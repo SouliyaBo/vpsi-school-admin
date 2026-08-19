@@ -1,0 +1,111 @@
+/* Design tokens first: everything below consumes them via Tailwind theme names. */
+@import './theme.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-muted text-foreground font-sans antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  /* Lao script sits taller than Latin; a little extra leading keeps tone marks
+     and subscripts from colliding with the line above. */
+  :lang(lo) {
+    line-height: 1.75;
+  }
+
+  /* Consistent focus treatment for keyboard users across every control. */
+  :focus-visible {
+    @apply outline-ring outline outline-2 outline-offset-2;
+  }
+
+  /* Tabular figures in tables so score/number columns line up vertically. */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ── Print ──────────────────────────────────────────────────────────────────
+   The behaviour register's monthly sheet is a document a school files on paper,
+   so it has to print as itself rather than as a screenshot of the app.
+
+   `.print-sheet` marks the block to keep. Everything else is dropped by hiding
+   any element that neither contains the sheet, is the sheet, nor sits inside it
+   — the ancestors have to stay visible, since they are the layout chain the
+   sheet hangs from, so they are excluded from the rule and then flattened. */
+@media print {
+  body {
+    background: #fff;
+  }
+
+  body:has(.print-sheet) *:not(:has(.print-sheet)):not(.print-sheet):not(.print-sheet *) {
+    display: none !important;
+  }
+
+  body:has(.print-sheet) *:has(.print-sheet) {
+    display: block !important;
+    overflow: visible !important;
+    width: auto !important;
+    max-width: none !important;
+    height: auto !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: #fff !important;
+  }
+
+  .print-sheet {
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* A horizontal scroller has no meaning on paper, and would clip the last
+     columns of the sheet rather than wrapping them. */
+  .print-sheet .scrollbar-thin {
+    overflow: visible !important;
+  }
+
+  /* The header fill is part of the form's identity, so it is not treated as
+     decoration the printer may drop. */
+  .print-sheet th {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Keep a row's stack of student lines on one page. */
+  .print-sheet tr {
+    break-inside: avoid;
+  }
+
+  .print-sheet thead {
+    display: table-header-group;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-border;
+  }
+}

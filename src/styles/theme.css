@@ -1,0 +1,91 @@
+/**
+ * ── Design tokens — the single place colour is defined ───────────────────────
+ *
+ * Every component reads these variables through Tailwind theme tokens
+ * (`bg-primary`, `text-muted-foreground`, `border-border`, …). No component
+ * hardcodes a hex value, so re-skinning the whole admin panel is an edit to
+ * this file alone.
+ *
+ * Values are HSL *channels* (no `hsl()` wrapper) because Tailwind composes them
+ * with an alpha channel: `hsl(var(--primary) / 0.5)`.
+ *
+ * Brand:
+ *   primary   #116830  →  147 72% 24%
+ *   secondary #FFFFFF  →    0  0% 100%
+ */
+
+:root {
+  /* ── Brand ─────────────────────────────────────────────────────────── */
+  --primary: 147 72% 24%; /* #116830 */
+  --primary-foreground: 0 0% 100%; /* #FFFFFF */
+  --primary-hover: 147 72% 20%;
+  --primary-active: 147 66% 30%; /* sidebar active row */
+  --primary-subtle: 147 45% 95%; /* tinted surface, e.g. selected table row */
+
+  --secondary: 0 0% 100%; /* #FFFFFF */
+  --secondary-foreground: 240 6% 10%;
+
+  /* ── Surfaces & text (zinc scale) ──────────────────────────────────── */
+  --background: 0 0% 100%;
+  --foreground: 240 6% 10%; /* #18181B */
+
+  --card: 0 0% 100%;
+  --card-foreground: 240 6% 10%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 6% 10%;
+
+  --muted: 0 0% 98%; /* #FAFAFA page/alt background */
+  --muted-foreground: 240 4% 46%; /* #71717A secondary text */
+
+  --accent: 240 5% 96%; /* hover surface */
+  --accent-foreground: 240 6% 10%;
+
+  --border: 240 6% 90%; /* #E4E4E7 */
+  --input: 240 6% 90%;
+  --ring: 147 72% 24%; /* focus ring = brand */
+
+  /* ── Status ────────────────────────────────────────────────────────── */
+  --success: 142 72% 29%; /* #15803D  active / approved / present */
+  --success-foreground: 0 0% 100%;
+  --success-subtle: 142 60% 96%;
+
+  --warning: 32 81% 37%; /* #B45309  pending / on_leave / late */
+  --warning-foreground: 0 0% 100%;
+  --warning-subtle: 38 92% 95%;
+
+  --danger: 0 74% 42%; /* #B91C1C  dropped / failed / absent */
+  --danger-foreground: 0 0% 100%;
+  --danger-subtle: 0 86% 97%;
+
+  --info: 224 76% 48%; /* #1D4ED8  upcoming / draft / queued */
+  --info-foreground: 0 0% 100%;
+  --info-subtle: 214 95% 96%;
+
+  /* shadcn/ui calls the danger scale `destructive` — kept as an alias so the
+     stock component sources work unmodified. */
+  --destructive: var(--danger);
+  --destructive-foreground: var(--danger-foreground);
+
+  /* ── Sidebar ───────────────────────────────────────────────────────── */
+  --sidebar: var(--primary);
+  --sidebar-foreground: 0 0% 100%;
+  --sidebar-muted-foreground: 147 30% 78%;
+  --sidebar-active: var(--primary-active);
+  --sidebar-border: 147 45% 32%;
+
+  /* ── Chart series (dashboard) ──────────────────────────────────────────
+     Assigned in this fixed order and never cycled. The set is validated for
+     colour-vision deficiency: every adjacent pair keeps ΔE ≥ 8 under protan and
+     tritan simulation, each step clears the chroma floor so none reads as grey,
+     and all five hold ≥ 3:1 against the card surface. Changing a value here
+     means re-running that check. */
+  --chart-1: 147 72% 24%; /* #116830 — brand */
+  --chart-2: 193 83% 40%; /* #1197bd */
+  --chart-3: 32 81% 45%; /* #d07916 */
+  --chart-4: 262 52% 52%; /* #7445c4 */
+  --chart-5: 0 74% 52%; /* #df2a2a */
+
+  /* ── Shape ─────────────────────────────────────────────────────────── */
+  --radius: 0.5rem;
+}
