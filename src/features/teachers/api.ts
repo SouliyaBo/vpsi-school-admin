@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { useCurrentUser } from '@/features/auth/hooks';
 import { get, upload } from '@/lib/api-client';
 import { createCrudApi, createCrudHooks, useLookupQuery } from '@/lib/crud';
 import { fullName } from '@/lib/utils';
@@ -63,6 +64,12 @@ export const teachersApi = {
     formData.append('file', file);
     return upload<Teacher>(`/teachers/${id}/photo`, formData, onProgress);
   },
+  /** Self-service: no id, and no `teachers:update`. See `useUploadMyPhoto`. */
+  uploadMyPhoto: (file: File, onProgress?: (percent: number) => void) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return upload<Teacher>('/teachers/me/photo', formData, onProgress);
+  },
 };
 
 export const teachers = createCrudHooks<Teacher, TeacherInput, TeacherUpdateInput>(
@@ -76,6 +83,39 @@ export function useUploadTeacherPhoto(id: string | undefined) {
     mutationFn: ({ file, onProgress }: { file: File; onProgress?: (percent: number) => void }) =>
       teachersApi.uploadPhoto(id!, file, onProgress),
     meta: { successMessage: 'toast.uploaded' },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teachers'] }),
+  });
+}
+
+/**
+ * The teacher record behind the signed-in account.
+ *
+ * Skipped — and so `undefined` — for an account that is not a teacher: an office
+ * login or a guardian has no staff record to show a portrait from. `/teachers/me`
+ * rather than `/teachers/:id` because a teacher may read and photograph their own
+ * record without holding the office's `teachers:read`/`teachers:update`.
+ *
+ * `photoUrl` is a signed URL that expires after 15 minutes, so the record is kept
+ * fresher than that — a stale one would render as a broken image.
+ */
+export function useMyTeacher() {
+  const user = useCurrentUser();
+  return useQuery({
+    queryKey: ['teachers', 'me'],
+    queryFn: () => get<Teacher>('/teachers/me'),
+    enabled: user?.personType === 'teacher' && Boolean(user.personId),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Replaces one's own portrait — the profile page's upload. */
+export function useUploadMyPhoto() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, onProgress }: { file: File; onProgress?: (percent: number) => void }) =>
+      teachersApi.uploadMyPhoto(file, onProgress),
+    meta: { successMessage: 'toast.uploaded' },
+    // Covers `['teachers', 'me']` and any list the new photo should appear in.
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teachers'] }),
   });
 }

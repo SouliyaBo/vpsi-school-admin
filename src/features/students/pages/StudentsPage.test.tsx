@@ -143,13 +143,12 @@ describe('StudentsPage — create', () => {
     expect((body as { guardians: unknown[] }).guardians[0]).not.toHaveProperty('guardianId');
   });
 
-  it('carries the title and both nicknames through to the payload', async () => {
+  it('carries both nicknames through to the payload, and no title — it is derived', async () => {
     renderWithProviders(<StudentsPage />);
     await userEvent.click(await screen.findByRole('button', { name: /add student/i }));
     const dialog = await screen.findByRole('dialog');
 
     await fillStudentFields(dialog);
-    await userEvent.type(within(dialog).getByLabelText(/^title$/i), 'ນ.');
     await userEvent.type(within(dialog).getByLabelText(/nickname \(lao\)/i), 'ລິຕ້າ');
     await userEvent.type(within(dialog).getByLabelText(/nickname \(english\)/i), 'RITA');
 
@@ -161,10 +160,33 @@ describe('StudentsPage — create', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: /^save$/i }));
 
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledTimes(1));
+    const body = vi.mocked(apiClient.post).mock.calls[0]![1];
+    expect(body).toMatchObject({ nickname: 'ລິຕ້າ', nicknameEn: 'RITA' });
+    // The honorific is a virtual read off `gender`; posting one would let the
+    // two disagree, which is the whole reason it stopped being a field.
+    expect(body).not.toHaveProperty('title');
+  });
+
+  it('sends only the organisations given a join date, and none derived from gender', async () => {
+    renderWithProviders(<StudentsPage />);
+    await userEvent.click(await screen.findByRole('button', { name: /add student/i }));
+    const dialog = await screen.findByRole('dialog');
+
+    await fillStudentFields(dialog);
+    // Youth union joined, women's union left blank — a female student is not a
+    // member of it until the school says she is.
+    await userEvent.type(within(dialog).getByLabelText(/youth union/i), '2024-09-01');
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /create new/i }));
+    await userEvent.type(within(dialog).getAllByLabelText(/first name \(lao\)/i)[1]!, 'ບຸນມີ');
+    await userEvent.type(within(dialog).getAllByLabelText(/last name \(lao\)/i)[1]!, 'ຄຳ');
+    await userEvent.type(within(dialog).getAllByLabelText(/phone/i).at(-1)!, '2055512345');
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledTimes(1));
     expect(vi.mocked(apiClient.post).mock.calls[0]![1]).toMatchObject({
-      title: 'ນ.',
-      nickname: 'ລິຕ້າ',
-      nicknameEn: 'RITA',
+      organizations: [{ organization: 'youth', joinedDate: '2024-09-01' }],
     });
   });
 });

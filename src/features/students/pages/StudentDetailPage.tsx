@@ -1,8 +1,9 @@
-import { ArrowLeft, BarChart3, CheckSquare, Pencil, School, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, BarChart3, CheckSquare, Pencil, School, Syringe, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useStudentAttendanceSummary } from '@/features/attendances/api';
+import { StudentVaccinations } from '@/features/vaccinations/components/StudentVaccinations';
 import { useCan } from '@/features/auth/hooks';
 import { EnrollDialog } from '@/features/enrollments/components/EnrollDialog';
 import { useEnrollmentHistory } from '@/features/enrollments/api';
@@ -55,6 +56,14 @@ export function StudentDetailPage() {
   const navigate = useNavigate();
   const can = useCan();
 
+  /**
+   * The open tab.
+   *
+   * Tracked rather than left to `defaultValue` because every read of a child's
+   * vaccination record is audited server-side: fetching it eagerly would leave a
+   * trail of lookups nobody performed.
+   */
+  const [tab, setTab] = useState('overview');
   const [editOpen, setEditOpen] = useState(false);
   const [guardiansOpen, setGuardiansOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -68,6 +77,7 @@ export function StudentDetailPage() {
   // class they have sat in — comes from its own endpoint. Skipped entirely for a
   // role without `enrollments:read`, which would only 403.
   const canReadEnrollments = can('enrollments');
+  const canReadVaccinations = can('vaccinations');
   const history = useEnrollmentHistory(canReadEnrollments ? id : undefined);
 
   // Both summaries are per-semester; without an active semester there is nothing
@@ -182,7 +192,7 @@ export function StudentDetailPage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="overview">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="overview">{t('common.details')}</TabsTrigger>
           <TabsTrigger value="guardians">
@@ -203,6 +213,12 @@ export function StudentDetailPage() {
             <CheckSquare />
             {t('student.attendanceSummary')}
           </TabsTrigger>
+          {canReadVaccinations && (
+            <TabsTrigger value="vaccination">
+              <Syringe />
+              {t('vaccination.tab')}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="overview">
@@ -216,6 +232,16 @@ export function StudentDetailPage() {
                   {nickname(student, i18n.language) ?? '—'}
                 </DetailRow>
                 <DetailRow label={t('person.gender')}>{t(`gender.${student.gender}`)}</DetailRow>
+                <DetailRow label={t('studentOrganization.label')}>
+                  {student.organizations?.length
+                    ? student.organizations
+                        .map(
+                          (membership) =>
+                            `${t(`studentOrganization.${membership.organization}`)} (${formatDate(membership.joinedDate)})`,
+                        )
+                        .join(', ')
+                    : t('studentOrganization.none')}
+                </DetailRow>
                 <DetailRow label={t('person.dateOfBirth')}>{formatDate(student.dateOfBirth)}</DetailRow>
                 <DetailRow label={t('student.placeOfBirth')}>{student.placeOfBirth ?? '—'}</DetailRow>
                 <DetailRow label={t('student.nationality')}>{student.nationality ?? '—'}</DetailRow>
@@ -529,6 +555,16 @@ export function StudentDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {canReadVaccinations && (
+          <TabsContent value="vaccination">
+            <Card>
+              <CardContent className="pt-5">
+                <StudentVaccinations studentId={id} enabled={tab === 'vaccination'} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
 
       <StudentFormDialog open={editOpen} onOpenChange={setEditOpen} student={student} />

@@ -196,6 +196,7 @@ export function DataTable<T>({
                           className={cn(meta.className, meta.hideOnMobile && 'hidden md:table-cell')}
                         >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
+
                         </TableCell>
                       );
                     })}

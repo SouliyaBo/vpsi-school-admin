@@ -64,6 +64,10 @@ const TeachingAssignmentsPage = lazyPage(
   () => import('@/features/teaching-assignments/pages/TeachingAssignmentsPage'),
   'TeachingAssignmentsPage',
 );
+const VaccinationsPage = lazyPage(
+  () => import('@/features/vaccinations/pages/VaccinationsPage'),
+  'VaccinationsPage',
+);
 const UsersPage = lazyPage(() => import('@/features/users/pages/UsersPage'), 'UsersPage');
 const ProfilePage = lazyPage(() => import('@/features/profile/pages/ProfilePage'), 'ProfilePage');
 
@@ -130,6 +134,8 @@ export const router = createBrowserRouter([
             path: 'teaching-assignments',
             element: guarded(<TeachingAssignmentsPage />, 'teaching-assignments'),
           },
+
+          { path: 'vaccinations', element: guarded(<VaccinationsPage />, 'vaccinations') },
 
           { path: 'users', element: guarded(<UsersPage />, 'users') },
 

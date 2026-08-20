@@ -716,6 +716,47 @@ export interface paths {
         patch: operations["GradeLevelsController_update"];
         trace?: never;
     };
+    "/api/v1/subject-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List subject groups, in display order */
+        get: operations["SubjectGroupsController_findAll"];
+        put?: never;
+        post: operations["SubjectGroupsController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/subject-groups/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["SubjectGroupsController_findOne"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a group no subject or teacher is filed under
+         * @description Rejected with a conflict while anything still references it.
+         */
+        delete: operations["SubjectGroupsController_remove"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename a group or change its head
+         * @description Send `headTeacherId: null` to leave the group without a head.
+         */
+        patch: operations["SubjectGroupsController_update"];
+        trace?: never;
+    };
     "/api/v1/subjects": {
         parameters: {
             query?: never;
@@ -803,6 +844,26 @@ export interface paths {
         get: operations["TeachersController_findAll"];
         put?: never;
         post: operations["TeachersController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teachers/next-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The code a new teacher would be given
+         * @description A preview for the create form, not a reservation — the code is only taken when a teacher is saved.
+         */
+        get: operations["TeachersController_nextCode"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -906,7 +967,7 @@ export interface paths {
         };
         /**
          * Search students
-         * @description Filterable by status, gender, village, district/province ancestry, grade level, classroom, and guardian.
+         * @description Filterable by status, gender, village, district/province ancestry, grade level, classroom, and guardian. A teacher account sees only the students in the classrooms it is homeroom teacher of.
          */
         get: operations["StudentsController_findAll"];
         put?: never;
@@ -938,7 +999,31 @@ export interface paths {
         delete: operations["StudentsController_remove"];
         options?: never;
         head?: never;
+        /**
+         * Correct a student record
+         * @description A teacher account may only edit the students in the classroom it is homeroom teacher of, and may not change their `status` — that stays with the office.
+         */
         patch: operations["StudentsController_update"];
+        trace?: never;
+    };
+    "/api/v1/students/{id}/siblings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Students who share a guardian with this one
+         * @description Siblings are derived from the guardian link rather than stored, so they stay correct without a second relationship to maintain. Oldest first, every status included. Same access rules as reading the student.
+         */
+        get: operations["StudentsController_findSiblings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/students/{id}/guardians": {
@@ -951,7 +1036,7 @@ export interface paths {
         get?: never;
         /**
          * Replace the guardian list
-         * @description Exactly one guardian must be primary; if none is flagged, the first is used.
+         * @description Exactly one guardian must be primary; if none is flagged, the first is used. Subject to the same homeroom limit as editing the student.
          */
         put: operations["StudentsController_setGuardians"];
         post?: never;
@@ -970,7 +1055,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Upload a student photo (JPEG/PNG/WebP, max 5 MB) */
+        /**
+         * Upload a student photo (JPEG/PNG/WebP, max 5 MB)
+         * @description Subject to the same homeroom limit as editing the student.
+         */
         post: operations["StudentsController_uploadPhoto"];
         delete?: never;
         options?: never;
@@ -1392,7 +1480,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Roll-call sheet for a class on one date */
+        /**
+         * Roll-call sheet for a class on one date
+         * @description Returns every lesson the class has that day, each with its subject, assigned teacher, time slot and the roster with anything already recorded.
+         */
         get: operations["AttendancesController_dailySheet"];
         put?: never;
         post?: never;
@@ -1419,6 +1510,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/attendances/summary/student/{studentId}/semester/{semesterId}/by-subject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The same counts for a student, split by subject
+         * @description Worst attendance first. With one lesson per school day a student can lose a whole subject while their overall rate stays healthy, which the overall summary hides.
+         */
+        get: operations["AttendancesController_studentSubjectSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/attendances/summary/classroom/{classroomId}/semester/{semesterId}": {
         parameters: {
             query?: never;
@@ -1431,6 +1542,105 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/behavior-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The register as a flat log, newest first — one record per student */
+        get: operations["BehaviorLogsController_findAll"];
+        put?: never;
+        /**
+         * File one row of the register
+         * @description Classroom, semester, subject, teacher and period are read off the lesson, never from the body. `entries` may be empty for a row that only records the state of the class, but a row that is empty on both counts is refused.
+         */
+        post: operations["BehaviorLogsController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/behavior-logs/monthly-sheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The monthly sheet for one class, laid out as the paper form
+         * @description Rows are reassembled from the group each set of records was written with, so several students named in one entry come back on one row. Chronological, and printable.
+         */
+        get: operations["BehaviorLogsController_monthlySheet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/behavior-logs/entry-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The class's lessons on one date, plus its roster
+         * @description What the entry form offers: a row must be filed against a timetabled lesson.
+         */
+        get: operations["BehaviorLogsController_entryContext"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/behavior-logs/tally/classroom/{classroomId}/semester/{semesterId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Entry counts per student for one class over a semester, most-flagged first */
+        get: operations["BehaviorLogsController_classroomTally"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/behavior-logs/{groupId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace one row, keeping its identity
+         * @description Omitted fields keep what the row already says. The lesson and the date are not editable — changing either invalidates every field copied from the timetable.
+         */
+        put: operations["BehaviorLogsController_replace"];
+        post?: never;
+        /** Soft-delete one row and every record in it */
+        delete: operations["BehaviorLogsController_remove"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1561,6 +1771,122 @@ export interface paths {
          */
         post: operations["TermResultsController_publish"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vaccinations/campaigns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["VaccinationsController_findAllCampaigns"];
+        put?: never;
+        /**
+         * Plan a vaccination round
+         * @description The eligibility rule is what makes a round girls-only or grade-only. It is never derived from a student’s gender: the member count of a girls-only round and the female student count are different figures.
+         */
+        post: operations["VaccinationsController_createCampaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vaccinations/campaigns/{id}/roll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The students a campaign covers, with what is recorded for each
+         * @description Rebuilt from the eligibility rule on every read, so a student who transfers in before the visit is on it. `outstandingOnly=true` gives the follow-up list.
+         */
+        get: operations["VaccinationsController_campaignRoll"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vaccinations/campaigns/{id}/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record the outcome for every student on a roll
+         * @description One transaction for the whole sheet. A refusal or an absence is recorded as an outcome, not left as a missing row — the follow-up list is built from that difference. A dose marked given must carry a date and a guardian’s consent.
+         */
+        post: operations["VaccinationsController_recordCampaignDoses"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vaccinations/campaigns/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["VaccinationsController_removeCampaign"];
+        options?: never;
+        head?: never;
+        patch: operations["VaccinationsController_updateCampaign"];
+        trace?: never;
+    };
+    "/api/v1/vaccinations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Vaccination records
+         * @description A read filtered to one student is audited; a campaign-wide list is not.
+         */
+        get: operations["VaccinationsController_findAll"];
+        put?: never;
+        /**
+         * Record a dose given away from the school
+         * @description For a dose from a clinic or another programme. It counts towards the course, so it names its own vaccine and dose and belongs to no campaign.
+         */
+        post: operations["VaccinationsController_recordStandalone"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vaccinations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["VaccinationsController_remove"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1761,6 +2087,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lesson-plans/compliance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who owes a lesson plan, by department and week
+         * @description Crosses the timetable with the semester’s weeks and fills in the plans that exist, so a plan that was never written shows as a gap — which the plain list cannot report. Defaults to the active semester, from its start up to the current week.
+         */
+        get: operations["LessonPlansController_compliance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lesson-plans/review-queue": {
         parameters: {
             query?: never;
@@ -1888,6 +2234,144 @@ export interface paths {
          * @description Notifies teachers of plans due within 48 hours or already overdue. Intended to be called by a daily scheduler; exposed so it can be triggered and tested by hand.
          */
         post: operations["LessonPlansController_runDueReminders"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lesson-plan-months": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Months that have a checklist
+         * @description A teacher sees published months only — a draft is the office’s working copy.
+         */
+        get: operations["LessonPlanMonthsController_findAll"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lesson-plan-months/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft a month from the timetable
+         * @description Creates one line per teaching assignment per week whose Monday falls in the month. Additive and repeatable: it fills in what is missing and never removes a line, so trim after drafting rather than before.
+         */
+        post: operations["LessonPlanMonthsController_draft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lesson-plan-months/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One month’s checklist, with what has been handed in
+         * @description A teacher gets their own lines; the office gets the whole school’s.
+         */
+        get: operations["LessonPlanMonthsController_findOne"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Set the instruction shown to teachers on the list */
+        patch: operations["LessonPlanMonthsController_update"];
+        trace?: never;
+    };
+    "/api/v1/lesson-plan-months/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish the month to its teachers
+         * @description One-way, and notifies every teacher with lines on it. Teachers act on what they were told, so a list that could be pulled back is one they could not rely on.
+         */
+        post: operations["LessonPlanMonthsController_publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lesson-plan-months/{id}/remove-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Drop lines that are not owed — an exam week, a holiday, a teacher on leave
+         * @description Refused for a line a plan has already been handed in against.
+         */
+        post: operations["LessonPlanMonthsController_removeTasks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lesson-plan-tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Move one line’s deadline off the standing policy */
+        patch: operations["LessonPlanTasksController_update"];
+        trace?: never;
+    };
+    "/api/v1/lesson-plan-tasks/{id}/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hand a document in against a line
+         * @description Creates the plan for the week if there is none, attaches the document and submits it in one action — the file is the plan on this path. Only the teacher who owes the line may use it. PDF/Word/Excel/PowerPoint/image, max 20 MB.
+         */
+        post: operations["LessonPlanTasksController_upload"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2578,7 +3062,7 @@ export interface components {
         };
         PermissionDto: {
             /** @enum {string} */
-            resource: "users" | "roles" | "teachers" | "students" | "guardians" | "locations" | "school-years" | "semesters" | "grade-levels" | "classrooms" | "subjects" | "teaching-assignments" | "enrollments" | "score-components" | "scores" | "conduct-scores" | "attendances" | "term-results" | "reports" | "lesson-plans" | "exams" | "certificates" | "announcements" | "notifications" | "calendar" | "documents" | "feedback" | "audit-logs" | "settings";
+            resource: "users" | "roles" | "teachers" | "students" | "guardians" | "locations" | "school-years" | "semesters" | "grade-levels" | "classrooms" | "subject-groups" | "subjects" | "teaching-assignments" | "enrollments" | "score-components" | "scores" | "conduct-scores" | "behavior-logs" | "attendances" | "term-results" | "reports" | "lesson-plans" | "exams" | "certificates" | "announcements" | "notifications" | "calendar" | "documents" | "feedback" | "audit-logs" | "settings" | "vaccinations";
             /** @enum {array} */
             actions: "create" | "read" | "update" | "delete" | "approve" | "export" | "manage";
         };
@@ -2706,6 +3190,29 @@ export interface components {
             level?: number;
             isExitLevel?: boolean;
         };
+        CreateSubjectGroupDto: {
+            /** @example science */
+            code: string;
+            /** @example ສາຍວິທະຍາສາດ */
+            nameLo: string;
+            /** @example Science */
+            nameEn?: string;
+            /** @description The head who reviews this group’s lesson plans */
+            headTeacherId?: string;
+            /** @description Display order on menus and the compliance matrix */
+            sortOrder?: number;
+        };
+        UpdateSubjectGroupDto: {
+            nameLo?: string;
+            nameEn?: string;
+            /**
+             * @description Passing `null` clears the head, which is how a group is left vacant.
+             *     `ValidateIf` is what lets the null through — `IsMongoId` alone rejects it.
+             */
+            headTeacherId?: string | null;
+            sortOrder?: number;
+            isActive?: boolean;
+        };
         CreateSubjectDto: {
             /** @example MATH-M4 */
             code: string;
@@ -2714,6 +3221,8 @@ export interface components {
             /** @example Mathematics */
             nameEn?: string;
             gradeLevelId: string;
+            /** @description Department this subject is taught by */
+            subjectGroupId?: string;
             /**
              * @default core
              * @enum {string}
@@ -2731,6 +3240,8 @@ export interface components {
         };
         UpdateSubjectDto: {
             nameLo?: string;
+            /** @description `null` detaches the subject from its department. */
+            subjectGroupId?: string | null;
             nameEn?: string;
             /** @enum {string} */
             type?: "core" | "elective" | "extracurricular";
@@ -2764,9 +3275,42 @@ export interface components {
             room?: string;
             isActive?: boolean;
         };
+        PlaceOfBirthDto: {
+            /** @example ພັນໝັ້ນ */
+            village?: string;
+            /** @example ສີສັດຕະນາກ */
+            district?: string;
+            /** @example ນະຄອນຫຼວງວຽງຈັນ */
+            province?: string;
+        };
+        TeacherEducationDto: {
+            /**
+             * @description Institution attended
+             * @example ມ.ຊ
+             */
+            institution?: string;
+            /**
+             * @description Academic year completed
+             * @example 2016-2017
+             */
+            graduatedYear?: string;
+        };
+        TeacherParentDto: {
+            fullNameLo?: string;
+            address?: string;
+            occupation?: string;
+        };
         CreateTeacherDto: {
-            /** @example T-2025-001 */
-            teacherCode: string;
+            /**
+             * @description Omit to have one generated for the active school year — T-2627-001 for 2026-2027. Supply one only to preserve a code the school already issued.
+             * @example T-2627-001
+             */
+            teacherCode?: string;
+            /**
+             * @description Honorific as written
+             * @example ນ.
+             */
+            title?: string;
             /** @example ສົມສັກ */
             firstNameLo: string;
             /** @example ພົມມະຈັນ */
@@ -2774,8 +3318,11 @@ export interface components {
             firstNameEn?: string;
             lastNameEn?: string;
             /** @enum {string} */
-            gender: "male" | "female" | "other";
+            gender: "male" | "female";
             dateOfBirth?: string;
+            /** @example ລາວລຸ່ມ */
+            ethnicity?: string;
+            placeOfBirth?: components["schemas"]["PlaceOfBirthDto"];
             nationalId?: string;
             /** @example 02012345678 */
             phone?: string;
@@ -2783,19 +3330,53 @@ export interface components {
             villageId?: string;
             addressDetail?: string;
             qualification?: string;
+            /**
+             * @description Field of study
+             * @example ຄູຄະນິດສາດ
+             */
             specialization?: string;
+            education?: components["schemas"]["TeacherEducationDto"];
+            /**
+             * @example [
+             *       "ເຄມີສາດ",
+             *       "ວິທະຍາສາດທຳມະຊາດ"
+             *     ]
+             */
+            teachingSubjects?: string[];
+            /**
+             * @description Ministry professional grade
+             * @example P
+             */
+            professionalLevel?: string;
             hireDate?: string;
+            /** @description Entry into public service */
+            joinedOrgDate?: string;
+            /** @enum {string} */
+            maritalStatus?: "single" | "engaged" | "married" | "divorced" | "widowed";
+            childrenCount?: number;
+            /** @enum {string} */
+            housingType?: "own" | "rented" | "parents" | "relatives" | "other";
+            livingWith?: string;
+            /** @description Siblings and where they live */
+            siblings?: string;
+            father?: components["schemas"]["TeacherParentDto"];
+            mother?: components["schemas"]["TeacherParentDto"];
             /** @description Academic heads can approve and return lesson plans */
             isAcademicHead?: boolean;
+            /** @description Department (ສາຍວິຊາ) the teacher belongs to */
+            subjectGroupId?: string;
         };
         UpdateTeacherDto: {
+            title?: string;
             firstNameLo?: string;
             lastNameLo?: string;
             firstNameEn?: string;
             lastNameEn?: string;
             /** @enum {string} */
-            gender?: "male" | "female" | "other";
+            gender?: "male" | "female";
             dateOfBirth?: string;
+            ethnicity?: string;
+            placeOfBirth?: components["schemas"]["PlaceOfBirthDto"];
             nationalId?: string;
             phone?: string;
             email?: string;
@@ -2803,10 +3384,25 @@ export interface components {
             addressDetail?: string;
             qualification?: string;
             specialization?: string;
+            education?: components["schemas"]["TeacherEducationDto"];
+            teachingSubjects?: string[];
+            professionalLevel?: string;
             hireDate?: string;
+            joinedOrgDate?: string;
+            /** @enum {string} */
+            maritalStatus?: "single" | "engaged" | "married" | "divorced" | "widowed";
+            childrenCount?: number;
+            /** @enum {string} */
+            housingType?: "own" | "rented" | "parents" | "relatives" | "other";
+            livingWith?: string;
+            siblings?: string;
+            father?: components["schemas"]["TeacherParentDto"];
+            mother?: components["schemas"]["TeacherParentDto"];
             /** @enum {string} */
             status?: "active" | "on_leave" | "resigned" | "retired";
             isAcademicHead?: boolean;
+            /** @description `null` detaches the teacher from their department. */
+            subjectGroupId?: string | null;
         };
         CreateGuardianDto: {
             /** @example ບຸນມີ */
@@ -2814,7 +3410,7 @@ export interface components {
             /** @example ສີສຸວັນ */
             lastNameLo: string;
             /** @enum {string} */
-            gender?: "male" | "female" | "other";
+            gender?: "male" | "female";
             dateOfBirth?: string;
             nationalId?: string;
             /** @example 02012345678 */
@@ -2831,7 +3427,7 @@ export interface components {
             firstNameLo?: string;
             lastNameLo?: string;
             /** @enum {string} */
-            gender?: "male" | "female" | "other";
+            gender?: "male" | "female";
             dateOfBirth?: string;
             nationalId?: string;
             phone?: string;
@@ -2858,6 +3454,15 @@ export interface components {
              */
             canViewRecords: boolean;
         };
+        StudentOrganizationInputDto: {
+            /** @enum {string} */
+            organization: "children" | "youth" | "women";
+            /**
+             * @description ວັນເຂົ້າ
+             * @example 2024-09-01
+             */
+            joinedDate: string;
+        };
         CreateStudentDto: {
             /** @example S-2025-0001 */
             studentCode: string;
@@ -2867,8 +3472,12 @@ export interface components {
             lastNameLo: string;
             firstNameEn?: string;
             lastNameEn?: string;
+            /** @example ລິຕ້າ */
+            nickname?: string;
+            /** @example RITA */
+            nicknameEn?: string;
             /** @enum {string} */
-            gender: "male" | "female" | "other";
+            gender: "male" | "female";
             /** @example 2010-05-14 */
             dateOfBirth: string;
             placeOfBirth?: string;
@@ -2877,32 +3486,52 @@ export interface components {
             ethnicity?: string;
             nationalId?: string;
             phone?: string;
+            /** @description The number the office rings about this child */
+            contactPhone?: string;
+            /**
+             * @description Who `contactPhone` reaches
+             * @example ເອື້ອຍລ້ຽງ
+             */
+            contactName?: string;
             villageId?: string;
             addressDetail?: string;
             admissionDate?: string;
             notes?: string;
+            /**
+             * @description Defaults to `active`. Send `new` for an intake not yet placed in a class.
+             * @default active
+             * @enum {string}
+             */
+            status: "new" | "active" | "graduated" | "no_certificate" | "transferred" | "dropped" | "suspended";
             /** @description At least one guardian is required */
             guardians: components["schemas"]["StudentGuardianInputDto"][];
+            organizations?: components["schemas"]["StudentOrganizationInputDto"][];
         };
         UpdateStudentDto: {
             firstNameLo?: string;
             lastNameLo?: string;
             firstNameEn?: string;
             lastNameEn?: string;
+            nickname?: string;
+            nicknameEn?: string;
             /** @enum {string} */
-            gender?: "male" | "female" | "other";
+            gender?: "male" | "female";
             dateOfBirth?: string;
             placeOfBirth?: string;
             nationality?: string;
             ethnicity?: string;
             nationalId?: string;
             phone?: string;
+            contactPhone?: string;
+            contactName?: string;
             villageId?: string;
             addressDetail?: string;
             admissionDate?: string;
             /** @enum {string} */
-            status?: "active" | "graduated" | "transferred" | "dropped" | "suspended";
+            status?: "new" | "active" | "graduated" | "no_certificate" | "transferred" | "dropped" | "suspended";
             notes?: string;
+            /** @description Replaces the whole list when given. Omit to leave memberships untouched. */
+            organizations?: components["schemas"]["StudentOrganizationInputDto"][];
         };
         SetStudentGuardiansDto: {
             guardians: components["schemas"]["StudentGuardianInputDto"][];
@@ -2918,6 +3547,8 @@ export interface components {
             room?: string;
             /** @description Period number in the daily timetable */
             periodNumber?: number;
+            /** @description A slot two teachers take turns in — one takes ມ.2/ກ while the other takes ມ.2/ຂ, then they trade. Teacher, class and room clashes are waived against other periods that also set this, and only against those. */
+            isRotating?: boolean;
         };
         CreateTeachingAssignmentDto: {
             teacherId: string;
@@ -3053,6 +3684,21 @@ export interface components {
             /** @description Present + late + excused + sick, over total recorded */
             attendanceRate: number;
         };
+        AttendanceSubjectSummaryDto: {
+            studentId: string;
+            present: number;
+            absent: number;
+            late: number;
+            excused: number;
+            sick: number;
+            totalRecorded: number;
+            /** @description Present + late + excused + sick, over total recorded */
+            attendanceRate: number;
+            subjectId: string;
+            subjectCode: string | null;
+            subjectNameLo: string | null;
+            subjectNameEn: string | null;
+        };
         AttendanceEntryDto: {
             studentId: string;
             /** @enum {string} */
@@ -3062,21 +3708,44 @@ export interface components {
             reason?: string;
         };
         RecordAttendanceDto: {
-            classroomId: string;
-            semesterId: string;
+            /** @description The timetabled lesson being registered */
+            teachingAssignmentId: string;
             /**
-             * @description Normalized to UTC midnight
+             * @description Normalized to UTC midnight; must fall on a day the lesson is scheduled
              * @example 2025-09-15
              */
             date: string;
-            /**
-             * @description 0 records whole-day attendance; 1..n records a specific period
-             * @default 0
-             */
-            period: number;
-            /** @description Subject taught in this period; only for per-period records */
-            subjectId?: string;
             entries: components["schemas"]["AttendanceEntryDto"][];
+        };
+        BehaviorEntryDto: {
+            studentId: string;
+            /** @description ພຶດຕິກຳ(ລາຍບຸກຄົນ) — what this student did */
+            behavior?: string;
+            /**
+             * @description ຕັດຄະແນນ/ຕັກເຕືອນ — free text, as written on the paper form
+             * @example ເຕືອນ 2 ຄັ້ງ
+             */
+            action?: string;
+        };
+        CreateBehaviorLogDto: {
+            /** @description The timetabled lesson the observation was made in */
+            teachingAssignmentId: string;
+            /**
+             * @description Normalized to UTC midnight; must fall on a day the lesson is scheduled
+             * @example 2025-11-06
+             */
+            date: string;
+            /** @description ສະພາບລວມພາຍໃນຫ້ອງ — the class as a whole */
+            classNote?: string;
+            /** @description ໝາຍເຫດ */
+            remark?: string;
+            /** @default [] */
+            entries: components["schemas"]["BehaviorEntryDto"][];
+        };
+        UpdateBehaviorLogDto: {
+            classNote?: string;
+            remark?: string;
+            entries?: components["schemas"]["BehaviorEntryDto"][];
         };
         ComputeTermResultsDto: {
             classroomId: string;
@@ -3089,6 +3758,88 @@ export interface components {
             semesterId: string;
             /** @example queued */
             status: string;
+        };
+        CampaignEligibilityDto: {
+            /**
+             * @description Omit to cover every student. This is the only place a round is girls-only.
+             * @enum {string}
+             */
+            gender?: "male" | "female";
+            /** @description Omit to cover every grade */
+            gradeLevelIds?: string[];
+            /** @description Earliest date of birth the round covers */
+            bornFrom?: string;
+            /** @description Latest date of birth the round covers */
+            bornTo?: string;
+        };
+        CreateCampaignDto: {
+            /** @example ວັກແຊງ HPV ເຂັມທີ 1 */
+            nameLo: string;
+            /** @enum {string} */
+            vaccine: "hpv" | "td" | "mr" | "je" | "covid" | "other";
+            /**
+             * @description Which dose of the course this round gives
+             * @example 1
+             */
+            doseNumber: number;
+            scheduledDate: string;
+            schoolYearId: string;
+            eligibility?: components["schemas"]["CampaignEligibilityDto"];
+            /** @example ສູນສາທາລະນະສຸກເມືອງ */
+            provider?: string;
+            /** @enum {string} */
+            status?: "planned" | "active" | "completed" | "cancelled";
+            notes?: string;
+        };
+        VaccinationConsentDto: {
+            /** @enum {string} */
+            status: "pending" | "given" | "refused";
+            /** @description The guardian who decided. Must be on the student’s list. */
+            guardianId?: string;
+            decidedAt?: string;
+            /** @example ໃບເຊັນ */
+            method?: string;
+        };
+        RecordVaccinationDto: {
+            studentId: string;
+            /** @enum {string} */
+            status: "scheduled" | "administered" | "refused" | "absent" | "contraindicated";
+            /** @description Required when `status` is `administered` */
+            administeredDate?: string;
+            /** @example B2409-17 */
+            batchNumber?: string;
+            provider?: string;
+            consent?: components["schemas"]["VaccinationConsentDto"];
+            /** @description The reason, for a refusal or a contraindication */
+            notes?: string;
+        };
+        RecordCampaignDosesDto: {
+            records: components["schemas"]["RecordVaccinationDto"][];
+        };
+        UpdateCampaignDto: {
+            nameLo?: string;
+            scheduledDate?: string;
+            eligibility?: components["schemas"]["CampaignEligibilityDto"];
+            provider?: string;
+            /** @enum {string} */
+            status?: "planned" | "active" | "completed" | "cancelled";
+            notes?: string;
+        };
+        RecordStandaloneVaccinationDto: {
+            studentId: string;
+            /** @enum {string} */
+            status: "scheduled" | "administered" | "refused" | "absent" | "contraindicated";
+            /** @description Required when `status` is `administered` */
+            administeredDate?: string;
+            /** @example B2409-17 */
+            batchNumber?: string;
+            provider?: string;
+            consent?: components["schemas"]["VaccinationConsentDto"];
+            /** @description The reason, for a refusal or a contraindication */
+            notes?: string;
+            /** @enum {string} */
+            vaccine: "hpv" | "td" | "mr" | "je" | "covid" | "other";
+            doseNumber: number;
         };
         CreateReportTemplateDto: {
             /** @example report-card-default */
@@ -3164,22 +3915,18 @@ export interface components {
             /** @example ແຜນການສອນ ອາທິດທີ 3 */
             title: string;
             description?: string;
-            /** @example 2025-09-15 */
-            weekStartDate: string;
-            /** @example 2025-09-19 */
-            weekEndDate: string;
             /**
-             * @description Submission deadline
-             * @example 2025-09-14
+             * @description Any date in the taught week — snapped to that week’s Monday
+             * @example 2025-09-15
              */
-            dueDate: string;
+            weekStartDate: string;
             activities?: components["schemas"]["LessonActivityDto"][];
         };
         UpdateLessonPlanDto: {
             title?: string;
             description?: string;
+            /** @description Any date in the taught week */
             weekStartDate?: string;
-            weekEndDate?: string;
             /** @description Replaces the activity list */
             activities?: components["schemas"]["LessonActivityDto"][];
         };
@@ -3194,6 +3941,30 @@ export interface components {
             activityId: string;
             isCompleted: boolean;
             reflection?: string;
+        };
+        DraftLessonPlanMonthDto: {
+            /** @example 2026 */
+            year: number;
+            /**
+             * @description Calendar month, 1–12
+             * @example 8
+             */
+            month: number;
+            /** @description Defaults to the active semester */
+            semesterId?: string;
+            /** @description Limits the draft to these departments; omit for the whole school */
+            subjectGroupIds?: string[];
+        };
+        UpdateLessonPlanMonthDto: {
+            /** @description Instruction shown to every teacher on the list */
+            note?: string;
+        };
+        RemoveLessonPlanTasksDto: {
+            taskIds: string[];
+        };
+        UpdateLessonPlanTaskDto: {
+            /** @description Overrides the deadline policy for this line */
+            dueDate?: string;
         };
         EligibilityCheckDto: {
             isEligible: boolean;
@@ -3397,7 +4168,7 @@ export interface operations {
                 userId?: string;
                 entityType?: string;
                 entityId?: string;
-                action?: "create" | "update" | "delete" | "login" | "logout" | "login_failed" | "password_change" | "password_reset" | "lock" | "unlock" | "approve" | "reject" | "export";
+                action?: "create" | "read" | "update" | "delete" | "login" | "logout" | "login_failed" | "password_change" | "password_reset" | "lock" | "unlock" | "approve" | "reject" | "export";
                 /** @description ISO date, inclusive lower bound */
                 from?: string;
                 /** @description ISO date, inclusive upper bound */
@@ -4697,6 +5468,120 @@ export interface operations {
             };
         };
     };
+    SubjectGroupsController_findAll: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+                /** @description Field to sort by */
+                sortBy?: string;
+                sortOrder?: "asc" | "desc";
+                /** @description Free-text search term */
+                search?: string;
+                isActive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SubjectGroupsController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSubjectGroupDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    SubjectGroupsController_findOne: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    SubjectGroupsController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SubjectGroupsController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSubjectGroupDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
     SubjectsController_findAll: {
         parameters: {
             query?: {
@@ -4708,6 +5593,7 @@ export interface operations {
                 /** @description Free-text search term */
                 search?: string;
                 gradeLevelId?: string;
+                subjectGroupId?: string;
                 type?: "core" | "elective" | "extracurricular";
                 isActive?: boolean;
             };
@@ -4945,7 +5831,11 @@ export interface operations {
                 villageId?: string;
                 /** @description Filter by any location in the ancestry (district, province) */
                 locationId?: string;
+                /** @description Filter by a subject they teach */
+                teachingSubject?: string;
                 isAcademicHead?: boolean;
+                /** @description Filter by department */
+                subjectGroupId?: string;
             };
             header?: never;
             path?: never;
@@ -4981,6 +5871,23 @@ export interface operations {
                 content: {
                     "application/json": Record<string, never>;
                 };
+            };
+        };
+    };
+    TeachersController_nextCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -5222,8 +6129,9 @@ export interface operations {
                 sortOrder?: "asc" | "desc";
                 /** @description Free-text search term */
                 search?: string;
-                status?: "active" | "graduated" | "transferred" | "dropped" | "suspended";
-                gender?: "male" | "female" | "other";
+                /** @description Defaults to `active` — a list of students means the children currently attending. Send `all` for the whole register, leavers and graduates included, or a single status to narrow to it. */
+                status?: "new" | "active" | "graduated" | "no_certificate" | "transferred" | "dropped" | "suspended" | "all";
+                gender?: "male" | "female";
                 /** @description Exact village */
                 villageId?: string;
                 /** @description Any location in the ancestry (district or province) */
@@ -5337,6 +6245,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    StudentsController_findSiblings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>[];
                 };
             };
         };
@@ -6127,6 +7056,10 @@ export interface operations {
                 studentId?: string;
                 classroomId?: string;
                 semesterId?: string;
+                subjectId?: string;
+                /** @description The teacher whose lesson it was, per the timetable */
+                teacherId?: string;
+                teachingAssignmentId?: string;
                 status?: "present" | "absent" | "late" | "excused" | "sick";
                 /** @description Inclusive lower bound */
                 from?: string;
@@ -6173,8 +7106,6 @@ export interface operations {
             query: {
                 classroomId: string;
                 date: string;
-                /** @description 0 = whole day */
-                period?: string;
             };
             header?: never;
             path?: never;
@@ -6212,6 +7143,28 @@ export interface operations {
             };
         };
     };
+    AttendancesController_studentSubjectSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                studentId: string;
+                semesterId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceSubjectSummaryDto"][];
+                };
+            };
+        };
+    };
     AttendancesController_classroomSummary: {
         parameters: {
             query?: never;
@@ -6231,6 +7184,166 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AttendanceSummaryDto"][];
                 };
+            };
+        };
+    };
+    BehaviorLogsController_findAll: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+                /** @description Field to sort by */
+                sortBy?: string;
+                sortOrder?: "asc" | "desc";
+                /** @description Free-text search term */
+                search?: string;
+                studentId?: string;
+                classroomId?: string;
+                semesterId?: string;
+                subjectId?: string;
+                /** @description The teacher whose lesson it was, per the timetable */
+                teacherId?: string;
+                teachingAssignmentId?: string;
+                /** @description Inclusive lower bound */
+                from?: string;
+                /** @description Inclusive upper bound */
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BehaviorLogsController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBehaviorLogDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BehaviorLogsController_monthlySheet: {
+        parameters: {
+            query: {
+                classroomId: string;
+                year: number;
+                month: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BehaviorLogsController_entryContext: {
+        parameters: {
+            query: {
+                classroomId: string;
+                date: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BehaviorLogsController_classroomTally: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                classroomId: string;
+                semesterId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BehaviorLogsController_replace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBehaviorLogDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BehaviorLogsController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -6386,6 +7499,220 @@ export interface operations {
         };
         responses: {
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    VaccinationsController_findAllCampaigns: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+                /** @description Field to sort by */
+                sortBy?: string;
+                sortOrder?: "asc" | "desc";
+                /** @description Free-text search term */
+                search?: string;
+                schoolYearId?: string;
+                vaccine?: "hpv" | "td" | "mr" | "je" | "covid" | "other";
+                status?: "planned" | "active" | "completed" | "cancelled";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    VaccinationsController_createCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCampaignDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    VaccinationsController_campaignRoll: {
+        parameters: {
+            query: {
+                outstandingOnly: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>[];
+                };
+            };
+        };
+    };
+    VaccinationsController_recordCampaignDoses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordCampaignDosesDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    VaccinationsController_removeCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    VaccinationsController_updateCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCampaignDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    VaccinationsController_findAll: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+                /** @description Field to sort by */
+                sortBy?: string;
+                sortOrder?: "asc" | "desc";
+                /** @description Free-text search term */
+                search?: string;
+                studentId?: string;
+                campaignId?: string;
+                vaccine?: "hpv" | "td" | "mr" | "je" | "covid" | "other";
+                status?: "scheduled" | "administered" | "refused" | "absent" | "contraindicated";
+                /** @description Only students a campaign covers who have no `administered` record yet */
+                outstandingOnly?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    VaccinationsController_recordStandalone: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordStandaloneVaccinationDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    VaccinationsController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6697,6 +8024,10 @@ export interface operations {
                 subjectId?: string;
                 classroomId?: string;
                 semesterId?: string;
+                /** @description Restricts to plans whose subject belongs to this department */
+                subjectGroupId?: string;
+                /** @description Any date in the taught week */
+                weekStartDate?: string;
                 status?: "draft" | "submitted" | "under_review" | "approved" | "returned";
                 /** @description Only plans submitted after their deadline */
                 isLate?: string;
@@ -6738,6 +8069,36 @@ export interface operations {
             };
         };
     };
+    LessonPlansController_compliance: {
+        parameters: {
+            query?: {
+                /** @description Defaults to the active semester */
+                semesterId?: string;
+                /** @description Show only this department */
+                subjectGroupId?: string;
+                /** @description Show only this teacher’s rows */
+                teacherId?: string;
+                /** @description First week to include — any date in it. Defaults to the semester start. */
+                fromWeek?: string;
+                /** @description Last week to include — any date in it. Defaults to the current week. */
+                toWeek?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
     LessonPlansController_reviewQueue: {
         parameters: {
             query?: {
@@ -6752,6 +8113,10 @@ export interface operations {
                 subjectId?: string;
                 classroomId?: string;
                 semesterId?: string;
+                /** @description Restricts to plans whose subject belongs to this department */
+                subjectGroupId?: string;
+                /** @description Any date in the taught week */
+                weekStartDate?: string;
                 status?: "draft" | "submitted" | "under_review" | "approved" | "returned";
                 /** @description Only plans submitted after their deadline */
                 isLate?: string;
@@ -6967,6 +8332,200 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    LessonPlanMonthsController_findAll: {
+        parameters: {
+            query?: {
+                semesterId?: string;
+                year?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    LessonPlanMonthsController_draft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftLessonPlanMonthDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    LessonPlanMonthsController_findOne: {
+        parameters: {
+            query?: {
+                /** @description Defaults to the caller when they are a teacher */
+                teacherId?: string;
+                subjectGroupIds?: string;
+                /** @description Only the lines nothing has been handed in for */
+                outstandingOnly?: boolean;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    LessonPlanMonthsController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLessonPlanMonthDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    LessonPlanMonthsController_publish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    LessonPlanMonthsController_removeTasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveLessonPlanTasksDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    LessonPlanTasksController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLessonPlanTaskDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    LessonPlanTasksController_upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
             };
         };
     };

@@ -58,6 +58,13 @@ export function TeachersPage() {
         cell: ({ row }) => (
           <div className="flex items-center gap-2.5">
             <Avatar className="size-8">
+              {/* The staff list is read by face as much as by name. `photoUrl` is
+                  a short-lived signed URL minted per request — the object key
+                  never leaves the API — and initials remain the fallback for
+                  whoever has no photo on file yet. */}
+              {row.original.photoUrl && (
+                <AvatarImage src={row.original.photoUrl} alt="" loading="lazy" />
+              )}
               <AvatarFallback>{initials(row.original)}</AvatarFallback>
             </Avatar>
             <div className="min-w-0">

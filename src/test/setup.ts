@@ -27,6 +27,12 @@ Element.prototype.setPointerCapture ??= () => {};
 Element.prototype.releasePointerCapture ??= () => {};
 Element.prototype.scrollIntoView ??= () => {};
 
+// Selecting an image in `FileUpload` previews it from a blob URL, which jsdom has
+// no notion of. The identity of the string does not matter to any assertion — only
+// that picking a file does not throw.
+URL.createObjectURL ??= () => 'blob:preview';
+URL.revokeObjectURL ??= () => {};
+
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: vi.fn().mockImplementation((query: string) => ({

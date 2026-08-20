@@ -8,11 +8,16 @@ import type {
   LessonPlanStatus,
   LocationType,
   MaritalStatus,
+  ConsentStatus,
   SemesterStatus,
+  StudentOrganization,
   StudentStatus,
   SubjectType,
   TeacherStatus,
   UserStatus,
+  Vaccine,
+  VaccinationCampaignStatus,
+  VaccinationStatus,
   PersonType,
 } from './enums';
 
@@ -167,7 +172,7 @@ export interface Teacher extends BaseDocument {
   villageId?: Ref<Location>;
   addressDetail?: string | null;
   photoKey?: string | null;
-  /** Signed URL, present on detail responses only. */
+  /** Signed URL, minted on both the list and the detail read. Expires in 15 min. */
   photoUrl?: string | null;
   qualification?: string | null;
   specialization?: string | null;
@@ -240,9 +245,21 @@ export interface StudentPlacement {
   enrolledAt: string;
 }
 
+/** `ກອງເດັກນ້ອຍ` / `ສະຫະພັນຊາວໜຸ່ມ` / `ສະຫະພັນແມ່ຍິງ` — the fact and `ວັນເຂົ້າ`. */
+export interface StudentOrganizationMembership {
+  organization: StudentOrganization;
+  joinedDate: string;
+}
+
 export interface Student extends BaseDocument {
   studentCode: string;
-  /** Honorific — `ນ.`, `ທ້າວ`. Stored apart from the given name. */
+  /**
+   * `ນາງ` or `ທ້າວ`, derived server-side from `gender` — read-only.
+   *
+   * Absent when the record's gender is not yet on file, which is the whole
+   * reason it is not a stored field: a honorific and a gender that disagree
+   * were the register's typing, not two facts.
+   */
   title?: string | null;
   firstNameLo: string;
   lastNameLo: string;
@@ -266,6 +283,7 @@ export interface Student extends BaseDocument {
   photoKey?: string | null;
   photoUrl?: string | null;
   guardians: StudentGuardianLink[];
+  organizations: StudentOrganizationMembership[];
   admissionDate?: string | null;
   status: StudentStatus;
   notes?: string | null;
@@ -533,4 +551,66 @@ export interface CalendarEvent extends BaseDocument {
   startDate: string;
   endDate?: string | null;
   isAllDay?: boolean;
+}
+
+// ── Health ──────────────────────────────────────────────────────────────────
+
+/**
+ * Who a vaccination round is *offered* to — the filter behind the student picker.
+ *
+ * Not the roll: that is the campaign's explicit `studentIds`. This is still the
+ * only place a round is girls-only, and it is a decision someone recorded about
+ * the campaign, never something derived from a student's gender — the dose count
+ * of a girls-only round and the female student count are two different figures.
+ */
+export interface CampaignEligibility {
+  /** `null` covers every student. */
+  gender?: Gender | null;
+  /** Empty covers every grade. */
+  gradeLevelIds: Ref<GradeLevel>[];
+  bornFrom?: string | null;
+  bornTo?: string | null;
+}
+
+export interface VaccinationCampaign extends BaseDocument {
+  nameLo: string;
+  vaccine: Vaccine;
+  doseNumber: number;
+  scheduledDate: string;
+  schoolYearId: Ref<SchoolYear>;
+  eligibility: CampaignEligibility;
+  /**
+   * The students the round covers, picked one by one.
+   *
+   * Explicit rather than swept from `eligibility`, so no child lands on a dose
+   * sheet nobody chose. The cost is a list someone maintains: a newcomer is not
+   * on the round until the office adds them.
+   */
+  studentIds: string[];
+  provider?: string | null;
+  status: VaccinationCampaignStatus;
+  notes?: string | null;
+}
+
+/** `ໃບຍິນຍອມ` from a guardian on the student's own list. */
+export interface VaccinationConsent {
+  status: ConsentStatus;
+  guardianId?: Ref<Guardian> | null;
+  decidedAt?: string | null;
+  method?: string | null;
+}
+
+/** One student, one vaccine, one dose. */
+export interface Vaccination extends BaseDocument {
+  studentId: Ref<Student>;
+  /** `null` for a dose given at a clinic rather than in a school round. */
+  campaignId?: Ref<VaccinationCampaign> | null;
+  vaccine: Vaccine;
+  doseNumber: number;
+  status: VaccinationStatus;
+  administeredDate?: string | null;
+  batchNumber?: string | null;
+  provider?: string | null;
+  consent: VaccinationConsent;
+  notes?: string | null;
 }

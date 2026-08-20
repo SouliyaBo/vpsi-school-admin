@@ -21,8 +21,13 @@ import {
   requiredText,
 } from '@/lib/zod-helpers';
 import { vmsg } from '@/lib/form-message';
-import { GENDERS, GUARDIAN_RELATIONSHIPS, STUDENT_STATUSES } from '@/types/enums';
-import type { Student } from '@/types/entities';
+import {
+  GENDERS,
+  GUARDIAN_RELATIONSHIPS,
+  STUDENT_ORGANIZATIONS,
+  STUDENT_STATUSES,
+} from '@/types/enums';
+import type { Student, StudentOrganizationMembership } from '@/types/entities';
 import { Form } from '@/components/ui/form';
 import { Separator } from '@/components/ui/separator';
 import { EntitySelectField } from '@/components/common/EntitySelect';
@@ -75,7 +80,6 @@ const guardianLinkSchema = z
 
 const baseSchema = z.object({
   studentCode: requiredText(30),
-  title: optionalText(20),
   firstNameLo: requiredText(80),
   lastNameLo: requiredText(80),
   firstNameEn: optionalText(80),
@@ -104,6 +108,20 @@ const baseSchema = z.object({
    */
   classroomId: optionalId(),
   guardians: z.array(guardianLinkSchema),
+  /**
+   * Memberships keyed by organisation, each holding its `ວັນເຂົ້າ`.
+   *
+   * Keyed rather than a list because the three organisations are fixed and a
+   * student's answer for each is independent — an add/remove list would make the
+   * office pick the organisation from a dropdown it can never extend. A blank
+   * date is the "not a member" answer; the date *is* the membership, so there is
+   * no separate checkbox to disagree with it.
+   */
+  organizations: z.object({
+    children: optionalDate(),
+    youth: optionalDate(),
+    women: optionalDate(),
+  }),
 });
 
 /**
@@ -127,7 +145,6 @@ type FormValues = z.infer<typeof baseSchema>;
 
 const EMPTY: FormValues = {
   studentCode: '',
-  title: '',
   firstNameLo: '',
   lastNameLo: '',
   firstNameEn: '',
@@ -153,6 +170,7 @@ const EMPTY: FormValues = {
   status: 'active',
   classroomId: '',
   guardians: [EMPTY_GUARDIAN_LINK],
+  organizations: { children: '', youth: '', women: '' },
 };
 
 /**
@@ -162,7 +180,6 @@ const EMPTY: FormValues = {
 function toFormValues(student: Student): FormValues {
   return {
     studentCode: student.studentCode,
-    title: student.title ?? '',
     firstNameLo: student.firstNameLo,
     lastNameLo: student.lastNameLo,
     firstNameEn: student.firstNameEn ?? '',
@@ -184,6 +201,39 @@ function toFormValues(student: Student): FormValues {
     notes: student.notes ?? '',
     status: student.status,
     guardians: [],
+    organizations: toOrganizationFields(student.organizations),
+  };
+}
+
+/** The stored membership list as the form's keyed dates. */
+function toOrganizationFields(
+  memberships: StudentOrganizationMembership[] | undefined,
+): FormValues['organizations'] {
+  const fields: FormValues['organizations'] = { children: '', youth: '', women: '' };
+  for (const membership of memberships ?? []) {
+    fields[membership.organization] = toDateInput(membership.joinedDate);
+  }
+  return fields;
+}
+
+/**
+ * The form values as the API takes them — memberships back to a list.
+ *
+ * Used for both halves of the edit diff, so the "before" and "after" of a
+ * membership are always built the same way and an untouched list cannot read as
+ * a change.
+ */
+function toPayload(values: FormValues) {
+  const { guardians, classroomId, organizations, ...rest } = stripEmpty(values);
+  void guardians;
+  void classroomId;
+
+  return {
+    ...rest,
+    organizations: STUDENT_ORGANIZATIONS.filter((name) => organizations[name]).map((name) => ({
+      organization: name,
+      joinedDate: organizations[name] as string,
+    })),
   };
 }
 
@@ -236,15 +286,16 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
   }, [open, isEditing, onlyRoom, form]);
 
   function submit(values: FormValues) {
-    const { guardians, classroomId, ...rest } = stripEmpty(values);
+    const payload = toPayload(values);
+    const classroomId = stripEmpty(values).classroomId;
 
     if (student) {
       // Only what actually changed: PATCH must not carry `studentCode`, which is
       // immutable after intake and which the API rejects outright, and must not
       // re-send fields another user may have edited in the meantime.
       const { studentCode: _studentCode, ...patch } = changedFields(
-        rest,
-        stripEmpty(toFormValues(student)),
+        payload,
+        toPayload(toFormValues(student)),
       );
 
       if (Object.keys(patch).length === 0) {
@@ -261,8 +312,8 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
 
     void create
       .mutateAsync({
-        ...rest,
-        guardians: toGuardianPayload(guardians),
+        ...payload,
+        guardians: toGuardianPayload(values.guardians),
       } as StudentInput)
       .then(async (created) => {
         if (!classroomId) return { created, placed: false };
@@ -311,7 +362,6 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
               required
               options={GENDERS.map((gender) => ({ value: gender, label: t(`gender.${gender}`) }))}
             />
-            <TextField control={form.control} name="title" label={t('person.title')} />
             <TextField control={form.control} name="firstNameLo" label={t('person.firstNameLo')} required />
             <TextField control={form.control} name="lastNameLo" label={t('person.lastNameLo')} required />
             <TextField control={form.control} name="firstNameEn" label={t('person.firstNameEn')} />
@@ -366,6 +416,21 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
               />
             </FieldSection>
           )}
+
+          {/* A membership is an act with a date, so the date is the whole input.
+              Never derived from gender or age: the women's union count and the
+              female student count are two different figures. */}
+          <FieldSection title={t('studentOrganization.label')}>
+            {STUDENT_ORGANIZATIONS.map((name) => (
+              <DateField
+                key={name}
+                control={form.control}
+                name={`organizations.${name}`}
+                label={t(`studentOrganization.${name}`)}
+                description={t('studentOrganization.joinedDate')}
+              />
+            ))}
+          </FieldSection>
 
           <FieldSection>
             <DateField control={form.control} name="admissionDate" label={t('student.admissionDate')} />

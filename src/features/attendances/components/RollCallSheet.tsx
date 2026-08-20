@@ -657,10 +657,10 @@ function StudentRow({
               >
                 <SelectTrigger
                   aria-invalid={!draft.reason?.trim()}
-                  aria-label={t('attendance.excusedReason')}
+                  aria-label={t('attendance.reason')}
                   className="h-8 w-full text-xs sm:w-44"
                 >
-                  <SelectValue placeholder={t('attendance.excusedReason')} />
+                  <SelectValue placeholder={t('attendance.reason')} />
                 </SelectTrigger>
                 <SelectContent>
                   {EXCUSED_REASONS.map((reason) => (

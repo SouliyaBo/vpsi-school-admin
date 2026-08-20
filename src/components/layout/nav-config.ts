@@ -22,6 +22,7 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
+  Syringe,
   UserCog,
   Users,
   UsersRound,
@@ -110,6 +111,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { labelKey: 'lessonPlans', to: '/lesson-plans', icon: BookMarked, resource: 'lesson-plans' },
       { labelKey: 'exams', to: '/exams', icon: ScrollText, resource: 'exams', comingSoon: true },
       { labelKey: 'certificates', to: '/certificates', icon: Award, resource: 'certificates', comingSoon: true },
+      { labelKey: 'vaccinations', to: '/vaccinations', icon: Syringe, resource: 'vaccinations' },
     ],
   },
   {

@@ -14,8 +14,55 @@ export type PersonType = (typeof PERSON_TYPES)[number];
 export const USER_STATUSES = ['active', 'inactive', 'suspended'] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
 
-export const GENDERS = ['male', 'female', 'other'] as const;
+export const GENDERS = ['male', 'female'] as const;
 export type Gender = (typeof GENDERS)[number];
+
+/**
+ * Mass organisations a student is enrolled into — `ກອງເດັກນ້ອຍ`,
+ * `ສະຫະພັນຊາວໜຸ່ມ`, `ສະຫະພັນແມ່ຍິງ`.
+ *
+ * A student holds several at once, and never one derived from their gender: the
+ * women's union member count and the female student count are separate figures.
+ */
+export const STUDENT_ORGANIZATIONS = ['children', 'youth', 'women'] as const;
+export type StudentOrganization = (typeof STUDENT_ORGANIZATIONS)[number];
+
+/**
+ * School vaccination programme values.
+ *
+ * `VACCINES` names what is given; which students a round covers is a property of
+ * the campaign's eligibility rule, never of the vaccine — so nothing here
+ * implies a gender.
+ */
+export const VACCINES = ['hpv', 'td', 'mr', 'je', 'covid', 'other'] as const;
+export type Vaccine = (typeof VACCINES)[number];
+
+/**
+ * What happened to one student for one dose.
+ *
+ * `refused`, `absent` and `contraindicated` are outcomes rather than missing
+ * rows: the follow-up list is built from the difference between "not vaccinated"
+ * and "never asked".
+ */
+export const VACCINATION_STATUSES = [
+  'scheduled',
+  'administered',
+  'refused',
+  'absent',
+  'contraindicated',
+] as const;
+export type VaccinationStatus = (typeof VACCINATION_STATUSES)[number];
+
+export const CONSENT_STATUSES = ['pending', 'given', 'refused'] as const;
+export type ConsentStatus = (typeof CONSENT_STATUSES)[number];
+
+export const VACCINATION_CAMPAIGN_STATUSES = [
+  'planned',
+  'active',
+  'completed',
+  'cancelled',
+] as const;
+export type VaccinationCampaignStatus = (typeof VACCINATION_CAMPAIGN_STATUSES)[number];
 
 export const STUDENT_STATUSES = [
   'new',
@@ -220,11 +267,14 @@ export const PERMISSION_RESOURCES = [
   'feedback',
   'audit-logs',
   'settings',
+  'vaccinations',
 ] as const;
 export type PermissionResource = (typeof PERMISSION_RESOURCES)[number];
 
 export const AUDIT_ACTIONS = [
   'create',
+  // Health data only: reading one child's vaccination history is itself audited.
+  'read',
   'update',
   'delete',
   'login',

@@ -4,7 +4,12 @@ import { get, put, upload } from '@/lib/api-client';
 import { createCrudApi, createCrudHooks, useLookupQuery } from '@/lib/crud';
 import { fullName } from '@/lib/utils';
 import type { Sibling, Student } from '@/types/entities';
-import type { Gender, GuardianRelationship, StudentStatus } from '@/types/enums';
+import type {
+  Gender,
+  GuardianRelationship,
+  StudentOrganization,
+  StudentStatus,
+} from '@/types/enums';
 import type { GuardianInput } from '@/features/guardians/api';
 import type { SelectOption } from '@/components/common/fields';
 
@@ -24,9 +29,14 @@ export interface StudentGuardianInput {
   canViewRecords?: boolean;
 }
 
+/** One membership on the way in — the fact and `ວັນເຂົ້າ`, nothing else. */
+export interface StudentOrganizationInput {
+  organization: StudentOrganization;
+  joinedDate: string;
+}
+
 export interface StudentInput {
   studentCode: string;
-  title?: string;
   firstNameLo: string;
   lastNameLo: string;
   firstNameEn?: string;
@@ -50,6 +60,8 @@ export interface StudentInput {
   status?: StudentStatus;
   /** At least one, and exactly one of them must be primary. */
   guardians: StudentGuardianInput[];
+  /** At most one entry per organisation. Replaces the whole list when sent. */
+  organizations?: StudentOrganizationInput[];
 }
 
 /**

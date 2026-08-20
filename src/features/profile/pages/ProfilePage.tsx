@@ -9,17 +9,21 @@ import { z } from 'zod';
 import { authApi } from '@/features/auth/api';
 import { useCurrentUser } from '@/features/auth/hooks';
 import { useAuthStore } from '@/features/auth/store';
+import { useMyTeacher, useUploadMyPhoto } from '@/features/teachers/api';
 import { changeLocale } from '@/i18n';
 import { stripEmpty } from '@/lib/payload';
 import { notify } from '@/lib/toast';
+import { fullName, initials } from '@/lib/utils';
 import { optionalEmail } from '@/lib/zod-helpers';
 import { LOCALES, type Locale } from '@/types/enums';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form } from '@/components/ui/form';
 import { DetailRow, DetailSection } from '@/components/common/DetailDrawer';
 import { FieldSection, SelectField, TextField } from '@/components/common/fields';
+import { FileUpload } from '@/components/common/FileUpload';
 import { PageHeader } from '@/components/common/PageHeader';
 
 const schema = z.object({
@@ -32,15 +36,23 @@ type FormValues = z.infer<typeof schema>;
 /**
  * The signed-in user's own account.
  *
- * `PATCH /users/me` is the only self-service write available — everything else
- * about an account (role, status, person link) is an administrator action.
+ * `PATCH /users/me` and the portrait are the self-service writes available —
+ * everything else about an account (role, status, person link) is an
+ * administrator action. A teacher's photo is theirs to keep current, so it is
+ * uploaded here as well as from the staff page, where the office does it on
+ * their behalf.
  */
 export function ProfilePage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const user = useCurrentUser();
   const logout = useAuthStore((state) => state.logout);
   const refreshUser = useAuthStore((state) => state.refreshUser);
+
+  // Only loaded for an account linked to a staff record — an office or guardian
+  // login has no portrait to show, so the card stays off the page entirely.
+  const myTeacher = useMyTeacher();
+  const uploadPhoto = useUploadMyPhoto();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -79,6 +91,31 @@ export function ProfilePage() {
             <CardTitle className="text-base">{t('common.profile')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
+            {myTeacher.data && (
+              <div className="flex flex-wrap items-start gap-4">
+                <Avatar className="size-20 rounded-lg">
+                  {myTeacher.data.photoUrl && <AvatarImage src={myTeacher.data.photoUrl} alt="" />}
+                  <AvatarFallback className="rounded-lg text-lg">
+                    {initials(myTeacher.data)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div>
+                    <p className="truncate font-medium">
+                      {fullName(myTeacher.data, i18n.language)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{myTeacher.data.teacherCode}</p>
+                  </div>
+                  <FileUpload
+                    label={t('person.photo')}
+                    currentUrl={myTeacher.data.photoUrl}
+                    onUpload={(file, onProgress) => uploadPhoto.mutateAsync({ file, onProgress })}
+                    onUploaded={() => void myTeacher.refetch()}
+                  />
+                </div>
+              </div>
+            )}
+
             <DetailSection title={t('person.basicInfo')}>
               <DetailRow label={t('auth.username')}>{user.username}</DetailRow>
               <DetailRow label={t('nav.roles')}>

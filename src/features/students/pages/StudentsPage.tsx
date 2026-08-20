@@ -12,7 +12,7 @@ import { useTableQueryState } from '@/hooks/use-table-query-state';
 import { calculateAge, formatDate, fullName, initials, nickname } from '@/lib/utils';
 import { GENDERS, STUDENT_STATUSES } from '@/types/enums';
 import type { Student } from '@/types/entities';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
@@ -62,6 +62,14 @@ export function StudentsPage() {
         cell: ({ row }) => (
           <div className="flex items-center gap-2.5">
             <Avatar className="size-8">
+              {/* Staff recognise a child by their face before their name, so the
+                  roster shows the photo where there is one. `photoUrl` is a
+                  short-lived signed URL minted per request — the object key
+                  never leaves the API — and initials stay as the fallback for
+                  the students who have no photo on file yet. */}
+              {row.original.photoUrl && (
+                <AvatarImage src={row.original.photoUrl} alt="" loading="lazy" />
+              )}
               <AvatarFallback>{initials(row.original)}</AvatarFallback>
             </Avatar>
             <div className="min-w-0">

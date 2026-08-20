@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useCurrentUser } from '@/features/auth/hooks';
 import { useAuthStore } from '@/features/auth/store';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useMyTeacher } from '@/features/teachers/api';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -23,6 +24,9 @@ export function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
   const navigate = useNavigate();
   const user = useCurrentUser();
   const logout = useAuthStore((state) => state.logout);
+  // A teacher's own portrait, so the account menu shows who is signed in rather
+  // than two letters of their username. Not fetched at all for an office login.
+  const myTeacher = useMyTeacher();
 
   const current = findNavItem(location.pathname);
 
@@ -65,6 +69,7 @@ export function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm" className="gap-2 px-1.5">
             <Avatar className="size-7">
+              {myTeacher.data?.photoUrl && <AvatarImage src={myTeacher.data.photoUrl} alt="" />}
               <AvatarFallback>{user?.username.slice(0, 2).toUpperCase() ?? '?'}</AvatarFallback>
             </Avatar>
             <span className="hidden text-sm font-medium sm:inline">{user?.username}</span>
