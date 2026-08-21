@@ -224,18 +224,23 @@ export function StudentsPage() {
         toolbar={
           <TableToolbar hasActiveFilters={table.hasActiveFilters} onClearFilters={table.clearFilters}>
             <SearchInput value={table.search ?? ''} onChange={table.setSearch} className="w-full sm:w-64" />
-            {/* The API narrows to `active` when no status is given, so the
-                trigger shows that rather than "all", and seeing leavers and
-                graduates means asking for `all` by name. */}
+            {/* The API narrows to the current roll — `active` plus
+                `no_certificate`, since declining the certificate does not take a
+                child out of a classroom — when no status is given, so the trigger
+                shows that rather than "all", and seeing leavers and graduates
+                means asking for `all` by name. */}
             <FilterSelect
-              value={table.filters.status ?? 'active'}
+              value={table.filters.status ?? 'current'}
               onChange={(value) => table.setFilter('status', value)}
               allValue="all"
               allLabel={t('student.everyStatus')}
-              options={STUDENT_STATUSES.map((status) => ({
-                value: status,
-                label: t(`studentStatus.${status}`),
-              }))}
+              options={[
+                { value: 'current', label: t('student.currentRoll') },
+                ...STUDENT_STATUSES.map((status) => ({
+                  value: status,
+                  label: t(`studentStatus.${status}`),
+                })),
+              ]}
               placeholder={t('person.status')}
             />
             <FilterSelect

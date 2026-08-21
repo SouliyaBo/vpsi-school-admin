@@ -210,6 +210,7 @@ export const en: typeof lo = {
     sharedGuardian: 'Shared guardian',
     atLeastOneGuardian: 'At least one guardian is required',
     everyStatus: 'Status: every status',
+    currentRoll: 'Still studying (incl. no certificate)',
   },
   enrollment: {
     title: 'Enrollment',
@@ -306,7 +307,7 @@ export const en: typeof lo = {
   },
   behaviorLog: {
     title: 'Behaviour register',
-    subtitle: "Track and record student behaviour month by month, one sheet per class",
+    subtitle: 'Track and record student behaviour month by month, one sheet per class',
     formTitle: 'Monitoring and recording of student behaviour',
     sheetTab: 'Monthly sheet',
     historyTab: 'History',
@@ -371,6 +372,44 @@ export const en: typeof lo = {
     emptyTallyHint: 'An empty register means there has been nothing to follow up',
     tallyNote:
       'Only students named in the register are listed, ranked by how often they were warned or lost points',
+
+    // ── Weekly coverage ────────────────────────────────────────────────────
+    coverageTab: 'This week',
+    week: 'Week',
+    weekRange: '{{from}} – {{to}}',
+    previousWeek: 'Previous week',
+    nextWeek: 'Next week',
+    asOf: 'as of {{date}}',
+    everyClassroom: 'Every class',
+    onlyMissing: 'Only what is missing',
+    coverageReportTitle: 'Weekly behaviour-register coverage',
+    coverageScopeMissing: 'Outstanding lessons only',
+    coverageScopeAll: 'Every lesson of the week',
+    coverageSummaryLine:
+      '{{recorded}}/{{expected}} lessons written up ({{rate}}%) · {{missing}} outstanding · {{teachers}} teacher(s) · {{classrooms}} class(es) behind',
+    printedOn: 'Printed {{date}}',
+    lessons: 'Lessons',
+    lessonsTaught: '{{count}} lesson(s) taught',
+    coverageStatus: 'Status',
+    statusRecorded: 'Recorded',
+    statusMissing: 'Nothing written',
+    statusNotYet: 'Not due yet',
+    coverageRate: 'Recorded',
+    missingLessons: 'Nothing written',
+    teachersBehind: 'Teachers behind',
+    classroomsBehind: 'Classes behind',
+    noGaps: 'Every lesson this week has been written up',
+    noGapsHint: 'Nothing is outstanding for this week',
+    noLessonsThisWeek: 'No lessons timetabled this week',
+    noLessonsThisWeekHint: 'Check the active semester, or the timetable',
+    coverageNote:
+      'Taken from the timetable against what the register holds for that week, counted up to today only — a lesson still ahead is not a gap. Rotating periods are left out, since the timetable cannot say which teacher took which class. Holidays are not deducted.',
+
+    // ── The teacher's own week ──────────────────────────────────────────────
+    myWeekMissing: 'You have not written up {{count}} lesson(s) this week',
+    myWeekDone: 'Your register is up to date for this week ({{range}})',
+    myWeekHint: 'Use the “Monthly sheet” tab to add an entry',
+    andMore: 'and {{count}} more',
   },
   guardian: {
     title: 'Guardians',

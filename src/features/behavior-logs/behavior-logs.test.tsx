@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as apiClient from '@/lib/api-client';
 import { paginated, renderWithProviders } from '@/test/utils';
 import { MonthlySheet } from './components/MonthlySheet';
+import { MyWeekReminder } from './components/MyWeekReminder';
+import { WeeklyCoverage } from './components/WeeklyCoverage';
+import { BehaviorLogsPage } from './pages/BehaviorLogsPage';
 
 /**
  * The behaviour register, written and read as rows.
@@ -75,8 +78,22 @@ const sharedRow = {
   remark: 'ພອນທິບ',
   teachingAssignmentId: lesson.teachingAssignmentId,
   students: [
-    { id: 'rec-1', studentId: 'stu-1', studentCode: 'S-0001', studentNameLo: 'ທ້າວ ແດນມີ', behavior: 'ວົນແຊວ', action: 'ເຕືອນ 2 ຄັ້ງ' },
-    { id: 'rec-2', studentId: 'stu-3', studentCode: 'S-0003', studentNameLo: 'ທ້າວ ວິໄຊ', behavior: 'ວົນແຊວ', action: 'ເຕືອນ 2 ຄັ້ງ' },
+    {
+      id: 'rec-1',
+      studentId: 'stu-1',
+      studentCode: 'S-0001',
+      studentNameLo: 'ທ້າວ ແດນມີ',
+      behavior: 'ວົນແຊວ',
+      action: 'ເຕືອນ 2 ຄັ້ງ',
+    },
+    {
+      id: 'rec-2',
+      studentId: 'stu-3',
+      studentCode: 'S-0003',
+      studentNameLo: 'ທ້າວ ວິໄຊ',
+      behavior: 'ວົນແຊວ',
+      action: 'ເຕືອນ 2 ຄັ້ງ',
+    },
   ],
 };
 
@@ -97,8 +114,14 @@ const sheet = { classroom, year: 2025, month: 11, rows: [classOnlyRow, sharedRow
 
 const entryContext = { date: '2025-11-30', lessons: [lesson], roster: ROSTER };
 
+/**
+ * Swapped per test: the coverage tab is gated on `behavior-logs:manage`, which
+ * only the administrator and the head of academic affairs hold.
+ */
+let permits: (resource: string, action?: string) => boolean = () => true;
+
 vi.mock('@/features/auth/hooks', () => ({
-  useCan: () => () => true,
+  useCan: () => (resource: string, action?: string) => permits(resource, action),
   useCurrentUser: () => ({ username: 'admin', permissions: [] }),
   useSeesEveryStudent: () => true,
 }));
@@ -229,9 +252,7 @@ describe('behaviour register — nicknames', () => {
     expect(
       await screen.findByRole('option', { name: 'S-0001 — ທ້າວ ແດນມີ (ລິຕ້າ) (1)' }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole('option', { name: 'S-0002 — ທ້າວ ວົນລັງສຸມ (2)' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'S-0002 — ທ້າວ ວົນລັງສຸມ (2)' })).toBeInTheDocument();
   });
 });
 
@@ -255,7 +276,9 @@ describe('behaviour register — writing a row', () => {
     await userEvent.click(within(dialog).getByRole('combobox', { name: /add a student/i }));
     await userEvent.click(await screen.findByRole('option', { name: /ທ້າວ ແດນມີ/ }));
 
-    const studentRow = within(dialog).getByText(/ທ້າວ ແດນມີ/).closest('div') as HTMLElement;
+    const studentRow = within(dialog)
+      .getByText(/ທ້າວ ແດນມີ/)
+      .closest('div') as HTMLElement;
     await userEvent.type(within(studentRow).getByLabelText(/behaviour/i), 'ວົນແຊວ');
     await userEvent.type(within(studentRow).getByLabelText(/deduction/i), 'ເຕືອນ 2 ຄັ້ງ');
 
@@ -282,9 +305,7 @@ describe('behaviour register — writing a row', () => {
     await userEvent.click(await screen.findByRole('button', { name: /add entry/i }));
     const dialog = await screen.findByRole('dialog');
 
-    expect(
-      within(dialog).getByText(/will record the class as a whole only/i),
-    ).toBeInTheDocument();
+    expect(within(dialog).getByText(/will record the class as a whole only/i)).toBeInTheDocument();
 
     await userEvent.type(
       within(dialog).getByLabelText(/the class as a whole/i),
@@ -360,7 +381,9 @@ describe('behaviour register — correcting a row', () => {
 
     // Drops one of the two students, which is the case an in-place edit of the
     // records could not express.
-    const listed = within(dialog).getByText(/ທ້າວ ວິໄຊ/).closest('div') as HTMLElement;
+    const listed = within(dialog)
+      .getByText(/ທ້າວ ວິໄຊ/)
+      .closest('div') as HTMLElement;
     await userEvent.click(within(listed).getByRole('button', { name: /^delete$/i }));
 
     await userEvent.click(within(dialog).getByRole('button', { name: /^save$/i }));
@@ -389,5 +412,262 @@ describe('behaviour register — correcting a row', () => {
     await userEvent.click(screen.getByRole('button', { name: /^confirm$/i }));
 
     await waitFor(() => expect(del).toHaveBeenCalledWith('/behavior-logs/grp-1'));
+  });
+});
+
+/**
+ * The weekly coverage report — the register read for what is *not* in it.
+ *
+ * Every other screen here starts from rows that exist, so none of them can show
+ * the class nobody wrote about. These two do: the teacher's own reminder, and the
+ * oversight table behind it. The API computes both; what is under test is that
+ * the screen only ever shows a gap that is actually owed, and that the oversight
+ * half stays out of sight for the accounts it is not for.
+ */
+
+const coverageRow = (overrides: Record<string, unknown> = {}) => ({
+  teachingAssignmentId: 'ta-1',
+  teacherId: teacher.id,
+  teacherCode: teacher.teacherCode,
+  teacherName: 'ພອນທິບ ພົມມະ',
+  subjectId: subject.id,
+  subjectCode: subject.code,
+  subjectNameLo: subject.nameLo,
+  subjectNameEn: subject.nameEn,
+  classroomId: classroom.id,
+  classroomName: 'ກ',
+  gradeLevelCode: 'ມ.1',
+  lessonsThisWeek: 2,
+  lessonsElapsed: 1,
+  rows: 0,
+  studentsNoted: 0,
+  lastDate: null,
+  status: 'missing',
+  ...overrides,
+});
+
+const coverageWeek = (
+  rows: Record<string, unknown>[],
+  summary: Record<string, unknown> = {},
+  extra: Record<string, unknown> = {},
+) => ({
+  weekStartDate: '2025-11-03',
+  weekEndDate: '2025-11-09',
+  asOf: '2025-11-05',
+  semester: { id: 'sem-1', nameLo: 'ພາກຮຽນທີ 1', nameEn: 'Semester 1' },
+  rows,
+  summary: {
+    expected: rows.length,
+    recorded: rows.filter((row) => row.status === 'recorded').length,
+    missing: rows.filter((row) => row.status === 'missing').length,
+    notYet: rows.filter((row) => row.status === 'not_yet').length,
+    coverageRate: 0,
+    teachersMissing: 0,
+    classroomsMissing: 0,
+    ...summary,
+  },
+  ...extra,
+});
+
+/** Params of the most recent request to `url`. */
+function lastParams(url: string) {
+  const calls = vi.mocked(apiClient.get).mock.calls.filter(([path]) => path === url);
+  return (calls.at(-1)?.[1] as { params: Record<string, unknown> } | undefined)?.params;
+}
+
+describe('behaviour register — the teacher’s weekly reminder', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    permits = () => true;
+  });
+
+  it('names the lessons the teacher has not written up, and counts only those', async () => {
+    stubReads({
+      '/behavior-logs/weekly-coverage/mine': coverageWeek(
+        [
+          coverageRow(),
+          // Taught later this week — not owed yet, so it must not be counted.
+          coverageRow({ teachingAssignmentId: 'ta-2', status: 'not_yet', lessonsElapsed: 0 }),
+          coverageRow({ teachingAssignmentId: 'ta-3', status: 'recorded', rows: 2 }),
+        ],
+        {},
+        { teacherId: teacher.id },
+      ),
+    });
+
+    renderWithProviders(<MyWeekReminder />);
+
+    expect(await screen.findByText(/have not written up 1 lesson/i)).toBeInTheDocument();
+    // The class as the school names it, the subject, and how much was taught.
+    expect(screen.getByText('ມ.1/ກ')).toBeInTheDocument();
+    expect(screen.getByText(/Lao · 1 lesson\(s\) taught/)).toBeInTheDocument();
+  });
+
+  it('says so when the week is complete, rather than going quiet', async () => {
+    stubReads({
+      '/behavior-logs/weekly-coverage/mine': coverageWeek(
+        [coverageRow({ status: 'recorded', rows: 1 })],
+        {},
+        { teacherId: teacher.id },
+      ),
+    });
+
+    renderWithProviders(<MyWeekReminder />);
+
+    expect(await screen.findByText(/register is up to date for this week/i)).toBeInTheDocument();
+  });
+
+  it('shows nothing to an account that teaches nothing', async () => {
+    // The API scopes the read to the session, so an office account comes back
+    // with no lessons of its own — and a reminder about nothing is noise.
+    stubReads({
+      '/behavior-logs/weekly-coverage/mine': coverageWeek([], {}, { teacherId: null }),
+    });
+
+    renderWithProviders(<MyWeekReminder />);
+
+    await waitFor(() => expect(lastParams('/behavior-logs/weekly-coverage/mine')).toEqual({}));
+    expect(screen.queryByText(/have not written up/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/up to date for this week/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('behaviour register — weekly coverage for the office', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    permits = () => true;
+  });
+
+  it('lists the gaps first, and asks for only those by default', async () => {
+    stubReads({
+      '/behavior-logs/weekly-coverage': coverageWeek(
+        [coverageRow(), coverageRow({ teachingAssignmentId: 'ta-2', teacherName: 'ສົມໃຈ ວົງສາ' })],
+        {
+          expected: 4,
+          recorded: 2,
+          missing: 2,
+          teachersMissing: 2,
+          classroomsMissing: 1,
+          coverageRate: 50,
+        },
+      ),
+    });
+
+    renderWithProviders(<WeeklyCoverage />);
+
+    expect(await screen.findByText('ພອນທິບ ພົມມະ')).toBeInTheDocument();
+    expect(screen.getByText('ສົມໃຈ ວົງສາ')).toBeInTheDocument();
+    // The list is narrowed to what is outstanding, but the tiles still report the
+    // whole week — 2 of 4 recorded, two teachers and one class behind.
+    expect(screen.getByText('2/4')).toBeInTheDocument();
+    expect(screen.getByText(/teachers behind/i)).toBeInTheDocument();
+    expect(lastParams('/behavior-logs/weekly-coverage')).toMatchObject({
+      outstandingOnly: 'true',
+    });
+  });
+
+  it('shows the whole week when the filter is turned off', async () => {
+    stubReads({ '/behavior-logs/weekly-coverage': coverageWeek([coverageRow()]) });
+    renderWithProviders(<WeeklyCoverage />);
+    await screen.findByText('ພອນທິບ ພົມມະ');
+
+    await userEvent.click(screen.getByRole('switch', { name: /only what is missing/i }));
+
+    await waitFor(() =>
+      expect(lastParams('/behavior-logs/weekly-coverage')).toMatchObject({
+        outstandingOnly: 'false',
+      }),
+    );
+  });
+
+  it('walks back a week without letting the week ahead be asked for', async () => {
+    stubReads({ '/behavior-logs/weekly-coverage': coverageWeek([coverageRow()]) });
+    renderWithProviders(<WeeklyCoverage />);
+    await screen.findByText('ພອນທິບ ພົມມະ');
+
+    // Nothing has been taught in a week that has not started, so every row would
+    // come back "not due" — the button is closed rather than answering that.
+    expect(screen.getByRole('button', { name: /next week/i })).toBeDisabled();
+
+    const thisWeek = lastParams('/behavior-logs/weekly-coverage')?.weekOf as string;
+    await userEvent.click(screen.getByRole('button', { name: /previous week/i }));
+
+    await waitFor(() => {
+      const asked = lastParams('/behavior-logs/weekly-coverage')?.weekOf as string;
+      expect(new Date(thisWeek).getTime() - new Date(asked).getTime()).toBe(7 * 86_400_000);
+    });
+    expect(screen.getByRole('button', { name: /next week/i })).toBeEnabled();
+  });
+
+  it('hands the week out as a document, saying for itself what it is a table of', async () => {
+    const print = vi.fn();
+    vi.stubGlobal('print', print);
+    stubReads({
+      '/behavior-logs/weekly-coverage': coverageWeek([coverageRow()], {
+        expected: 3,
+        recorded: 2,
+        missing: 1,
+        teachersMissing: 1,
+        classroomsMissing: 1,
+        coverageRate: 66.7,
+      }),
+    });
+
+    renderWithProviders(<WeeklyCoverage />);
+    await screen.findByText('ພອນທິບ ພົມມະ');
+
+    // The week, the filter and the counts live in the toolbar and the tiles on
+    // screen — all of which the print stylesheet drops — so the printed block has
+    // to carry them itself.
+    // Scoped to the printed block: the week range is also in the toolbar above,
+    // which is exactly the part the printer drops.
+    const printed = screen
+      .getByText(/weekly behaviour-register coverage/i)
+      .closest('header') as HTMLElement;
+
+    expect(within(printed).getByText(/03\/11\/2025 – 09\/11\/2025/)).toBeInTheDocument();
+    expect(within(printed).getByText(/as of 05\/11\/2025/i)).toBeInTheDocument();
+    expect(within(printed).getByText(/outstanding lessons only · every class/i)).toBeInTheDocument();
+    expect(within(printed).getByText(/2\/3 lessons written up \(66.7%\)/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /^print$/i }));
+    expect(print).toHaveBeenCalledTimes(1);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('does not offer to print a week with nothing in it', async () => {
+    stubReads({ '/behavior-logs/weekly-coverage': coverageWeek([]) });
+
+    renderWithProviders(<WeeklyCoverage />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /^print$/i })).toBeDisabled());
+  });
+
+  it('is a tab only for the accounts that oversee the register', async () => {
+    stubReads({ '/behavior-logs/weekly-coverage': coverageWeek([]) });
+    // A teacher holds create/read/update/delete on the register but not `manage`:
+    // their own week is theirs to see, the school's is not.
+    permits = (_resource, action) => action !== 'manage';
+
+    renderWithProviders(<BehaviorLogsPage />);
+
+    expect(await screen.findByRole('tab', { name: /monthly sheet/i })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /this week/i })).not.toBeInTheDocument();
+
+    // …and the report itself is never requested, not merely hidden on screen.
+    expect(
+      vi
+        .mocked(apiClient.get)
+        .mock.calls.filter(([url]) => url === '/behavior-logs/weekly-coverage'),
+    ).toHaveLength(0);
+  });
+
+  it('is a tab for the administrator and the head of academic affairs', async () => {
+    stubReads({ '/behavior-logs/weekly-coverage': coverageWeek([]) });
+
+    renderWithProviders(<BehaviorLogsPage />);
+
+    expect(await screen.findByRole('tab', { name: /this week/i })).toBeInTheDocument();
   });
 });

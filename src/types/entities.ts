@@ -245,7 +245,7 @@ export interface StudentPlacement {
   enrolledAt: string;
 }
 
-/** `ກອງເດັກນ້ອຍ` / `ສະຫະພັນຊາວໜຸ່ມ` / `ສະຫະພັນແມ່ຍິງ` — the fact and `ວັນເຂົ້າ`. */
+/** `ເຍົາວະຊົນ` / `ເຂົ້າຊາວໜຸ່ມ` / `ເຂົ້າແມ່ຍິງ` — the fact and `ວັນເຂົ້າ`. */
 export interface StudentOrganizationMembership {
   organization: StudentOrganization;
   joinedDate: string;

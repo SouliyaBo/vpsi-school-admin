@@ -18,8 +18,8 @@ export const GENDERS = ['male', 'female'] as const;
 export type Gender = (typeof GENDERS)[number];
 
 /**
- * Mass organisations a student is enrolled into — `ກອງເດັກນ້ອຍ`,
- * `ສະຫະພັນຊາວໜຸ່ມ`, `ສະຫະພັນແມ່ຍິງ`.
+ * Mass organisations a student is enrolled into — `ເຍົາວະຊົນ`,
+ * `ເຂົ້າຊາວໜຸ່ມ`, `ເຂົ້າແມ່ຍິງ`.
  *
  * A student holds several at once, and never one derived from their gender: the
  * women's union member count and the female student count are separate figures.

@@ -224,10 +224,11 @@ describe('StudentsPage — list', () => {
 });
 
 /**
- * `GET /students` narrows to the children currently attending when no status is
- * given, so the dropdown has to show that default rather than "all", and asking
- * for the whole register has to send `all` by name — a cleared filter would
- * silently mean `active` again.
+ * `GET /students` narrows to the current roll when no status is given — `active`
+ * together with `no_certificate`, since declining the certificate leaves a child
+ * in their classroom — so the dropdown has to show that default rather than
+ * "all", and asking for the whole register has to send `all` by name; a cleared
+ * filter would silently mean the roll again.
  */
 describe('StudentsPage — the status filter', () => {
   beforeEach(() => {
@@ -258,8 +259,9 @@ describe('StudentsPage — the status filter', () => {
     renderWithProviders(<StudentsPage />);
     await screen.findByText('ສົມຈິດ ວົງສາ');
 
-    // The trigger names what the server actually returns…
-    statusFilter('Active');
+    // The trigger names what the server actually returns — the roll, not just
+    // the children with a certificate ahead of them…
+    statusFilter('Still studying (incl. no certificate)');
     // …and the default costs no query param, so it stays out of the URL and off
     // the "clear filters" count.
     expect(lastListParams()).not.toHaveProperty('status');
@@ -270,7 +272,7 @@ describe('StudentsPage — the status filter', () => {
     renderWithProviders(<StudentsPage />);
     await screen.findByText('ສົມຈິດ ວົງສາ');
 
-    await userEvent.click(statusFilter('Active'));
+    await userEvent.click(statusFilter('Still studying (incl. no certificate)'));
     await userEvent.click(await screen.findByRole('option', { name: /every status/i }));
 
     await waitFor(() => expect(lastListParams()).toMatchObject({ status: 'all' }));
@@ -280,7 +282,7 @@ describe('StudentsPage — the status filter', () => {
     renderWithProviders(<StudentsPage />);
     await screen.findByText('ສົມຈິດ ວົງສາ');
 
-    await userEvent.click(statusFilter('Active'));
+    await userEvent.click(statusFilter('Still studying (incl. no certificate)'));
     await userEvent.click(await screen.findByRole('option', { name: /graduated/i }));
 
     await waitFor(() => expect(lastListParams()).toMatchObject({ status: 'graduated' }));
