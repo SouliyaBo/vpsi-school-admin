@@ -4,6 +4,7 @@ import type { ListParams } from '@/lib/crud';
 import { cleanParams } from '@/lib/utils';
 import type { PaginatedResponse } from '@/types/common';
 import type { BehaviorLog, Classroom, Subject, Teacher } from '@/types/entities';
+import type { CoverageParams, MyLessonCoverage } from '@/features/coverage/api';
 
 /**
  * The behaviour register (ການຕິດຕາມ ແລະ ບັນທຶກພຶດຕິກຳຂອງນັກຮຽນ).
@@ -126,85 +127,6 @@ export interface UpdateBehaviorLogInput {
   entries?: BehaviorEntryInput[];
 }
 
-/**
- * One (teacher, subject, class) the timetable says was taught this week, and what
- * the register holds for it.
- *
- * `not_yet` is what keeps the report worth reading: on a Tuesday, a class taught
- * only on Thursday owes nothing.
- */
-export type CoverageStatus = 'recorded' | 'missing' | 'not_yet';
-
-export interface WeeklyCoverageRow {
-  teachingAssignmentId: string;
-  teacherId: string;
-  teacherCode: string | null;
-  teacherName: string;
-  subjectId: string;
-  subjectCode: string | null;
-  subjectNameLo: string;
-  subjectNameEn: string | null;
-  classroomId: string;
-  classroomName: string;
-  /** `ມ.1` — the grade, so a row reads as the school says it. */
-  gradeLevelCode: string | null;
-  /** Timetabled periods across the whole week. */
-  lessonsThisWeek: number;
-  /** Of those, the ones already taught. */
-  lessonsElapsed: number;
-  /** Rows of the register written for this lesson in the week. */
-  rows: number;
-  studentsNoted: number;
-  lastDate: string | null;
-  status: CoverageStatus;
-}
-
-export interface WeeklyCoverageSummary {
-  /** Lessons that owe something this week — `not_yet` excluded. */
-  expected: number;
-  recorded: number;
-  missing: number;
-  notYet: number;
-  /** `recorded / expected`, 0–100. */
-  coverageRate: number;
-  teachersMissing: number;
-  classroomsMissing: number;
-}
-
-/**
- * `GET /behavior-logs/weekly-coverage` — the register read the other way round.
- *
- * Every other read starts from rows that exist, so none of them can show the
- * class nobody wrote about. This one starts from the timetable, which is what
- * makes a gap visible at all.
- */
-export interface WeeklyCoverage {
-  weekStartDate: string;
-  weekEndDate: string;
-  /** The day the week is measured up to — today, or the week's end once past. */
-  asOf: string;
-  semester: { id: string; nameLo: string; nameEn: string | null } | null;
-  rows: WeeklyCoverageRow[];
-  /** Always the whole week, even when `rows` was narrowed to the gaps. */
-  summary: WeeklyCoverageSummary;
-}
-
-/** The signed-in teacher's own week; `teacherId` is `null` for an office account. */
-export interface MyWeeklyCoverage extends WeeklyCoverage {
-  teacherId: string | null;
-}
-
-/** `Record` so `cleanParams` can walk it — the same shape `ListParams` takes. */
-export interface WeeklyCoverageParams extends Record<string, unknown> {
-  /** Any date in the week; the API snaps it to the Monday. Defaults to today. */
-  weekOf?: string;
-  semesterId?: string;
-  classroomId?: string;
-  teacherId?: string;
-  /** Narrows the rows to the gaps; the summary still counts the whole week. */
-  outstandingOnly?: boolean;
-}
-
 /** `GET /behavior-logs/tally/...` — per-student counts over one semester. */
 export interface BehaviorTallyRow {
   studentId: string;
@@ -239,11 +161,8 @@ export const behaviorLogsApi = {
   classroomTally: (classroomId: string, semesterId: string) =>
     get<BehaviorTallyRow[]>(`/behavior-logs/tally/classroom/${classroomId}/semester/${semesterId}`),
 
-  weeklyCoverage: (params: WeeklyCoverageParams = {}) =>
-    get<WeeklyCoverage>('/behavior-logs/weekly-coverage', { params: cleanParams(params) }),
-
-  myWeek: (params: Pick<WeeklyCoverageParams, 'weekOf' | 'semesterId'> = {}) =>
-    get<MyWeeklyCoverage>('/behavior-logs/weekly-coverage/mine', {
+  myWeek: (params: Pick<CoverageParams, 'weekOf' | 'semesterId'> = {}) =>
+    get<MyLessonCoverage>('/behavior-logs/weekly-coverage/mine', {
       params: cleanParams(params),
     }),
 };
@@ -279,23 +198,6 @@ export function useBehaviorTally(classroomId: string | undefined, semesterId: st
     queryFn: () => behaviorLogsApi.classroomTally(classroomId!, semesterId!),
     enabled: Boolean(classroomId && semesterId),
     retry: false,
-  });
-}
-
-/**
- * Who wrote nothing this week — the oversight read.
- *
- * `behavior-logs:manage` on the API, which is the administrator and the head of
- * academic affairs: it reports on other people's work, so the screen that shows
- * it is gated the same way rather than trusted to hide itself.
- */
-export function useWeeklyCoverage(params: WeeklyCoverageParams) {
-  return useQuery({
-    queryKey: ['behavior-logs', 'weekly-coverage', params],
-    queryFn: () => behaviorLogsApi.weeklyCoverage(params),
-    // Keeps the previous week on screen while the next one loads, so paging back
-    // through the term does not blank the table on every click.
-    placeholderData: (previous) => previous,
   });
 }
 

@@ -1,11 +1,11 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as apiClient from '@/lib/api-client';
 import { paginated, renderWithProviders } from '@/test/utils';
 import { MonthlySheet } from './components/MonthlySheet';
 import { MyWeekReminder } from './components/MyWeekReminder';
-import { WeeklyCoverage } from './components/WeeklyCoverage';
+import { CoverageReport } from '@/features/coverage/CoverageReport';
 import { BehaviorLogsPage } from './pages/BehaviorLogsPage';
 
 /**
@@ -437,9 +437,11 @@ const coverageRow = (overrides: Record<string, unknown> = {}) => ({
   classroomId: classroom.id,
   classroomName: 'ກ',
   gradeLevelCode: 'ມ.1',
-  lessonsThisWeek: 2,
+  lessonsTimetabled: 2,
   lessonsElapsed: 1,
-  rows: 0,
+  lessonDates: ['2025-11-03'],
+  missingDates: ['2025-11-03'],
+  entries: 0,
   studentsNoted: 0,
   lastDate: null,
   status: 'missing',
@@ -451,8 +453,9 @@ const coverageWeek = (
   summary: Record<string, unknown> = {},
   extra: Record<string, unknown> = {},
 ) => ({
-  weekStartDate: '2025-11-03',
-  weekEndDate: '2025-11-09',
+  scope: 'week',
+  startDate: '2025-11-03',
+  endDate: '2025-11-09',
   asOf: '2025-11-05',
   semester: { id: 'sem-1', nameLo: 'ພາກຮຽນທີ 1', nameEn: 'Semester 1' },
   rows,
@@ -468,6 +471,15 @@ const coverageWeek = (
   },
   ...extra,
 });
+
+/** The same report one day wide — what the API sends when `date` is asked for. */
+const coverageDay = (rows: Record<string, unknown>[], summary: Record<string, unknown> = {}) =>
+  coverageWeek(rows, summary, {
+    scope: 'day',
+    startDate: '2025-11-03',
+    endDate: '2025-11-03',
+    asOf: '2025-11-03',
+  });
 
 /** Params of the most recent request to `url`. */
 function lastParams(url: string) {
@@ -488,7 +500,7 @@ describe('behaviour register — the teacher’s weekly reminder', () => {
           coverageRow(),
           // Taught later this week — not owed yet, so it must not be counted.
           coverageRow({ teachingAssignmentId: 'ta-2', status: 'not_yet', lessonsElapsed: 0 }),
-          coverageRow({ teachingAssignmentId: 'ta-3', status: 'recorded', rows: 2 }),
+          coverageRow({ teachingAssignmentId: 'ta-3', status: 'recorded', entries: 2 }),
         ],
         {},
         { teacherId: teacher.id },
@@ -506,7 +518,7 @@ describe('behaviour register — the teacher’s weekly reminder', () => {
   it('says so when the week is complete, rather than going quiet', async () => {
     stubReads({
       '/behavior-logs/weekly-coverage/mine': coverageWeek(
-        [coverageRow({ status: 'recorded', rows: 1 })],
+        [coverageRow({ status: 'recorded', entries: 1 })],
         {},
         { teacherId: teacher.id },
       ),
@@ -553,7 +565,7 @@ describe('behaviour register — weekly coverage for the office', () => {
       ),
     });
 
-    renderWithProviders(<WeeklyCoverage />);
+    renderWithProviders(<CoverageReport kind="behavior" />);
 
     expect(await screen.findByText('ພອນທິບ ພົມມະ')).toBeInTheDocument();
     expect(screen.getByText('ສົມໃຈ ວົງສາ')).toBeInTheDocument();
@@ -568,7 +580,7 @@ describe('behaviour register — weekly coverage for the office', () => {
 
   it('shows the whole week when the filter is turned off', async () => {
     stubReads({ '/behavior-logs/weekly-coverage': coverageWeek([coverageRow()]) });
-    renderWithProviders(<WeeklyCoverage />);
+    renderWithProviders(<CoverageReport kind="behavior" />);
     await screen.findByText('ພອນທິບ ພົມມະ');
 
     await userEvent.click(screen.getByRole('switch', { name: /only what is missing/i }));
@@ -582,7 +594,7 @@ describe('behaviour register — weekly coverage for the office', () => {
 
   it('walks back a week without letting the week ahead be asked for', async () => {
     stubReads({ '/behavior-logs/weekly-coverage': coverageWeek([coverageRow()]) });
-    renderWithProviders(<WeeklyCoverage />);
+    renderWithProviders(<CoverageReport kind="behavior" />);
     await screen.findByText('ພອນທິບ ພົມມະ');
 
     // Nothing has been taught in a week that has not started, so every row would
@@ -599,6 +611,58 @@ describe('behaviour register — weekly coverage for the office', () => {
     expect(screen.getByRole('button', { name: /next week/i })).toBeEnabled();
   });
 
+  it('jumps to a picked date, rather than walking back to it', async () => {
+    stubReads({ '/behavior-logs/weekly-coverage': coverageWeek([coverageRow()]) });
+    renderWithProviders(<CoverageReport kind="behavior" />);
+    await screen.findByText('ພອນທິບ ພົມມະ');
+
+    // A Wednesday. `fireEvent` rather than typing: `<input type="date">` takes a
+    // whole value, not keystrokes.
+    fireEvent.change(screen.getByLabelText(/^week$/i), { target: { value: '2025-09-17' } });
+
+    // Sent as picked — the API takes any day of the week and snaps it — and kept
+    // as picked, because it is also the day the "one day" view is about to read.
+    await waitFor(() =>
+      expect(lastParams('/behavior-logs/weekly-coverage')).toMatchObject({
+        weekOf: '2025-09-17',
+      }),
+    );
+    expect(screen.getByLabelText(/^week$/i)).toHaveValue('2025-09-17');
+    // A week in the past, so walking forward out of it is open again.
+    expect(screen.getByRole('button', { name: /next week/i })).toBeEnabled();
+  });
+
+  it('says which day of the week a gap belongs to', async () => {
+    // Monday 2025-11-03 — the lesson was taught, and nothing was written for it.
+    stubReads({ '/behavior-logs/weekly-coverage': coverageWeek([coverageRow()]) });
+    renderWithProviders(<CoverageReport kind="behavior" />);
+
+    // "0 of 2 written" does not say which two days went unwritten, and that is
+    // the first thing asked of whoever is holding the report.
+    expect(await screen.findByText('Mon 3')).toBeInTheDocument();
+  });
+
+  it('reads one day on its own, rather than crediting it with the week’s rows', async () => {
+    stubReads({ '/behavior-logs/weekly-coverage': coverageDay([coverageRow()]) });
+    renderWithProviders(<CoverageReport kind="behavior" />);
+    await screen.findByText('ພອນທິບ ພົມມະ');
+
+    await userEvent.click(screen.getByRole('button', { name: /one day/i }));
+
+    // `date`, not `weekOf`: a week's totals credit Monday's lesson with a row
+    // written on Tuesday, which is the whole reason a day is asked for on its own.
+    await waitFor(() => {
+      expect(lastParams('/behavior-logs/weekly-coverage')?.date).toEqual(expect.any(String));
+    });
+    expect(lastParams('/behavior-logs/weekly-coverage')?.weekOf).toBeUndefined();
+
+    // The document says it is a day's, and the arrows step a day at a time.
+    expect(screen.getByText(/daily behaviour-register coverage/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /previous day/i })).toBeInTheDocument();
+    // One date named above the table beats the same date on every row.
+    expect(screen.queryByRole('columnheader', { name: /lesson day/i })).not.toBeInTheDocument();
+  });
+
   it('hands the week out as a document, saying for itself what it is a table of', async () => {
     const print = vi.fn();
     vi.stubGlobal('print', print);
@@ -613,7 +677,7 @@ describe('behaviour register — weekly coverage for the office', () => {
       }),
     });
 
-    renderWithProviders(<WeeklyCoverage />);
+    renderWithProviders(<CoverageReport kind="behavior" />);
     await screen.findByText('ພອນທິບ ພົມມະ');
 
     // The week, the filter and the counts live in the toolbar and the tiles on
@@ -628,7 +692,7 @@ describe('behaviour register — weekly coverage for the office', () => {
     expect(within(printed).getByText(/03\/11\/2025 – 09\/11\/2025/)).toBeInTheDocument();
     expect(within(printed).getByText(/as of 05\/11\/2025/i)).toBeInTheDocument();
     expect(within(printed).getByText(/outstanding lessons only · every class/i)).toBeInTheDocument();
-    expect(within(printed).getByText(/2\/3 lessons written up \(66.7%\)/)).toBeInTheDocument();
+    expect(within(printed).getByText(/2\/3 lessons recorded \(66.7%\)/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /^print$/i }));
     expect(print).toHaveBeenCalledTimes(1);
@@ -636,10 +700,28 @@ describe('behaviour register — weekly coverage for the office', () => {
     vi.unstubAllGlobals();
   });
 
+  it('tells a window with no timetable from one with nothing outstanding', async () => {
+    // The gaps filter is on by default, so an empty table means one of two quite
+    // different things. Congratulating the school for a Sunday is how a report
+    // loses the reader it is written for.
+    stubReads({ '/behavior-logs/weekly-coverage': coverageWeek([]) });
+    const clear = renderWithProviders(<CoverageReport kind="behavior" />);
+    expect(await screen.findByText(/no lessons timetabled this week/i)).toBeInTheDocument();
+    clear.unmount();
+
+    stubReads({
+      '/behavior-logs/weekly-coverage': coverageWeek([], { expected: 4, recorded: 4, notYet: 0 }),
+    });
+    renderWithProviders(<CoverageReport kind="behavior" />);
+    expect(
+      await screen.findByText(/every lesson this week has been written up/i),
+    ).toBeInTheDocument();
+  });
+
   it('does not offer to print a week with nothing in it', async () => {
     stubReads({ '/behavior-logs/weekly-coverage': coverageWeek([]) });
 
-    renderWithProviders(<WeeklyCoverage />);
+    renderWithProviders(<CoverageReport kind="behavior" />);
 
     await waitFor(() => expect(screen.getByRole('button', { name: /^print$/i })).toBeDisabled());
   });

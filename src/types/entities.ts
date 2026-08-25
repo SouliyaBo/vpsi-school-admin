@@ -129,6 +129,11 @@ export interface Subject extends BaseDocument {
   credits: number;
   hoursPerWeek: number;
   passingPercentage?: number | null;
+  /**
+   * The strands the monthly mark sheet splits this subject into — ຟີຊິກ / ເຄມີ /
+   * ຊີວະ inside ວິທະຍາສາດທຳມະຊາດ. Empty for a subject marked as a whole.
+   */
+  strands?: string[];
   isActive: boolean;
 }
 

@@ -48,6 +48,9 @@ const schema = z.object({
   hoursPerWeek: requiredNumber({ min: 0 }),
   // Left blank, the API falls back to the global grading setting.
   passingPercentage: optionalNumber({ min: 0, max: 100 }),
+  // Comma-separated on the form, a list on the wire: they are columns on the
+  // mark sheet, and typing them is faster than managing rows of them.
+  strands: optionalText(200),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -62,6 +65,7 @@ const EMPTY: FormValues = {
   credits: 1,
   hoursPerWeek: 0,
   passingPercentage: undefined,
+  strands: '',
 };
 
 export function SubjectsPage() {
@@ -97,6 +101,7 @@ export function SubjectsPage() {
             credits: dialogs.record.credits,
             hoursPerWeek: dialogs.record.hoursPerWeek,
             passingPercentage: dialogs.record.passingPercentage ?? undefined,
+            strands: (dialogs.record.strands ?? []).join(', '),
           }
         : { ...EMPTY, gradeLevelId: table.filters.gradeLevelId ?? '' },
     );
@@ -195,16 +200,27 @@ export function SubjectsPage() {
     // A subject's code and grade level are fixed at creation — the API's update
     // DTO does not accept them, and it rejects unknown properties rather than
     // ignoring them, so sending the whole form back fails the save outright.
-    const { code: _code, gradeLevelId: _grade, ...updatable } = values;
+    const { code: _code, gradeLevelId: _grade, strands: _strands, ...updatable } = values;
+
+    // Sent as a list either way, so clearing the field marks the subject as one
+    // rather than leaving yesterday's strands on it.
+    const strands = (values.strands ?? '')
+      .split(',')
+      .map((strand) => strand.trim())
+      .filter(Boolean);
 
     const mutation = dialogs.record
       ? update.mutateAsync({
           id: dialogs.record.id,
           // The department is sent explicitly rather than stripped, so clearing it
           // detaches the subject instead of silently leaving the old group.
-          body: { ...stripEmpty(updatable), subjectGroupId: values.subjectGroupId ?? null },
+          body: {
+            ...stripEmpty(updatable),
+            subjectGroupId: values.subjectGroupId ?? null,
+            strands,
+          },
         })
-      : create.mutateAsync(stripEmpty(values) as SubjectInput);
+      : create.mutateAsync({ ...stripEmpty(values), strands } as SubjectInput);
     void mutation.then(dialogs.closeForm).catch(() => {});
   }
 
@@ -236,8 +252,15 @@ export function SubjectsPage() {
         onLimitChange={table.setLimit}
         getRowId={(row) => row.id}
         toolbar={
-          <TableToolbar hasActiveFilters={table.hasActiveFilters} onClearFilters={table.clearFilters}>
-            <SearchInput value={table.search ?? ''} onChange={table.setSearch} className="w-full sm:w-56" />
+          <TableToolbar
+            hasActiveFilters={table.hasActiveFilters}
+            onClearFilters={table.clearFilters}
+          >
+            <SearchInput
+              value={table.search ?? ''}
+              onChange={table.setSearch}
+              className="w-full sm:w-56"
+            />
             <FilterSelect
               value={table.filters.gradeLevelId}
               onChange={(value) => table.setFilter('gradeLevelId', value)}
@@ -335,6 +358,13 @@ export function SubjectsPage() {
               description={t('subject.passingHint')}
               min={0}
               max={100}
+            />
+            <TextField
+              control={form.control}
+              name="strands"
+              label={t('subject.strands')}
+              description={t('subject.strandsHint')}
+              className="sm:col-span-2"
             />
           </FieldSection>
         </Form>

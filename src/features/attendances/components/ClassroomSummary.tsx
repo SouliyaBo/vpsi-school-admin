@@ -7,7 +7,7 @@ import { useClassroomOptions } from '@/features/classrooms/api';
 import { useClassRoster } from '@/features/enrollments/api';
 import { useActiveSchoolYear } from '@/features/school-years/api';
 import { useActiveSemester, useSemesterOptions } from '@/features/semesters/api';
-import { cn, nickname, refId, refObject } from '@/lib/utils';
+import { cn, isOnCurrentRoll, nickname, refId, refObject } from '@/lib/utils';
 import type { Student } from '@/types/entities';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -95,24 +95,30 @@ export function ClassroomSummary() {
       }));
     }
 
-    return (roster.data ?? []).map((enrollment) => {
-      const studentId = refId(enrollment.studentId) ?? '';
-      return {
-        // A student with no records is absent from the aggregation, not absent
-        // from class — they get zeroes rather than being dropped from the table.
-        ...(byStudent.get(studentId) ?? EMPTY_COUNTS),
-        studentId,
-        studentCode: enrollment.studentCode,
-        studentName: enrollment.studentNameLo,
-        // The roster row snapshots the register name; the nickname comes off the
-        // joined student, so it is current even when it was typed in after
-        // placement. Read in Lao regardless of the interface language, to match
-        // the `studentNameLo` it sits beside — and the register sheets, which the
-        // API resolves the same way.
-        studentNickname: nickname(refObject<Student>(enrollment.studentId), 'lo'),
-        rollNumber: enrollment.rollNumber,
-      };
-    });
+    // The roster is every open enrollment in the room, which is not the same as
+    // every child still being taught there: the office marks a student as
+    // transferred or dropped without closing their placement. This table is read
+    // as the class, so it follows the roll rather than the placements.
+    return (roster.data ?? [])
+      .filter((enrollment) => isOnCurrentRoll(enrollment.studentId))
+      .map((enrollment) => {
+        const studentId = refId(enrollment.studentId) ?? '';
+        return {
+          // A student with no records is absent from the aggregation, not absent
+          // from class — they get zeroes rather than being dropped from the table.
+          ...(byStudent.get(studentId) ?? EMPTY_COUNTS),
+          studentId,
+          studentCode: enrollment.studentCode,
+          studentName: enrollment.studentNameLo,
+          // The roster row snapshots the register name; the nickname comes off the
+          // joined student, so it is current even when it was typed in after
+          // placement. Read in Lao regardless of the interface language, to match
+          // the `studentNameLo` it sits beside — and the register sheets, which the
+          // API resolves the same way.
+          studentNickname: nickname(refObject<Student>(enrollment.studentId), 'lo'),
+          rollNumber: enrollment.rollNumber,
+        };
+      });
   }, [summary.data, roster.data, canReadRoster]);
 
   const isLoading = summary.isLoading || (canReadRoster && roster.isLoading);

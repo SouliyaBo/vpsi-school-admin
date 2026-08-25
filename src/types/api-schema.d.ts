@@ -3773,7 +3773,7 @@ export interface components {
             bornTo?: string;
         };
         CreateCampaignDto: {
-            /** @example ວັກແຊງ HPV ເຂັມທີ 1 */
+            /** @example ວັກຊີນ HPV ເຂັມທີ 1 */
             nameLo: string;
             /** @enum {string} */
             vaccine: "hpv" | "td" | "mr" | "je" | "covid" | "other";

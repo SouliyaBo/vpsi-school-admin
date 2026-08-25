@@ -20,7 +20,7 @@ import { VaccinationsPage } from './pages/VaccinationsPage';
 
 const campaign: VaccinationCampaign = {
   id: 'cam-1',
-  nameLo: 'ວັກແຊງ HPV ເຂັມທີ 1',
+  nameLo: 'ວັກຊີນ HPV ເຂັມທີ 1',
   vaccine: 'hpv',
   doseNumber: 1,
   scheduledDate: '2026-11-03T00:00:00.000Z',
@@ -224,7 +224,7 @@ describe('VaccinationsPage', () => {
   it('lists the rounds and says who each one covers', async () => {
     renderWithProviders(<VaccinationsPage />);
 
-    expect(await screen.findByText('ວັກແຊງ HPV ເຂັມທີ 1')).toBeInTheDocument();
+    expect(await screen.findByText('ວັກຊີນ HPV ເຂັມທີ 1')).toBeInTheDocument();
     // The eligibility column is the one field worth checking before the sheet is
     // opened — and the only place a round's "girls only" is actually stated.
     expect(await screen.findByText(/female/i)).toBeInTheDocument();
@@ -232,7 +232,7 @@ describe('VaccinationsPage', () => {
 
   it('opens the campaign form with every field it declares', async () => {
     renderWithProviders(<VaccinationsPage />);
-    await screen.findByText('ວັກແຊງ HPV ເຂັມທີ 1');
+    await screen.findByText('ວັກຊີນ HPV ເຂັມທີ 1');
 
     await userEvent.click(screen.getByRole('button', { name: /plan a campaign/i }));
     const dialog = await screen.findByRole('dialog');
@@ -248,7 +248,7 @@ describe('VaccinationsPage', () => {
 
   it('opens a round on the picker, because a sheet needs students first', async () => {
     renderWithProviders(<VaccinationsPage />);
-    await userEvent.click(await screen.findByText('ວັກແຊງ HPV ເຂັມທີ 1'));
+    await userEvent.click(await screen.findByText('ວັກຊີນ HPV ເຂັມທີ 1'));
 
     // The campaign replaces the list in place — it is only ever reached from its
     // row, so it has no route of its own.
@@ -261,7 +261,7 @@ describe('VaccinationsPage', () => {
 
   it('reaches the dose sheet from the round’s second tab', async () => {
     renderWithProviders(<VaccinationsPage />);
-    await userEvent.click(await screen.findByText('ວັກແຊງ HPV ເຂັມທີ 1'));
+    await userEvent.click(await screen.findByText('ວັກຊີນ HPV ເຂັມທີ 1'));
     await userEvent.click(await screen.findByRole('tab', { name: /dose sheet/i }));
 
     expect(await screen.findByText('ຈຸທາລັດ ວົງສາ')).toBeInTheDocument();
@@ -272,7 +272,7 @@ describe('VaccinationsPage', () => {
 /** Picks the class, which is what makes the picker load. */
 async function openPickerForClass() {
   renderWithProviders(<VaccinationsPage />);
-  await userEvent.click(await screen.findByText('ວັກແຊງ HPV ເຂັມທີ 1'));
+  await userEvent.click(await screen.findByText('ວັກຊີນ HPV ເຂັມທີ 1'));
   await userEvent.click(await screen.findByRole('combobox', { name: /class/i }));
   await userEvent.click(await screen.findByRole('button', { name: /ກ/ }));
 }

@@ -75,6 +75,16 @@ export const STUDENT_STATUSES = [
 ] as const;
 export type StudentStatus = (typeof STUDENT_STATUSES)[number];
 
+/**
+ * The statuses that make up the current roll — the children the school is
+ * teaching right now. Mirrors `CURRENT_ROLL_STUDENT_STATUSES` on the API.
+ *
+ * `no_certificate` sits beside `active` because declining the certificate says
+ * nothing about attendance: the child is still in a classroom and still expected
+ * on a roster. Only the certificate module cares about the difference.
+ */
+export const CURRENT_ROLL_STUDENT_STATUSES = ['active', 'no_certificate'] as const;
+
 export const TEACHER_STATUSES = ['active', 'on_leave', 'resigned', 'retired'] as const;
 export type TeacherStatus = (typeof TEACHER_STATUSES)[number];
 

@@ -75,7 +75,12 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     labelKey: 'academic',
     items: [
-      { labelKey: 'schoolYears', to: '/school-years', icon: CalendarRange, resource: 'school-years' },
+      {
+        labelKey: 'schoolYears',
+        to: '/school-years',
+        icon: CalendarRange,
+        resource: 'school-years',
+      },
       { labelKey: 'semesters', to: '/semesters', icon: CalendarDays, resource: 'semesters' },
       { labelKey: 'gradeLevels', to: '/grade-levels', icon: Layers, resource: 'grade-levels' },
       { labelKey: 'classrooms', to: '/classrooms', icon: School, resource: 'classrooms' },
@@ -98,7 +103,7 @@ export const NAV_GROUPS: NavGroup[] = [
     labelKey: 'operations',
     items: [
       { labelKey: 'enrollments', to: '/enrollments', icon: Building2, resource: 'enrollments' },
-      { labelKey: 'scores', to: '/scores', icon: BarChart3, resource: 'scores', comingSoon: true },
+      { labelKey: 'scores', to: '/scores', icon: BarChart3, resource: 'scores' },
       { labelKey: 'attendances', to: '/attendances', icon: CheckSquare, resource: 'attendances' },
       {
         labelKey: 'behaviorLogs',
@@ -106,21 +111,63 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: ClipboardCheck,
         resource: 'behavior-logs',
       },
-      { labelKey: 'termResults', to: '/term-results', icon: FileBadge, resource: 'term-results', comingSoon: true },
-      { labelKey: 'reports', to: '/reports', icon: FileText, resource: 'reports', comingSoon: true },
+      {
+        labelKey: 'termResults',
+        to: '/term-results',
+        icon: FileBadge,
+        resource: 'term-results',
+        comingSoon: true,
+      },
+      {
+        labelKey: 'reports',
+        to: '/reports',
+        icon: FileText,
+        resource: 'reports',
+        comingSoon: true,
+      },
       { labelKey: 'lessonPlans', to: '/lesson-plans', icon: BookMarked, resource: 'lesson-plans' },
       { labelKey: 'exams', to: '/exams', icon: ScrollText, resource: 'exams', comingSoon: true },
-      { labelKey: 'certificates', to: '/certificates', icon: Award, resource: 'certificates', comingSoon: true },
+      {
+        labelKey: 'certificates',
+        to: '/certificates',
+        icon: Award,
+        resource: 'certificates',
+        comingSoon: true,
+      },
       { labelKey: 'vaccinations', to: '/vaccinations', icon: Syringe, resource: 'vaccinations' },
     ],
   },
   {
     labelKey: 'communication',
     items: [
-      { labelKey: 'announcements', to: '/announcements', icon: MessageSquare, resource: 'announcements', comingSoon: true },
-      { labelKey: 'calendar', to: '/calendar', icon: CalendarDays, resource: 'calendar', comingSoon: true },
-      { labelKey: 'documents', to: '/documents', icon: FileStack, resource: 'documents', comingSoon: true },
-      { labelKey: 'feedback', to: '/feedback', icon: MessageSquare, resource: 'feedback', comingSoon: true },
+      {
+        labelKey: 'announcements',
+        to: '/announcements',
+        icon: MessageSquare,
+        resource: 'announcements',
+        comingSoon: true,
+      },
+      {
+        labelKey: 'calendar',
+        to: '/calendar',
+        icon: CalendarDays,
+        resource: 'calendar',
+        comingSoon: true,
+      },
+      {
+        labelKey: 'documents',
+        to: '/documents',
+        icon: FileStack,
+        resource: 'documents',
+        comingSoon: true,
+      },
+      {
+        labelKey: 'feedback',
+        to: '/feedback',
+        icon: MessageSquare,
+        resource: 'feedback',
+        comingSoon: true,
+      },
     ],
   },
   {
@@ -128,8 +175,20 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { labelKey: 'users', to: '/users', icon: UserCog, resource: 'users' },
       { labelKey: 'roles', to: '/roles', icon: ShieldCheck, resource: 'roles', comingSoon: true },
-      { labelKey: 'auditLogs', to: '/audit-logs', icon: ScrollText, resource: 'audit-logs', comingSoon: true },
-      { labelKey: 'settings', to: '/settings', icon: Settings, resource: 'settings', comingSoon: true },
+      {
+        labelKey: 'auditLogs',
+        to: '/audit-logs',
+        icon: ScrollText,
+        resource: 'audit-logs',
+        comingSoon: true,
+      },
+      {
+        labelKey: 'settings',
+        to: '/settings',
+        icon: Settings,
+        resource: 'settings',
+        comingSoon: true,
+      },
     ],
   },
 ];

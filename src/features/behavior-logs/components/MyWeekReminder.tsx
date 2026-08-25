@@ -2,7 +2,8 @@ import { BellRing, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatDate } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
-import { useMyBehaviorWeek, type WeeklyCoverageRow } from '../api';
+import { classLabel, subjectLabel } from '@/features/coverage/api';
+import { useMyBehaviorWeek } from '../api';
 
 /** Enough to act on; the rest is a count, so the banner cannot push the page down. */
 const LISTED = 4;
@@ -31,8 +32,8 @@ export function MyWeekReminder() {
 
   const missing = data.rows.filter((row) => row.status === 'missing');
   const range = t('behaviorLog.weekRange', {
-    from: formatDate(data.weekStartDate),
-    to: formatDate(data.weekEndDate),
+    from: formatDate(data.startDate),
+    to: formatDate(data.endDate),
   });
 
   if (missing.length === 0) {
@@ -78,18 +79,4 @@ export function MyWeekReminder() {
       </CardContent>
     </Card>
   );
-}
-
-/** `ມ.1/ກ` — the grade and the section, as the school names a class. */
-export function classLabel(
-  row: Pick<WeeklyCoverageRow, 'classroomName' | 'gradeLevelCode'>,
-): string {
-  return row.gradeLevelCode ? `${row.gradeLevelCode}/${row.classroomName}` : row.classroomName;
-}
-
-export function subjectLabel(
-  row: Pick<WeeklyCoverageRow, 'subjectNameLo' | 'subjectNameEn'>,
-  locale: string,
-): string {
-  return locale === 'en' ? row.subjectNameEn || row.subjectNameLo : row.subjectNameLo;
 }

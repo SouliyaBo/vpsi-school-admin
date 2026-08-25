@@ -128,7 +128,7 @@ export function CampaignFormDialog({ open, onOpenChange, campaign }: Props) {
     void create
       .mutateAsync(body as CampaignInput)
       .then(() => onOpenChange(false))
-      .catch(() => {});
+      .catch(() => { });
   }
 
   return (
@@ -148,7 +148,7 @@ export function CampaignFormDialog({ open, onOpenChange, campaign }: Props) {
               name="nameLo"
               label={t('common.nameLo')}
               required
-              placeholder="ວັກແຊງ HPV ເຂັມທີ 1"
+              placeholder="ວັກຊີນ HPV ເຂັມທີ 1"
               className="sm:col-span-2"
             />
             <SelectField

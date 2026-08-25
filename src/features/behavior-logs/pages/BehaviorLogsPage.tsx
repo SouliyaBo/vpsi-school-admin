@@ -1,6 +1,7 @@
 import { BarChart3, CalendarCheck, ClipboardList, History } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCan } from '@/features/auth/hooks';
+import { CoverageReport } from '@/features/coverage/CoverageReport';
 import { useActiveSchoolYear } from '@/features/school-years/api';
 import { localizedName } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +11,6 @@ import { BehaviorHistory } from '../components/BehaviorHistory';
 import { BehaviorTally } from '../components/BehaviorTally';
 import { MonthlySheet } from '../components/MonthlySheet';
 import { MyWeekReminder } from '../components/MyWeekReminder';
-import { WeeklyCoverage } from '../components/WeeklyCoverage';
 
 /**
  * The behaviour register — where it is written, and read back two ways.
@@ -85,7 +85,7 @@ export function BehaviorLogsPage() {
         </TabsContent>
         {oversees && (
           <TabsContent value="coverage">
-            <WeeklyCoverage />
+            <CoverageReport kind="behavior" />
           </TabsContent>
         )}
       </Tabs>

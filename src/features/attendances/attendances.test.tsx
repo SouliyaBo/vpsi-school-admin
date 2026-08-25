@@ -4,8 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as apiClient from '@/lib/api-client';
 import { ApiError } from '@/lib/api-error';
 import { paginated, renderWithProviders } from '@/test/utils';
+import { CoverageReport } from '@/features/coverage/CoverageReport';
 import { ClassroomSummary } from './components/ClassroomSummary';
 import { RollCallSheet } from './components/RollCallSheet';
+import { AttendancesPage } from './pages/AttendancesPage';
 
 /**
  * Roll call, and reading it back.
@@ -82,8 +84,14 @@ const blankSheet = {
   lessons: [{ ...lesson, entries: blankEntries }],
 };
 
+/**
+ * Swapped per test: the coverage tab is gated on `attendances:manage`, which only
+ * the administrator and the head of academic affairs hold.
+ */
+let permits: (resource: string, action?: string) => boolean = () => true;
+
 vi.mock('@/features/auth/hooks', () => ({
-  useCan: () => () => true,
+  useCan: () => (resource: string, action?: string) => permits(resource, action),
   useCurrentUser: () => ({ username: 'admin', permissions: [] }),
   useSeesEveryStudent: () => true,
 }));
@@ -368,7 +376,9 @@ describe('roll call — the reason for a leave', () => {
     const row = await openReasonList();
 
     // Nothing to type into until "other" is the choice.
-    expect(within(row).queryByRole('textbox', { name: /specify the reason/i })).not.toBeInTheDocument();
+    expect(
+      within(row).queryByRole('textbox', { name: /specify the reason/i }),
+    ).not.toBeInTheDocument();
 
     await userEvent.click(await screen.findByRole('option', { name: 'Other' }));
     await userEvent.type(
@@ -427,7 +437,9 @@ describe('roll call — the reason for a leave', () => {
     expect(screen.queryByText(/still need a reason/i)).not.toBeInTheDocument();
 
     const preset = rowFor('ນາງ ຄຳ');
-    expect(within(preset).queryByRole('textbox', { name: /specify the reason/i })).not.toBeInTheDocument();
+    expect(
+      within(preset).queryByRole('textbox', { name: /specify the reason/i }),
+    ).not.toBeInTheDocument();
     expect(within(preset).getByRole('combobox', { name: /reason/i })).toHaveTextContent('ໄປຫາໝໍ');
   });
 });
@@ -590,5 +602,160 @@ describe('attendance summary', () => {
     // of one, so they are listed as unrecorded instead.
     expect(screen.getAllByText(/nothing recorded yet/i)).toHaveLength(2);
     expect(screen.getByText('ບຸນມີ ສີສຸກ')).toBeInTheDocument();
+  });
+
+  it('leaves out a student the office has taken off the roll', async () => {
+    stubReads({
+      [`/attendances/summary/classroom/${classroom.id}/semester/${semester.id}`]: [],
+      [`/enrollments/classroom/${classroom.id}/roster`]: STUDENTS.map((student, index) => ({
+        id: `e-${student.studentId}`,
+        // The placement is still open — closing it is a separate act the office
+        // often never gets to — so the roster row alone cannot tell the class.
+        studentId: {
+          id: student.studentId,
+          status: index === 1 ? 'dropped' : 'active',
+        },
+        studentCode: student.studentCode,
+        studentNameLo: student.studentNameLo,
+        rollNumber: student.rollNumber,
+        status: 'active',
+      })),
+    });
+
+    renderWithProviders(<ClassroomSummary />);
+    await chooseClassroom();
+
+    expect(await screen.findByText('ສົມຈິດ ວົງສາ')).toBeInTheDocument();
+    expect(screen.getByText('ບຸນມີ ສີສຸກ')).toBeInTheDocument();
+    expect(screen.queryByText('ນາງ ຄຳ')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Which teacher never marked the roll.
+ *
+ * The one question the other three tabs cannot answer: they all read records that
+ * exist, and an unmarked class is the absence of a record rather than an absent
+ * student. Attendance is owed on every day a class is taught, which is where this
+ * report parts company with the behaviour register's — so what is under test is
+ * that the screen asks for it, and reports the days back.
+ */
+const coverageRow = (overrides: Record<string, unknown> = {}) => ({
+  teachingAssignmentId: 'ta-1',
+  teacherId: 'tea-1',
+  teacherCode: 'T-2627-003',
+  teacherName: 'ພອນທິບ ວົງພະຈັນ',
+  subjectId: 'sub-1',
+  subjectCode: 'LAO-M1',
+  subjectNameLo: 'ພາສາລາວ-ວັນນະຄະດີ',
+  subjectNameEn: 'Lao language',
+  classroomId: classroom.id,
+  classroomName: 'A',
+  gradeLevelCode: 'm4',
+  lessonsTimetabled: 3,
+  lessonsElapsed: 3,
+  lessonDates: ['2025-11-03', '2025-11-05', '2025-11-07'],
+  missingDates: ['2025-11-05', '2025-11-07'],
+  entries: 1,
+  studentsNoted: 4,
+  lastDate: '2025-11-03',
+  status: 'missing',
+  ...overrides,
+});
+
+const coverageWeek = (rows: Record<string, unknown>[], extra: Record<string, unknown> = {}) => ({
+  scope: 'week',
+  startDate: '2025-11-03',
+  endDate: '2025-11-09',
+  asOf: '2025-11-09',
+  semester: { id: semester.id, nameLo: semester.nameLo, nameEn: semester.nameEn },
+  rows,
+  summary: {
+    expected: rows.length,
+    recorded: rows.filter((row) => row.status === 'recorded').length,
+    missing: rows.filter((row) => row.status === 'missing').length,
+    notYet: 0,
+    coverageRate: 0,
+    teachersMissing: 1,
+    classroomsMissing: 1,
+    ...((extra.summary as Record<string, unknown>) ?? {}),
+  },
+  ...extra,
+});
+
+/** Params of the most recent request to `url`. */
+function lastParams(url: string) {
+  const calls = vi.mocked(apiClient.get).mock.calls.filter(([path]) => path === url);
+  return (calls.at(-1)?.[1] as GetConfig | undefined)?.params;
+}
+
+describe('roll call — who has not marked it', () => {
+  afterEach(() => {
+    permits = () => true;
+    vi.restoreAllMocks();
+  });
+
+  it('asks its own endpoint for the week, and names the days that went unmarked', async () => {
+    stubReads({ '/attendances/coverage': coverageWeek([coverageRow()]) });
+
+    renderWithProviders(<CoverageReport kind="attendance" />);
+
+    expect(await screen.findByText('ພອນທິບ ວົງພະຈັນ')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(lastParams('/attendances/coverage')).toMatchObject({ outstandingOnly: 'true' }),
+    );
+
+    // Marked once, on the Monday — so the two days to chase are the other two,
+    // and it is those the row has to name rather than "1 of 3".
+    expect(screen.getByText('Wed 5, Fri 7')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /days not marked/i })).toBeInTheDocument();
+    expect(screen.getByText(/not recorded/i)).toBeInTheDocument();
+  });
+
+  it('reads one day on its own when asked to', async () => {
+    stubReads({
+      '/attendances/coverage': coverageWeek([coverageRow()], {
+        scope: 'day',
+        startDate: '2025-11-05',
+        endDate: '2025-11-05',
+        asOf: '2025-11-05',
+      }),
+    });
+
+    renderWithProviders(<CoverageReport kind="attendance" />);
+    await screen.findByText('ພອນທິບ ວົງພະຈັນ');
+
+    await userEvent.click(screen.getByRole('button', { name: /one day/i }));
+
+    await waitFor(() => {
+      expect(lastParams('/attendances/coverage')?.date).toEqual(expect.any(String));
+    });
+    expect(lastParams('/attendances/coverage')?.weekOf).toBeUndefined();
+    // The printed document says which of the two reports it is, and how wide.
+    expect(screen.getByText(/daily roll-call coverage/i)).toBeInTheDocument();
+  });
+
+  it('is a tab only for the accounts that oversee the roll call', async () => {
+    // A teacher may create, read and update attendance, but not `manage`: the
+    // school's compliance is not theirs to read.
+    permits = (_resource, action) => action !== 'manage';
+    stubReads({ '/attendances/coverage': coverageWeek([]) });
+
+    renderWithProviders(<AttendancesPage />);
+
+    expect(await screen.findByRole('tab', { name: /roll call/i })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /not marked/i })).not.toBeInTheDocument();
+    // …and the report itself is never requested, not merely hidden on screen.
+    expect(
+      vi.mocked(apiClient.get).mock.calls.some(([url]) => url === '/attendances/coverage'),
+    ).toBe(false);
+  });
+
+  it('is a tab for the administrator and the head of academic affairs', async () => {
+    stubReads({ '/attendances/coverage': coverageWeek([]) });
+
+    renderWithProviders(<AttendancesPage />);
+
+    expect(await screen.findByRole('tab', { name: /not marked/i })).toBeInTheDocument();
   });
 });

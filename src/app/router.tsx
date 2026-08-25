@@ -20,14 +20,26 @@ const lazyPage = <T extends Record<string, React.ComponentType>>(
   name: keyof T,
 ) => lazy(() => loader().then((module) => ({ default: module[name] })));
 
-const DashboardPage = lazyPage(() => import('@/features/dashboard/pages/DashboardPage'), 'DashboardPage');
-const TeachersPage = lazyPage(() => import('@/features/teachers/pages/TeachersPage'), 'TeachersPage');
-const StudentsPage = lazyPage(() => import('@/features/students/pages/StudentsPage'), 'StudentsPage');
+const DashboardPage = lazyPage(
+  () => import('@/features/dashboard/pages/DashboardPage'),
+  'DashboardPage',
+);
+const TeachersPage = lazyPage(
+  () => import('@/features/teachers/pages/TeachersPage'),
+  'TeachersPage',
+);
+const StudentsPage = lazyPage(
+  () => import('@/features/students/pages/StudentsPage'),
+  'StudentsPage',
+);
 const StudentDetailPage = lazyPage(
   () => import('@/features/students/pages/StudentDetailPage'),
   'StudentDetailPage',
 );
-const GuardiansPage = lazyPage(() => import('@/features/guardians/pages/GuardiansPage'), 'GuardiansPage');
+const GuardiansPage = lazyPage(
+  () => import('@/features/guardians/pages/GuardiansPage'),
+  'GuardiansPage',
+);
 const AttendancesPage = lazyPage(
   () => import('@/features/attendances/pages/AttendancesPage'),
   'AttendancesPage',
@@ -36,26 +48,42 @@ const BehaviorLogsPage = lazyPage(
   () => import('@/features/behavior-logs/pages/BehaviorLogsPage'),
   'BehaviorLogsPage',
 );
+const MonthlyMarksPage = lazyPage(
+  () => import('@/features/monthly-marks/pages/MonthlyMarksPage'),
+  'MonthlyMarksPage',
+);
 const EnrollmentsPage = lazyPage(
   () => import('@/features/enrollments/pages/EnrollmentsPage'),
   'EnrollmentsPage',
 );
-const LocationsPage = lazyPage(() => import('@/features/locations/pages/LocationsPage'), 'LocationsPage');
+const LocationsPage = lazyPage(
+  () => import('@/features/locations/pages/LocationsPage'),
+  'LocationsPage',
+);
 const SchoolYearsPage = lazyPage(
   () => import('@/features/school-years/pages/SchoolYearsPage'),
   'SchoolYearsPage',
 );
-const SemestersPage = lazyPage(() => import('@/features/semesters/pages/SemestersPage'), 'SemestersPage');
+const SemestersPage = lazyPage(
+  () => import('@/features/semesters/pages/SemestersPage'),
+  'SemestersPage',
+);
 const GradeLevelsPage = lazyPage(
   () => import('@/features/grade-levels/pages/GradeLevelsPage'),
   'GradeLevelsPage',
 );
-const ClassroomsPage = lazyPage(() => import('@/features/classrooms/pages/ClassroomsPage'), 'ClassroomsPage');
+const ClassroomsPage = lazyPage(
+  () => import('@/features/classrooms/pages/ClassroomsPage'),
+  'ClassroomsPage',
+);
 const SubjectGroupsPage = lazyPage(
   () => import('@/features/subject-groups/pages/SubjectGroupsPage'),
   'SubjectGroupsPage',
 );
-const SubjectsPage = lazyPage(() => import('@/features/subjects/pages/SubjectsPage'), 'SubjectsPage');
+const SubjectsPage = lazyPage(
+  () => import('@/features/subjects/pages/SubjectsPage'),
+  'SubjectsPage',
+);
 const LessonPlansPage = lazyPage(
   () => import('@/features/lesson-plans/pages/LessonPlansPage'),
   'LessonPlansPage',
@@ -87,10 +115,12 @@ function guarded(
  * stays honest about what exists — and so the permission wiring for each of
  * those resources is already in place when the page lands.
  */
-const placeholderRoutes: RouteObject[] = NAV_ITEMS.filter((item) => item.comingSoon).map((item) => ({
-  path: item.to.replace(/^\//, ''),
-  element: guarded(<PlaceholderPage labelKey={item.labelKey} />, item.resource, item.action),
-}));
+const placeholderRoutes: RouteObject[] = NAV_ITEMS.filter((item) => item.comingSoon).map(
+  (item) => ({
+    path: item.to.replace(/^\//, ''),
+    element: guarded(<PlaceholderPage labelKey={item.labelKey} />, item.resource, item.action),
+  }),
+);
 
 export const router = createBrowserRouter([
   {
@@ -121,6 +151,7 @@ export const router = createBrowserRouter([
           { path: 'enrollments', element: guarded(<EnrollmentsPage />, 'enrollments') },
           { path: 'attendances', element: guarded(<AttendancesPage />, 'attendances') },
           { path: 'behavior-logs', element: guarded(<BehaviorLogsPage />, 'behavior-logs') },
+          { path: 'scores', element: guarded(<MonthlyMarksPage />, 'scores') },
           { path: 'locations', element: guarded(<LocationsPage />, 'locations') },
 
           { path: 'school-years', element: guarded(<SchoolYearsPage />, 'school-years') },

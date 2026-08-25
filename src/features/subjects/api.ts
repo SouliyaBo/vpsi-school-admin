@@ -16,6 +16,8 @@ export interface SubjectInput {
   credits?: number;
   hoursPerWeek?: number;
   passingPercentage?: number;
+  /** Strands of the monthly mark sheet; an empty list marks the subject as one. */
+  strands?: string[];
 }
 
 export const subjectsApi = createCrudApi<Subject, SubjectInput>('/subjects');

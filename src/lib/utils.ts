@@ -3,6 +3,7 @@ import { format, formatDistanceToNow, isValid, parseISO } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import { twMerge } from 'tailwind-merge';
 import type { Ref } from '@/types/common';
+import { CURRENT_ROLL_STUDENT_STATUSES, type StudentStatus } from '@/types/enums';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -22,6 +23,25 @@ export function refObject<T>(ref: Ref<T> | undefined): T | null {
   return ref;
 }
 
+/**
+ * Whether a populated student ref names a child on the current roll.
+ *
+ * A student's status and their enrollment's status are separate records: the
+ * office marks a child as transferred, dropped or suspended without closing the
+ * enrollment that placed them in a room, so a class read off enrollments alone
+ * still carries their name. Screens that ask "who is in the class today" — roll
+ * call, the behaviour register — filter by this; screens that show what was
+ * recorded, or that exist to fix the stale enrollment, do not.
+ *
+ * An unpopulated ref carries no status to judge by, so it is kept: the roster row
+ * is then the only evidence there is.
+ */
+export function isOnCurrentRoll(ref: Ref<{ status?: StudentStatus }> | undefined): boolean {
+  const status = refObject(ref)?.status;
+  if (!status) return true;
+  return (CURRENT_ROLL_STUDENT_STATUSES as readonly string[]).includes(status);
+}
+
 // ── Dates ───────────────────────────────────────────────────────────────────
 
 /**
@@ -34,7 +54,10 @@ function toDate(value: string | Date | null | undefined): Date | null {
   return isValid(date) ? date : null;
 }
 
-export function formatDate(value: string | Date | null | undefined, pattern = 'dd/MM/yyyy'): string {
+export function formatDate(
+  value: string | Date | null | undefined,
+  pattern = 'dd/MM/yyyy',
+): string {
   const date = toDate(value);
   return date ? format(date, pattern, { locale: enUS }) : '—';
 }
