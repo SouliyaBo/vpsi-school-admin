@@ -30,26 +30,6 @@ export function useLocationTree() {
   });
 }
 
-/**
- * Village picker options.
- *
- * Villages are the only location level people are asked to type, and there are
- * thousands of them — so the search runs on the server and the parent chain is
- * shown to disambiguate identically-named villages.
- */
-export function useVillageOptions(search: string) {
-  const { i18n } = useTranslation();
-  const query = useLookupQuery('locations', locationsApi.list, search, { type: 'village' }, 25);
-
-  return {
-    isLoading: query.isLoading,
-    data: query.data?.data.map<SelectOption>((location) => ({
-      value: location.id,
-      label: localizedName(location, i18n.language),
-    })),
-  };
-}
-
 export function useLocationOptions(type: 'province' | 'district', search = '') {
   const { i18n } = useTranslation();
   const query = useLookupQuery('locations', locationsApi.list, search, { type }, 100);

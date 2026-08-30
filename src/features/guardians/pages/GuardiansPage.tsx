@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
 import { useCan } from '@/features/auth/hooks';
-import { useVillageOptions } from '@/features/locations/api';
+import { VillagePickerField } from '@/features/locations/components/VillagePickerField';
 import { useCrudDialogs } from '@/hooks/use-crud-dialogs';
 import { useTableQueryState } from '@/hooks/use-table-query-state';
 import { stripEmpty } from '@/lib/payload';
@@ -29,7 +29,6 @@ import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { DataTable, type DataTableColumnMeta } from '@/components/common/DataTable';
 import { DetailDrawer, DetailRow, DetailSection } from '@/components/common/DetailDrawer';
 import { EmptyState } from '@/components/common/EmptyState';
-import { EntitySelectField } from '@/components/common/EntitySelect';
 import { DateField, FieldSection, SelectField, TextField } from '@/components/common/fields';
 import { FormDialog } from '@/components/common/FormDialog';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -266,12 +265,10 @@ export function GuardiansPage() {
             </FieldSection>
 
             <FieldSection title={t('person.addressInfo')}>
-              <EntitySelectField
+              <VillagePickerField
                 control={form.control}
                 name="villageId"
                 label={t('person.village')}
-                useOptions={useVillageOptions}
-                searchPlaceholder={t('location.searchVillage')}
               />
               <TextField control={form.control} name="addressDetail" label={t('person.addressDetail')} />
             </FieldSection>

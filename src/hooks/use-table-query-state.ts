@@ -63,9 +63,12 @@ export function useTableQueryState(options: Options = {}) {
             else params.set(key, String(value));
           }
 
+          // Only the filters actually named in `next` are touched — a patch is a
+          // partial update, so filtering by class must leave the status and
+          // gender already in the URL alone.
           if (next.filters) {
-            for (const key of filterKeys) {
-              const value = next.filters[key];
+            for (const [key, value] of Object.entries(next.filters)) {
+              if (!filterKeys.includes(key)) continue;
               if (!value) params.delete(key);
               else params.set(key, value);
             }

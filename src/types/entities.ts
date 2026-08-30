@@ -403,6 +403,53 @@ export interface BehaviorLog extends BaseDocument {
   recordedBy: Ref<User>;
 }
 
+// ── Conduct deductions (ຕັດຄະແນນອຸປະນິໄສ) ────────────────────────────────────
+
+/**
+ * One numbered item on the school's published discipline sheet.
+ *
+ * `code` is the sheet's own numbering — `2.3` is the third rule in the ຕັດ 10
+ * ຄະແນນ column — because that is what a teacher reads off the wall and what a
+ * letter home cites. Retired items are withdrawn (`isActive: false`) rather than
+ * deleted, so the deductions taken under them still make sense.
+ */
+export interface ConductRule extends BaseDocument {
+  code: string;
+  /** ຕັດ N ຄະແນນ/ຄັ້ງ — what one occurrence costs. */
+  points: number;
+  nameLo: string;
+  nameEn?: string | null;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+/**
+ * One occurrence: this child, this rule, this day.
+ *
+ * The rule's number, wording and points are copied onto the row at write time.
+ * The sheet is reissued every year, and a deduction that displayed next year's
+ * text would be a quiet rewriting of what the child was told they did.
+ *
+ * There is no balance here. It is the sum of these rows against the 100 every
+ * child starts a term on, and the API computes it on every read.
+ */
+export interface ConductDeduction extends BaseDocument {
+  studentId: Ref<Student>;
+  classroomId: Ref<Classroom>;
+  semesterId: Ref<Semester>;
+  schoolYearId: Ref<SchoolYear>;
+  date: string;
+  ruleId: Ref<ConductRule>;
+  ruleCode: string;
+  ruleNameLo: string;
+  points: number;
+  /** ໝາຍເຫດ — the circumstances the rule was applied in. */
+  note?: string | null;
+  /** Why it was withdrawn, kept beside the note rather than over it. */
+  revokeReason?: string | null;
+  recordedBy: Ref<User>;
+}
+
 // ── Teaching assignments ────────────────────────────────────────────────────
 
 /**

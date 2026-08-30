@@ -13,6 +13,7 @@ import {
   FileBadge,
   FileStack,
   FileText,
+  Gavel,
   GraduationCap,
   Home,
   Layers,
@@ -110,6 +111,12 @@ export const NAV_GROUPS: NavGroup[] = [
         to: '/behavior-logs',
         icon: ClipboardCheck,
         resource: 'behavior-logs',
+      },
+      {
+        labelKey: 'conductDeductions',
+        to: '/conduct-deductions',
+        icon: Gavel,
+        resource: 'conduct-scores',
       },
       {
         labelKey: 'termResults',

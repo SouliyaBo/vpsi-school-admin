@@ -48,6 +48,10 @@ const BehaviorLogsPage = lazyPage(
   () => import('@/features/behavior-logs/pages/BehaviorLogsPage'),
   'BehaviorLogsPage',
 );
+const ConductDeductionsPage = lazyPage(
+  () => import('@/features/conduct-deductions/pages/ConductDeductionsPage'),
+  'ConductDeductionsPage',
+);
 const MonthlyMarksPage = lazyPage(
   () => import('@/features/monthly-marks/pages/MonthlyMarksPage'),
   'MonthlyMarksPage',
@@ -151,6 +155,10 @@ export const router = createBrowserRouter([
           { path: 'enrollments', element: guarded(<EnrollmentsPage />, 'enrollments') },
           { path: 'attendances', element: guarded(<AttendancesPage />, 'attendances') },
           { path: 'behavior-logs', element: guarded(<BehaviorLogsPage />, 'behavior-logs') },
+          {
+            path: 'conduct-deductions',
+            element: guarded(<ConductDeductionsPage />, 'conduct-scores'),
+          },
           { path: 'scores', element: guarded(<MonthlyMarksPage />, 'scores') },
           { path: 'locations', element: guarded(<LocationsPage />, 'locations') },
 

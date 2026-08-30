@@ -143,6 +143,35 @@ export type Grade = (typeof GRADES)[number];
 export const CONDUCT_GRADES = ['excellent', 'very_good', 'good', 'fair', 'poor'] as const;
 export type ConductGrade = (typeof CONDUCT_GRADES)[number];
 
+/**
+ * The rungs of the school's ໝາຍເຫດ ladder: how far a term's deductions have to
+ * be escalated. Named for what the sheet calls them — ຂັ້ນຫ້ອງ, then ຂັ້ນ 1, 2, 3
+ * — with `review` as the last line, where the child's place is reconsidered.
+ *
+ * Which rung a total reaches is decided by the API, never here: the thresholds
+ * are school policy and belong in one place.
+ */
+export const CONDUCT_ESCALATION_LEVELS = [
+  'none',
+  'classroom',
+  'level1',
+  'level2',
+  'level3',
+  'review',
+] as const;
+export type ConductEscalationLevel = (typeof CONDUCT_ESCALATION_LEVELS)[number];
+
+/** Who the sheet says must be told at each rung. */
+export const CONDUCT_NOTIFY_PARTIES = [
+  'homeroomTeacher',
+  'student',
+  'disciplineCommittee',
+  'studentAffairs',
+  'guardian',
+  'director',
+] as const;
+export type ConductNotifyParty = (typeof CONDUCT_NOTIFY_PARTIES)[number];
+
 export const ATTENDANCE_STATUSES = ['present', 'absent', 'late', 'excused', 'sick'] as const;
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { useSeesEveryStudent } from '@/features/auth/hooks';
 import { useClassroomOptions } from '@/features/classrooms/api';
 import { useEnroll } from '@/features/enrollments/api';
-import { useVillageOptions } from '@/features/locations/api';
+import { VillagePickerField } from '@/features/locations/components/VillagePickerField';
 import { useActiveSchoolYear } from '@/features/school-years/api';
 import { errorMessage } from '@/lib/error-message';
 import { notify } from '@/lib/toast';
@@ -389,12 +389,10 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
           </FieldSection>
 
           <FieldSection title={t('person.addressInfo')}>
-            <EntitySelectField
+            <VillagePickerField
               control={form.control}
               name="villageId"
               label={t('person.village')}
-              useOptions={useVillageOptions}
-              searchPlaceholder={t('location.searchVillage')}
             />
             <TextField control={form.control} name="addressDetail" label={t('person.addressDetail')} />
           </FieldSection>

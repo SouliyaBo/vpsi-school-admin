@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
-import { useVillageOptions } from '@/features/locations/api';
+import { VillagePickerField } from '@/features/locations/components/VillagePickerField';
 import { useSubjectGroupOptions } from '@/features/subject-groups/api';
 import { stripEmpty } from '@/lib/payload';
 import { refId, toDateInput } from '@/lib/utils';
@@ -331,12 +331,10 @@ export function TeacherFormDialog({ open, onOpenChange, teacher }: Props) {
           </FieldSection>
 
           <FieldSection title={t('person.addressInfo')}>
-            <EntitySelectField
+            <VillagePickerField
               control={form.control}
               name="villageId"
               label={t('person.village')}
-              useOptions={useVillageOptions}
-              searchPlaceholder={t('location.searchVillage')}
             />
             <TextField
               control={form.control}

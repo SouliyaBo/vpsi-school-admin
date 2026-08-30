@@ -287,6 +287,28 @@ describe('StudentsPage — the status filter', () => {
 
     await waitFor(() => expect(lastListParams()).toMatchObject({ status: 'graduated' }));
   });
+
+  /**
+   * Regression guard: setting one filter used to rewrite every filter key the
+   * table declares, so the single-key patch coming out of a dropdown cleared
+   * all the others — picking a gender wiped the status that was already set,
+   * and the toolbar could never hold two filters at once.
+   */
+  it('keeps the filters already set when another one is picked', async () => {
+    renderWithProviders(<StudentsPage />);
+    await screen.findByText('ສົມຈິດ ວົງສາ');
+
+    await userEvent.click(statusFilter('Still studying (incl. no certificate)'));
+    await userEvent.click(await screen.findByRole('option', { name: /graduated/i }));
+    await waitFor(() => expect(lastListParams()).toMatchObject({ status: 'graduated' }));
+
+    await userEvent.click(statusFilter('Gender: All'));
+    await userEvent.click(await screen.findByRole('option', { name: /^female$/i }));
+
+    await waitFor(() =>
+      expect(lastListParams()).toMatchObject({ status: 'graduated', gender: 'female' }),
+    );
+  });
 });
 
 describe('StudentsPage — editing', () => {

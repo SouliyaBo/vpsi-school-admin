@@ -26,6 +26,7 @@ export const en: typeof lo = {
     no: 'No',
     all: 'All',
     optional: 'optional',
+    and: 'and',
     required: 'required',
     selectPlaceholder: 'Select…',
     showing: 'Showing {{from}}–{{to}} of {{total}}',
@@ -80,6 +81,7 @@ export const en: typeof lo = {
     scores: 'Scores',
     attendances: 'Attendance',
     behaviorLogs: 'Behaviour register',
+    conductDeductions: 'Conduct deductions',
     termResults: 'Term results',
     reports: 'Reports',
     lessonPlans: 'Lesson plans',
@@ -514,6 +516,102 @@ export const en: typeof lo = {
     myWeekHint: 'Use the “Monthly sheet” tab to add an entry',
     andMore: 'and {{count}} more',
   },
+  conductDeduction: {
+    title: 'Conduct deductions',
+    subtitle:
+      'Every student starts the term on 100 conduct points and loses them against the ' +
+      "school's published rules",
+    recordTab: 'Deduct',
+    standingTab: 'Class standing',
+    rulesTab: 'Rules',
+
+    classroom: 'Class',
+    selectClassroom: 'Select a class',
+    semester: 'Semester',
+    date: 'Date',
+    rule: 'Rule broken',
+    selectRule: 'Select a rule',
+    pointsShort: '−{{points}}',
+    noRules: 'No rules yet — add them on the “Rules” tab first',
+    students: 'Students',
+    pickClassFirst: 'Pick a class to see its students',
+    emptyRoster: 'No students currently studying in this class',
+    willDeduct: '{{points}} points × {{count}} students',
+    note: 'Note',
+    notePlaceholder: 'Circumstances (optional)',
+    save: 'Record deduction',
+    recorded: 'Recorded for {{count}} students',
+
+    outcomeTitle: 'Where they now stand',
+    remainingOf: '{{remaining}} points left',
+    mustTell: 'Must be reported to:',
+    manualScoreKept:
+      "This term's conduct score was set by hand, so the deduction counts on the ledger but " +
+      'does not change the mark on the report card',
+
+    standingHint: 'Pick a class and a semester to see the whole class',
+    studentName: 'Student',
+    deducted: 'Deducted',
+    remaining: 'Remaining',
+    level: 'Report at',
+    lastEntry: 'Last deduction',
+    allClean: 'Nobody in this class has reached a level that has to be reported',
+    flaggedCount: '{{count}} of {{total}} students have to be reported',
+    toReport: 'To be reported',
+
+    ledgerHint: 'Every deduction this term, oldest first',
+    balanceLine: '{{base}} points less {{deducted}}',
+    noEntries: 'No deductions yet',
+    revoke: 'Withdraw',
+    revoked: 'Deduction withdrawn',
+    revokeReason: 'Reason for withdrawing',
+    revokeReasonPlaceholder: 'e.g. recorded against the wrong student',
+  },
+
+  conductRule: {
+    add: 'Add a rule',
+    edit: 'Amend rule',
+    code: 'Number',
+    points: 'Points per occurrence',
+    nameLo: 'Wording (Lao)',
+    nameEn: 'Wording (English)',
+    inForce: 'In force',
+    withdrawn: 'Withdrawn',
+    showWithdrawn: 'Show withdrawn rules',
+    column: '{{points}} points per occurrence',
+    formHint:
+      "Number it as the school's own sheet does, e.g. 2.3 — rewording a rule does not change " +
+      'deductions already taken under it',
+    empty: 'No rules yet',
+    emptyHint: "Add each item from the school's rule sheet with what one occurrence costs",
+    deleteConfirm: 'Delete rule “{{code}}”?',
+    deleteHint:
+      'Only a rule nobody has been deducted under can be deleted — withdraw the rest instead',
+    ladderTitle: 'Escalation ladder',
+    ladderHint:
+      'Every student starts the term on {{base}} points. Once this much has been deducted, ' +
+      'the case is reported at the level shown.',
+    fromPoints: '{{points}}+',
+  },
+
+  conductEscalation: {
+    none: 'Below reporting',
+    classroom: 'Classroom level',
+    level1: 'Level 1',
+    level2: 'Level 2',
+    level3: 'Level 3 (school)',
+    review: 'Enrolment reviewed',
+  },
+
+  conductNotify: {
+    homeroomTeacher: 'the homeroom teacher',
+    student: 'the student',
+    disciplineCommittee: 'the discipline committee',
+    studentAffairs: 'the student affairs board',
+    guardian: 'the guardians',
+    director: 'the director',
+  },
+
   /**
    * Wording shared by both "who has not filled this in" reports — the behaviour
    * register's and the roll call's. What differs between them stays in their own
@@ -550,7 +648,8 @@ export const en: typeof lo = {
     printedOn: 'Printed {{date}}',
     coverageScopeMissing: 'Outstanding lessons only',
     coverageScopeAll: 'Every lesson',
-    coverageSummaryLine: '{{recorded}}/{{expected}} lessons recorded ({{rate}}%) · {{missing}} outstanding · {{teachers}} teacher(s) · {{classrooms}} class(es) behind',
+    coverageSummaryLine:
+      '{{recorded}}/{{expected}} lessons recorded ({{rate}}%) · {{missing}} outstanding · {{teachers}} teacher(s) · {{classrooms}} class(es) behind',
     onlyMissing: 'Only what is missing',
     print: 'Print',
     noLessonsThisDay: 'No lessons timetabled on this day',
@@ -586,6 +685,11 @@ export const en: typeof lo = {
     parentRequired: 'A parent location is required',
     deleteConfirm: 'Delete "{{name}}"? Child locations must be removed first',
     searchVillage: 'Search villages…',
+    searchProvince: 'Search provinces…',
+    searchDistrict: 'Search districts…',
+    selectProvinceFirst: 'Choose a province first',
+    selectDistrictFirst: 'Choose a district first',
+    noVillagesHint: 'No villages on file for this district — write the full address in the detail field',
   },
   schoolYear: {
     title: 'School years',
@@ -1156,6 +1260,16 @@ export const en: typeof lo = {
     behaviorLog: {
       futureDate: 'Behaviour cannot be recorded for a future date',
       emptyRow: 'Give either a note about the class or at least one student',
+      duplicateStudent: 'The same student is listed twice in one entry',
+    },
+    conductRule: {
+      duplicateCode: 'A rule with that number already exists',
+      inUse: 'That rule has already been applied — withdraw it instead of deleting it',
+      withdrawn: 'That rule is no longer in force',
+    },
+    conductDeduction: {
+      futureDate: 'Points cannot be deducted for a future date',
+      outsideSemester: 'That date does not fall within any semester',
       duplicateStudent: 'The same student is listed twice in one entry',
     },
   },
