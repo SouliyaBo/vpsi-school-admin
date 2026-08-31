@@ -33,7 +33,7 @@ import { NotifyList } from './NotifyList';
 import { StudentLedgerDialog } from './StudentLedgerDialog';
 
 /**
- * ສະຫຼຸບຄະແນນອຸປະນິໄສ — where a class stands this term.
+ * ສະຫຼຸບຄະແນນກົດລະບຽບ — where a class stands this term.
  *
  * Built from the roll, so a child with nothing against them is listed on their
  * full 100 rather than being absent from the page: on a discipline sheet the

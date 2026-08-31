@@ -11,7 +11,7 @@ import { DeductionEntry } from '../components/DeductionEntry';
 import { RuleSheet } from '../components/RuleSheet';
 
 /**
- * ຕັດຄະແນນອຸປະນິໄສ — the discipline sheet, worked in three tabs.
+ * ຕັດຄະແນນກົດລະບຽບ — the discipline sheet, worked in three tabs.
  *
  * Taking points leads, because it is the only tab that writes and the one a
  * teacher opens with a child in front of them. The standing is what the

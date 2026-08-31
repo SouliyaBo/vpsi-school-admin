@@ -9,7 +9,7 @@ import { DeductionEntry } from './components/DeductionEntry';
 import { RuleSheet } from './components/RuleSheet';
 
 /**
- * ຕັດຄະແນນອຸປະນິໄສ — the discipline sheet.
+ * ຕັດຄະແນນກົດລະບຽບ — the discipline sheet.
  *
  * What is under test is the part the screen is answerable for. The balance and
  * the rung are the API's arithmetic and are asserted there; here it is that the

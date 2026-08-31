@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
-import { useSeesEveryStudent } from '@/features/auth/hooks';
+import { useCan, useSeesEveryStudent } from '@/features/auth/hooks';
 import { useClassroomOptions } from '@/features/classrooms/api';
 import { useEnroll } from '@/features/enrollments/api';
 import { VillagePickerField } from '@/features/locations/components/VillagePickerField';
@@ -255,7 +255,17 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
   const enroll = useEnroll();
   const activeYear = useActiveSchoolYear();
   const seesEveryStudent = useSeesEveryStudent();
+  const can = useCan();
   const isEditing = student !== null;
+
+  /**
+   * Reissuing the register number is the office's, so the field is read-only for
+   * everyone else once the student exists. `students:manage` is the same grant
+   * the API gates it on — admin and registrar hold it, a homeroom teacher does
+   * not — so the form is disabled where the API would refuse rather than
+   * offering an edit that comes back 403.
+   */
+  const mayEditCode = !isEditing || can('students', 'manage');
 
   // Placement is per school year and the API derives the year from the
   // classroom, so with no active year there is nothing to choose from. A
@@ -290,13 +300,12 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
     const classroomId = stripEmpty(values).classroomId;
 
     if (student) {
-      // Only what actually changed: PATCH must not carry `studentCode`, which is
-      // immutable after intake and which the API rejects outright, and must not
-      // re-send fields another user may have edited in the meantime.
-      const { studentCode: _studentCode, ...patch } = changedFields(
-        payload,
-        toPayload(toFormValues(student)),
-      );
+      // Only what actually changed, so the PATCH does not re-send fields another
+      // user may have edited in the meantime. `studentCode` rides along when the
+      // office actually retyped it — the API takes it from an account holding
+      // `students:manage` and re-syncs the copies on enrollments, exam
+      // registrations and term results.
+      const patch = changedFields(payload, toPayload(toFormValues(student)));
 
       if (Object.keys(patch).length === 0) {
         onOpenChange(false);
@@ -353,7 +362,8 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
               name="studentCode"
               label={t('student.studentCode')}
               required
-              disabled={isEditing}
+              disabled={!mayEditCode}
+              description={isEditing && mayEditCode ? t('student.studentCodeHint') : undefined}
             />
             <SelectField
               control={form.control}

@@ -403,7 +403,7 @@ export interface BehaviorLog extends BaseDocument {
   recordedBy: Ref<User>;
 }
 
-// ── Conduct deductions (ຕັດຄະແນນອຸປະນິໄສ) ────────────────────────────────────
+// ── Conduct deductions (ຕັດຄະແນນກົດລະບຽບ) ────────────────────────────────────
 
 /**
  * One numbered item on the school's published discipline sheet.

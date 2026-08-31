@@ -7,7 +7,7 @@ import type { ConductDeduction, ConductRule } from '@/types/entities';
 import type { ConductEscalationLevel, ConductGrade, ConductNotifyParty } from '@/types/enums';
 
 /**
- * ການຕັດຄະແນນອຸປະນິໄສ — the discipline ledger.
+ * ການຕັດຄະແນນກົດລະບຽບ — the discipline ledger.
  *
  * The rule sheet is ordinary master data and uses `createCrudApi`; the ledger
  * does not. Nothing here is a record the client edits: points are taken by

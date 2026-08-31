@@ -39,9 +39,12 @@ const student = {
 
 /** Flipped by the homeroom-teacher test below; everything else runs as the office. */
 let seesEveryStudent = true;
+/** `students:manage` — what lets the office reissue a register number. */
+let canManageStudents = true;
 
 vi.mock('@/features/auth/hooks', () => ({
-  useCan: () => () => true,
+  useCan: () => (resource: string, action: string) =>
+    resource === 'students' && action === 'manage' ? canManageStudents : true,
   useCurrentUser: () => ({ username: 'admin', permissions: [] }),
   useSeesEveryStudent: () => seesEveryStudent,
 }));
@@ -319,6 +322,7 @@ describe('StudentsPage — editing', () => {
 
   afterEach(() => {
     seesEveryStudent = true;
+    canManageStudents = true;
     vi.restoreAllMocks();
   });
 
@@ -345,21 +349,18 @@ describe('StudentsPage — editing', () => {
   });
 
   /**
-   * Regression guard: the edit form used to PATCH every field it held, including
-   * `studentCode`. `UpdateStudentDto` has no such property and the API runs with
-   * `forbidNonWhitelisted`, so every edit came back 400 — "ຫນ້າທີ່..." — no
-   * matter which field the office had actually touched.
+   * Regression guard: the edit form used to PATCH every field it held. Sending
+   * back a field nobody touched races whoever edited it in the meantime, and the
+   * API runs with `forbidNonWhitelisted`, so an unchanged `studentCode` used to
+   * come back 400 no matter which field the office had actually touched.
    */
-  it('patches only the field that changed, never the immutable student code', async () => {
+  it('patches only the field that changed, leaving an untouched code alone', async () => {
     const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue({
       ...student,
       status: 'graduated',
     });
 
     const dialog = await openEditDialog();
-
-    // The code is shown for orientation but cannot be retyped after intake.
-    expect(within(dialog).getByLabelText(/student code/i)).toBeDisabled();
 
     await userEvent.click(within(dialog).getByRole('combobox', { name: /status/i }));
     await userEvent.click(await screen.findByRole('option', { name: /graduated/i }));
@@ -369,5 +370,35 @@ describe('StudentsPage — editing', () => {
     const [url, body] = patch.mock.calls[0]!;
     expect(url).toBe(`/students/${student.id}`);
     expect(body).toEqual({ status: 'graduated' });
+  });
+
+  /**
+   * A child regularly joins a class before the school can issue a real code, so
+   * the office enters a stand-in and replaces it once the papers are in.
+   */
+  it('lets the office reissue the student code', async () => {
+    const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue({
+      ...student,
+      studentCode: 'S-0042',
+    });
+
+    const dialog = await openEditDialog();
+
+    const code = within(dialog).getByLabelText(/student code/i);
+    expect(code).toBeEnabled();
+    await userEvent.clear(code);
+    await userEvent.type(code, 'S-0042');
+    await userEvent.click(within(dialog).getByRole('button', { name: /save/i }));
+
+    await waitFor(() => expect(patch).toHaveBeenCalled());
+    expect(patch.mock.calls[0]![1]).toEqual({ studentCode: 'S-0042' });
+  });
+
+  /** Everyone else sees the code but cannot retype it — the API refuses it too. */
+  it('keeps the code read-only without students:manage', async () => {
+    canManageStudents = false;
+
+    const dialog = await openEditDialog();
+    expect(within(dialog).getByLabelText(/student code/i)).toBeDisabled();
   });
 });

@@ -1,21 +1,14 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowRightLeft, GraduationCap, RotateCcw, UserMinus, Users } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { z } from 'zod';
 import { useCan } from '@/features/auth/hooks';
 import { classroomLabel, classrooms, useClassroomOptions } from '@/features/classrooms/api';
 import { useActiveSchoolYear } from '@/features/school-years/api';
-import { stripEmpty } from '@/lib/payload';
 import { formatDate, refId } from '@/lib/utils';
-import { optionalId, optionalText } from '@/lib/zod-helpers';
-import { vmsg } from '@/lib/form-message';
 import type { EnrollmentStatus } from '@/types/enums';
 import type { Enrollment } from '@/types/entities';
 import { Card, CardContent } from '@/components/ui/card';
-import { Form } from '@/components/ui/form';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -27,42 +20,17 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { EmptyState } from '@/components/common/EmptyState';
-import { EntitySelect, EntitySelectField } from '@/components/common/EntitySelect';
+import { EntitySelect } from '@/components/common/EntitySelect';
 import { ErrorState } from '@/components/common/ErrorState';
-import { FieldSection, TextareaField } from '@/components/common/fields';
-import { FormDialog } from '@/components/common/FormDialog';
 import { RowActions } from '@/components/common/RowActions';
 import { StatusBadge } from '@/components/common/StatusBadge';
-import { ALLOWED_TRANSITIONS, useChangeEnrollmentStatus, useClassRoster } from '../api';
-
-const baseSchema = z.object({
-  transferredToClassroomId: optionalId(),
-  reason: optionalText(500),
-});
-
-/** Only a transfer needs a destination; the other moves just take a reason. */
-const transferSchema = baseSchema.refine((values) => Boolean(values.transferredToClassroomId), {
-  path: ['transferredToClassroomId'],
-  message: vmsg('validation.required'),
-});
-
-type StatusFormValues = z.infer<typeof baseSchema>;
-
-const STATUS_ICONS: Partial<Record<EnrollmentStatus, typeof ArrowRightLeft>> = {
-  transferred: ArrowRightLeft,
-  promoted: GraduationCap,
-  dropped: UserMinus,
-  repeated: RotateCcw,
-  active: RotateCcw,
-};
-
-const STATUS_LABEL_KEYS: Record<EnrollmentStatus, string> = {
-  transferred: 'enrollment.transfer',
-  promoted: 'enrollment.promote',
-  dropped: 'enrollment.drop',
-  repeated: 'enrollment.repeat',
-  active: 'enrollment.reactivate',
-};
+import { ALLOWED_TRANSITIONS, useClassRoster } from '../api';
+import {
+  EnrollmentMoveDialog,
+  STATUS_ICONS,
+  STATUS_LABEL_KEYS,
+  type EnrollmentMove,
+} from './EnrollmentMoveDialog';
 
 /**
  * One classroom's students, in roll-number order.
@@ -76,39 +44,16 @@ export function ClassRoster() {
   const activeYear = useActiveSchoolYear();
 
   const [classroomId, setClassroomId] = useState<string | undefined>();
-  const [move, setMove] = useState<{ enrollment: Enrollment; status: EnrollmentStatus } | null>(
-    null,
-  );
+  const [move, setMove] = useState<EnrollmentMove | null>(null);
 
   const roster = useClassRoster(classroomId);
   const classroom = classrooms.useDetail(classroomId);
-  const changeStatus = useChangeEnrollmentStatus();
 
   const useClassroomsForYear = (search: string) =>
     useClassroomOptions(search, activeYear.data?.id);
 
-  const form = useForm<StatusFormValues>({
-    // Which rule applies depends on the move being made, so the resolver follows
-    // the open dialog rather than carrying the branch inside one schema.
-    resolver: zodResolver(move?.status === 'transferred' ? transferSchema : baseSchema),
-    defaultValues: { transferredToClassroomId: '', reason: '' },
-  });
-
   function openMove(enrollment: Enrollment, status: EnrollmentStatus) {
-    form.reset({ transferredToClassroomId: '', reason: '' });
     setMove({ enrollment, status });
-  }
-
-  function submitMove(values: StatusFormValues) {
-    if (!move) return;
-
-    changeStatus
-      .mutateAsync({
-        id: move.enrollment.id,
-        body: { status: move.status, ...(stripEmpty(values) as StatusFormValues) },
-      })
-      .then(() => setMove(null))
-      .catch(() => {});
   }
 
   const occupancy = classroom.data
@@ -210,42 +155,11 @@ export function ClassRoster() {
         </CardContent>
       </Card>
 
-      <FormDialog
-        open={move !== null}
-        onOpenChange={(open) => !open && setMove(null)}
-        title={move ? t(STATUS_LABEL_KEYS[move.status]) : ''}
-        description={
-          move
-            ? `${move.enrollment.studentCode} — ${move.enrollment.studentNameLo}${
-                classroom.data ? ` · ${classroomLabel(classroom.data)}` : ''
-              }`
-            : undefined
-        }
-        onSubmit={form.handleSubmit(submitMove)}
-        isSubmitting={changeStatus.isPending}
-        submitLabel={move ? t(STATUS_LABEL_KEYS[move.status]) : undefined}
-      >
-        <Form {...form}>
-          <FieldSection columns={1}>
-            {move?.status === 'transferred' && (
-              <EntitySelectField
-                control={form.control}
-                name="transferredToClassroomId"
-                label={t('enrollment.transferTo')}
-                required
-                useOptions={useClassroomsForYear}
-                searchPlaceholder={t('enrollment.selectClassroom')}
-              />
-            )}
-            <TextareaField
-              control={form.control}
-              name="reason"
-              label={t('enrollment.statusReason')}
-              description={t('enrollment.statusReasonHint')}
-            />
-          </FieldSection>
-        </Form>
-      </FormDialog>
+      <EnrollmentMoveDialog
+        move={move}
+        onClose={() => setMove(null)}
+        fromLabel={classroom.data ? classroomLabel(classroom.data) : undefined}
+      />
 
       <p className="text-xs text-muted-foreground">{t('enrollment.transferNote')}</p>
     </div>

@@ -1,4 +1,14 @@
-import { ArrowLeft, BarChart3, CheckSquare, Pencil, School, Syringe, Trash2, Users } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRightLeft,
+  BarChart3,
+  CheckSquare,
+  Pencil,
+  School,
+  Syringe,
+  Trash2,
+  Users,
+} from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -6,7 +16,13 @@ import { useStudentAttendanceSummary } from '@/features/attendances/api';
 import { StudentVaccinations } from '@/features/vaccinations/components/StudentVaccinations';
 import { useCan } from '@/features/auth/hooks';
 import { EnrollDialog } from '@/features/enrollments/components/EnrollDialog';
-import { useEnrollmentHistory } from '@/features/enrollments/api';
+import {
+  EnrollmentMoveDialog,
+  STATUS_ICONS,
+  STATUS_LABEL_KEYS,
+  type EnrollmentMove,
+} from '@/features/enrollments/components/EnrollmentMoveDialog';
+import { ALLOWED_TRANSITIONS, useEnrollmentHistory } from '@/features/enrollments/api';
 import { useActiveSemester } from '@/features/semesters/api';
 import {
   calculateAge,
@@ -40,6 +56,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { ErrorState } from '@/components/common/ErrorState';
 import { FileUpload } from '@/components/common/FileUpload';
 import { PageHeader } from '@/components/common/PageHeader';
+import { RowActions } from '@/components/common/RowActions';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { GuardianLinksDialog } from '../components/GuardianLinksDialog';
 import { StudentFormDialog } from '../components/StudentFormDialog';
@@ -68,6 +85,7 @@ export function StudentDetailPage() {
   const [guardiansOpen, setGuardiansOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
+  const [move, setMove] = useState<EnrollmentMove | null>(null);
 
   const detail = students.useDetail(id);
   const siblings = useStudentSiblings(id);
@@ -123,6 +141,20 @@ export function StudentDetailPage() {
               <Button onClick={() => setEnrollOpen(true)}>
                 <School />
                 {t('enrollment.enroll')}
+              </Button>
+            )}
+            {/* A placed student is moved, not re-enrolled: the transfer frees the
+                seat in the old room and takes one in the new, which a second
+                placement would not. Offered here as well as on the class roster
+                because the office usually has one child in front of them, not a
+                class. */}
+            {currentPlacement && can('enrollments', 'update') && (
+              <Button
+                variant="outline"
+                onClick={() => setMove({ enrollment: currentPlacement, status: 'transferred' })}
+              >
+                <ArrowRightLeft />
+                {t('enrollment.transfer')}
               </Button>
             )}
             {can('students', 'update') && (
@@ -409,6 +441,7 @@ export function StudentDetailPage() {
                       <TableHead className="text-end">{t('enrollment.rollNumber')}</TableHead>
                       <TableHead>{t('enrollment.enrolledAt')}</TableHead>
                       <TableHead>{t('person.status')}</TableHead>
+                      <TableHead className="w-12" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -440,6 +473,21 @@ export function StudentDetailPage() {
                               </p>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell className="text-end">
+                          {/* The same moves the class roster offers. Which ones
+                              apply depends on where the row already is —
+                              `transferred` and `promoted` are terminal, a
+                              `dropped` child can only come back. */}
+                          <RowActions
+                            actions={ALLOWED_TRANSITIONS[enrollment.status].map((status) => ({
+                              label: t(STATUS_LABEL_KEYS[status]),
+                              icon: STATUS_ICONS[status],
+                              destructive: status === 'dropped',
+                              hidden: !can('enrollments', 'update'),
+                              onSelect: () => setMove({ enrollment, status }),
+                            }))}
+                          />
                         </TableCell>
                       </TableRow>
                     ))}
@@ -574,6 +622,12 @@ export function StudentDetailPage() {
         onOpenChange={setEnrollOpen}
         student={student}
         onEnrolled={() => void history.refetch()}
+      />
+
+      <EnrollmentMoveDialog
+        move={move}
+        onClose={() => setMove(null)}
+        fromLabel={move ? refObject<Classroom>(move.enrollment.classroomId)?.name : undefined}
       />
 
       <GuardianLinksDialog

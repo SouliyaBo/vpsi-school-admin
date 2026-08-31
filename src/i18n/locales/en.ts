@@ -183,6 +183,7 @@ export const en: typeof lo = {
     create: 'Add student',
     edit: 'Edit student',
     studentCode: 'Student code',
+    studentCodeHint: 'Changing it updates the code on every class list and report card',
     placeOfBirth: 'Place of birth',
     nationality: 'Nationality',
     ethnicity: 'Ethnicity',

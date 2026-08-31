@@ -67,11 +67,13 @@ export interface StudentInput {
 /**
  * PATCH takes any subset of the editable fields.
  *
- * `studentCode` is excluded because it is immutable after intake — the API's
- * `UpdateStudentDto` has no such property and rejects the whole request when one
- * is sent. `guardians` are replaced through their own endpoint.
+ * `studentCode` is included: a child is often placed in a class before the
+ * school can issue a real one, so the office enters a stand-in and replaces it
+ * here. The API takes the change only from an account holding `students:manage`
+ * and re-syncs the copies held on enrollments, exam registrations and term
+ * results. `guardians` are replaced through their own endpoint.
  */
-export type StudentUpdateInput = Partial<Omit<StudentInput, 'guardians' | 'studentCode'>>;
+export type StudentUpdateInput = Partial<Omit<StudentInput, 'guardians'>>;
 
 export const studentsApi = {
   ...createCrudApi<Student, StudentInput, StudentUpdateInput>('/students'),
