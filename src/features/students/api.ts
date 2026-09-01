@@ -45,7 +45,8 @@ export interface StudentInput {
   nicknameEn?: string;
   gender: Gender;
   dateOfBirth: string;
-  placeOfBirth?: string;
+  birthLocationId?: string;
+  birthAddressDetail?: string;
   nationality?: string;
   ethnicity?: string;
   nationalId?: string;

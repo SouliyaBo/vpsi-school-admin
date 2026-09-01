@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Control, FieldPath, FieldValues } from 'react-hook-form';
 import { EntitySelect } from '@/components/common/EntitySelect';
@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/form';
 import { localizedName } from '@/lib/utils';
 import type { LocationTreeNode } from '@/types/entities';
-import { useLocationTree } from '../api';
+import { localOptions, useLocationIndex } from '../lib/location-index';
 
 /**
  * Province → district → village, which is how an address is actually said.
@@ -23,9 +23,8 @@ import { useLocationTree } from '../api';
  * villages, and eleven of its names are borne by more than one village, so a
  * single flat search offers `ດອນກອຍ` twice with nothing to tell them apart.
  *
- * The whole tree arrives in one cached request (about 680 rows) and the
- * filtering happens here, so changing a province costs nothing and the list
- * never lags a keystroke behind.
+ * For a field that may stop at a province or a district — a birthplace outside
+ * the capital, where the official list has no villages — use `PlacePickerField`.
  */
 
 interface VillagePickerFieldProps<T extends FieldValues> {
@@ -35,19 +34,6 @@ interface VillagePickerFieldProps<T extends FieldValues> {
   required?: boolean;
 }
 
-/** A local list dressed up as `EntitySelect`'s server-search hook. */
-function localOptions(options: SelectOption[]) {
-  return (search: string) => {
-    const needle = search.trim().toLowerCase();
-    return {
-      isLoading: false,
-      data: needle
-        ? options.filter((option) => option.label.toLowerCase().includes(needle))
-        : options,
-    };
-  };
-}
-
 export function VillagePickerField<T extends FieldValues>({
   control,
   name,
@@ -55,26 +41,7 @@ export function VillagePickerField<T extends FieldValues>({
   required,
 }: VillagePickerFieldProps<T>) {
   const { t, i18n } = useTranslation();
-  const { data: tree, isLoading } = useLocationTree();
-
-  const { provinces, byId, parentOf } = useMemo(() => {
-    const byId = new Map<string, LocationTreeNode>();
-    const parentOf = new Map<string, LocationTreeNode>();
-    // The endpoint answers with an array of roots. Anything else is a failed or
-    // stubbed response, and an address field is no reason to take a form down.
-    const roots = Array.isArray(tree) ? tree : [];
-
-    const walk = (nodes: LocationTreeNode[], parent?: LocationTreeNode) => {
-      for (const node of nodes) {
-        byId.set(node.id, node);
-        if (parent) parentOf.set(node.id, parent);
-        if (node.children?.length) walk(node.children, node);
-      }
-    };
-
-    walk(roots);
-    return { provinces: roots, byId, parentOf };
-  }, [tree]);
+  const { provinces, byId, parentOf, isLoading } = useLocationIndex();
 
   const toOptions = (nodes: LocationTreeNode[] = []): SelectOption[] =>
     nodes.map((node) => ({ value: node.id, label: localizedName(node, i18n.language) }));
@@ -103,20 +70,37 @@ export function VillagePickerField<T extends FieldValues>({
         const districts = provinceId ? (byId.get(provinceId)?.children ?? []) : [];
         const villages = districtId ? (byId.get(districtId)?.children ?? []) : [];
 
+        /**
+         * Clearing is `''`, never `undefined`.
+         *
+         * `Controller` resolves its value with `get(formValues, name, defaultValue)`,
+         * and that helper treats `undefined` as "absent" and hands back the default
+         * instead. So `field.onChange(undefined)` on a student who already has a
+         * village left the old id in place, the village kept resolving, and the
+         * province it implies overrode the one just picked — the select snapped
+         * back and the address could not be changed at all. Every form using this
+         * picker starts the field at `''`, so that is the value that reads as empty.
+         */
+        const clear = () => field.onChange('');
+
         const selectProvince = (value?: string) => {
           setPending({ provinceId: value });
-          field.onChange(undefined);
+          clear();
         };
 
         const selectDistrict = (value?: string) => {
           setPending({ provinceId, districtId: value });
-          field.onChange(undefined);
+          clear();
         };
 
         const selectVillage = (value?: string) => {
           // Clearing the village must not also clear the two selects that found
           // it, or correcting a mistyped village means starting from the province.
-          if (!value) setPending({ provinceId, districtId });
+          if (!value) {
+            setPending({ provinceId, districtId });
+            clear();
+            return;
+          }
           field.onChange(value);
         };
 

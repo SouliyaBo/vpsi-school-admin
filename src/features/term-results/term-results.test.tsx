@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as apiClient from '@/lib/api-client';
 import { paginated, renderWithProviders } from '@/test/utils';
+import { MAX_PAGE_SIZE } from '@/types/common';
 import { ClassResultSheet } from './components/ClassResultSheet';
 
 /**
@@ -165,6 +166,42 @@ describe('class results — reading the sheet', () => {
     const row = (await screen.findByText(/ເກວະລິນ/)).closest('tr') as HTMLElement;
     expect(within(row).getByText('7.50')).toHaveClass('italic');
     expect(within(row).getByText(/incomplete/i)).toBeInTheDocument();
+  });
+});
+
+describe('class results — asking for the class', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /**
+   * The sheet ranks and averages across the whole class, so it asks for it in one
+   * page — but past `MAX_PAGE_SIZE` the API answers 400 and the tab shows nothing
+   * but "ຂໍ້ມູນບໍ່ຖືກຕ້ອງ". Asserted on the request because every other test here
+   * stubs `get` by url alone and would not notice the params at all.
+   */
+  it('stays inside the page size the API accepts', async () => {
+    const params: Record<string, unknown>[] = [];
+    vi.spyOn(apiClient, 'get').mockImplementation(
+      async (url: string, config?: { params?: Record<string, unknown> }) => {
+        if (url === '/term-results') params.push(config?.params ?? {});
+        if (url === '/school-years/active') return activeYear as never;
+        if (url === '/semesters/active') return semester as never;
+        if (url === '/semesters') return paginated([semester]) as never;
+        if (url === '/classrooms') return paginated([classroom]) as never;
+        if (url === '/term-results') return paginated([termResult()]) as never;
+        return paginated([]) as never;
+      },
+    );
+
+    renderWithProviders(<ClassResultSheet />);
+    await chooseClass();
+    await screen.findByText(/ເກວະລິນ/);
+
+    expect(params).not.toHaveLength(0);
+    for (const sent of params) {
+      expect(Number(sent.limit)).toBeLessThanOrEqual(MAX_PAGE_SIZE);
+      // The class comes back ranked, which is what the row order means.
+      expect(sent.sortBy).toBe('rank');
+    }
   });
 });
 

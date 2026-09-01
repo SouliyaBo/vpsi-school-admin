@@ -274,7 +274,13 @@ export interface Student extends BaseDocument {
   nicknameEn?: string | null;
   gender: Gender;
   dateOfBirth: string;
-  placeOfBirth?: string | null;
+  /**
+   * Birthplace, held like the current address. Unlike `villageId` this may point
+   * at a province or a district — the official list carries villages for
+   * Vientiane Capital only.
+   */
+  birthLocationId?: Ref<Location>;
+  birthAddressDetail?: string | null;
   nationality?: string | null;
   ethnicity?: string | null;
   nationalId?: string | null;
@@ -665,4 +671,26 @@ export interface Vaccination extends BaseDocument {
   provider?: string | null;
   consent: VaccinationConsent;
   notes?: string | null;
+}
+
+// ── System ─────────────────────────────────────────────────────────────────
+
+/**
+ * One row of the settings catalogue, keyed by a dotted `key` rather than by id.
+ *
+ * `value` is whatever JSON that key holds — a string for `school.nameLo`, a
+ * number for `grading.passingPercentage`, an array of bands for `grading.scale`.
+ * The API stores it as `Mixed` and validates nothing beyond "defined", so the
+ * shape is a convention between the reader and the writer of each key.
+ */
+export interface Setting extends BaseDocument {
+  key: string;
+  value: unknown;
+  category: string;
+  description?: string | null;
+  /** Readable without a token — the login screen needs the school name. */
+  isPublic: boolean;
+  /** Seeded; the application depends on it, and the API refuses to delete it. */
+  isSystem: boolean;
+  updatedBy?: Ref<User> | null;
 }

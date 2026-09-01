@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { useCan, useSeesEveryStudent } from '@/features/auth/hooks';
 import { useClassroomOptions } from '@/features/classrooms/api';
 import { useEnroll } from '@/features/enrollments/api';
+import { PlacePickerField } from '@/features/locations/components/PlacePickerField';
 import { VillagePickerField } from '@/features/locations/components/VillagePickerField';
 import { useActiveSchoolYear } from '@/features/school-years/api';
 import { errorMessage } from '@/lib/error-message';
@@ -88,7 +89,8 @@ const baseSchema = z.object({
   nicknameEn: optionalText(60),
   gender: z.enum(GENDERS),
   dateOfBirth: requiredDate(),
-  placeOfBirth: optionalText(150),
+  birthLocationId: optionalId(),
+  birthAddressDetail: optionalText(300),
   nationality: optionalText(60),
   ethnicity: optionalText(60),
   nationalId: optionalText(30),
@@ -153,7 +155,8 @@ const EMPTY: FormValues = {
   nicknameEn: '',
   gender: 'male',
   dateOfBirth: '',
-  placeOfBirth: '',
+  birthLocationId: '',
+  birthAddressDetail: '',
   nationality: 'Lao',
   ethnicity: '',
   nationalId: '',
@@ -188,7 +191,8 @@ function toFormValues(student: Student): FormValues {
     nicknameEn: student.nicknameEn ?? '',
     gender: student.gender,
     dateOfBirth: toDateInput(student.dateOfBirth),
-    placeOfBirth: student.placeOfBirth ?? '',
+    birthLocationId: refId(student.birthLocationId) ?? '',
+    birthAddressDetail: student.birthAddressDetail ?? '',
     nationality: student.nationality ?? '',
     ethnicity: student.ethnicity ?? '',
     nationalId: student.nationalId ?? '',
@@ -379,7 +383,6 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
             <TextField control={form.control} name="nickname" label={t('person.nickname')} />
             <TextField control={form.control} name="nicknameEn" label={t('person.nicknameEn')} />
             <DateField control={form.control} name="dateOfBirth" label={t('person.dateOfBirth')} required />
-            <TextField control={form.control} name="placeOfBirth" label={t('student.placeOfBirth')} />
             <TextField control={form.control} name="nationality" label={t('student.nationality')} />
             <TextField control={form.control} name="ethnicity" label={t('student.ethnicity')} />
             <TextField control={form.control} name="nationalId" label={t('person.nationalId')} />
@@ -395,6 +398,24 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
               name="contactName"
               label={t('student.contactName')}
               description={t('student.contactNameHint')}
+            />
+          </FieldSection>
+
+          {/* Held exactly like the current address, except that the node may be a
+              province or a district: the official list has villages for
+              Vientiane Capital only, so a birth elsewhere goes no finer than
+              its district and its village name goes in the detail. */}
+          <FieldSection title={t('student.placeOfBirth')}>
+            <PlacePickerField
+              control={form.control}
+              name="birthLocationId"
+              label={t('location.province')}
+            />
+            <TextField
+              control={form.control}
+              name="birthAddressDetail"
+              label={t('person.addressDetail')}
+              description={t('student.birthAddressDetailHint')}
             />
           </FieldSection>
 

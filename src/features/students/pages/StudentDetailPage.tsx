@@ -3,6 +3,7 @@ import {
   ArrowRightLeft,
   BarChart3,
   CheckSquare,
+  FileText,
   Pencil,
   School,
   Syringe,
@@ -13,6 +14,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useStudentAttendanceSummary } from '@/features/attendances/api';
+import { StudyCertificateDialog } from '@/features/certificates/components/StudyCertificateDialog';
 import { StudentVaccinations } from '@/features/vaccinations/components/StudentVaccinations';
 import { useCan } from '@/features/auth/hooks';
 import { EnrollDialog } from '@/features/enrollments/components/EnrollDialog';
@@ -24,6 +26,7 @@ import {
 } from '@/features/enrollments/components/EnrollmentMoveDialog';
 import { ALLOWED_TRANSITIONS, useEnrollmentHistory } from '@/features/enrollments/api';
 import { useActiveSemester } from '@/features/semesters/api';
+import { locationPath, useLocationIndex } from '@/features/locations/lib/location-index';
 import {
   calculateAge,
   formatDate,
@@ -81,6 +84,7 @@ export function StudentDetailPage() {
    * trail of lookups nobody performed.
    */
   const [tab, setTab] = useState('overview');
+  const [certificateOpen, setCertificateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [guardiansOpen, setGuardiansOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -89,6 +93,9 @@ export function StudentDetailPage() {
 
   const detail = students.useDetail(id);
   const siblings = useStudentSiblings(id);
+  // Cached tree, shared with the address pickers — the birthplace is shown as a
+  // full path and the populated node carries only ancestor ids.
+  const locationIndex = useLocationIndex();
   const remove = students.useDelete();
   const uploadPhoto = useUploadStudentPhoto(id);
   // Placement lives in `enrollments`, so the class a student sits in — and every
@@ -121,6 +128,9 @@ export function StudentDetailPage() {
 
   const student = detail.data;
   const village = refObject<Location>(student.villageId);
+  // The birthplace may be a province, a district or a village, so it is shown as
+  // the full path — the node's own name would not say which.
+  const birthPlace = locationPath(locationIndex, refId(student.birthLocationId), i18n.language);
   const currentPlacement = history.data?.find((enrollment) => enrollment.status === 'active');
 
   return (
@@ -137,6 +147,12 @@ export function StudentDetailPage() {
         description={student.studentCode}
         actions={
           <>
+            {can('certificates', 'create') && (
+              <Button variant="outline" onClick={() => setCertificateOpen(true)}>
+                <FileText />
+                {t('certificate.studyVerification')}
+              </Button>
+            )}
             {!currentPlacement && !history.isLoading && can('enrollments', 'create') && (
               <Button onClick={() => setEnrollOpen(true)}>
                 <School />
@@ -275,7 +291,9 @@ export function StudentDetailPage() {
                     : t('studentOrganization.none')}
                 </DetailRow>
                 <DetailRow label={t('person.dateOfBirth')}>{formatDate(student.dateOfBirth)}</DetailRow>
-                <DetailRow label={t('student.placeOfBirth')}>{student.placeOfBirth ?? '—'}</DetailRow>
+                <DetailRow label={t('student.placeOfBirth')}>
+                  {[birthPlace, student.birthAddressDetail].filter(Boolean).join(' — ') || '—'}
+                </DetailRow>
                 <DetailRow label={t('student.nationality')}>{student.nationality ?? '—'}</DetailRow>
                 <DetailRow label={t('student.ethnicity')}>{student.ethnicity ?? '—'}</DetailRow>
                 <DetailRow label={t('person.nationalId')}>{student.nationalId ?? '—'}</DetailRow>
@@ -616,6 +634,11 @@ export function StudentDetailPage() {
       </Tabs>
 
       <StudentFormDialog open={editOpen} onOpenChange={setEditOpen} student={student} />
+
+      <StudyCertificateDialog
+        student={certificateOpen ? student : null}
+        onClose={() => setCertificateOpen(false)}
+      />
 
       <EnrollDialog
         open={enrollOpen}

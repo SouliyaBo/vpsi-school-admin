@@ -1,4 +1,4 @@
-import { Lock, LockOpen, Save, Table2 } from 'lucide-react';
+import { Eraser, Lock, LockOpen, Save, Table2, Wand2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCan } from '@/features/auth/hooks';
@@ -34,6 +34,7 @@ import {
   useMonthGrid,
   useSaveMonthGrid,
   useUnlockMonth,
+  type MarkColumn,
   type MonthCells,
   type SaveMarksResult,
 } from '../api';
@@ -53,6 +54,11 @@ const EMPTY: MonthCells = { attendance: null, notebook: null, activity: null, te
  * ລວມ is the one figure computed on this side, because it has to answer under
  * the fingers of whoever is typing. Everything above it — ສະເລ່ຍ, 3 ເດືອນ,
  * ພາກຮຽນ — is the API's, so no two screens can disagree about the term mark.
+ *
+ * An unmarked row opens on ຄະແນນເຕັມ rather than on four blanks, because that is
+ * what most of a class gets: the teacher then types only where a mark was lost.
+ * Those cells are drawn faintly and are still only a draft — nothing reaches the
+ * API until ບັນທຶກ — and ລ້າງ puts the sheet back to what is actually saved.
  */
 export function MonthGridForm() {
   const { t } = useTranslation();
@@ -84,7 +90,7 @@ export function MonthGridForm() {
     }
   }, [data, month]);
 
-  /** The saved marks for the strand on screen, as the draft starts out. */
+  /** The saved marks for the strand on screen. */
   const saved = useMemo(() => {
     const rows: Record<string, MonthCells> = {};
     for (const row of data?.rows ?? []) {
@@ -94,19 +100,74 @@ export function MonthGridForm() {
     return rows;
   }, [data, activeStrand]);
 
+  const isLocked = (data?.rows ?? []).some((row) =>
+    row.strands.some((cell) => (cell.strand ?? undefined) === activeStrand && cell.isLocked),
+  );
+  const canWrite = Boolean(data?.canEdit) && !isLocked;
+
+  /** ຄະແນນເຕັມ of every column, as the API states them for this subject. */
+  const fullMarks = useMemo<MonthCells>(() => {
+    if (!data) return EMPTY;
+    return Object.fromEntries(
+      MARK_COLUMNS.map((column) => [column, data.columnMax[column] ?? null]),
+    ) as MonthCells;
+  }, [data]);
+
+  /** Fill the blanks of one row with full marks, leaving written marks alone. */
+  const withFullMarks = (cells: MonthCells): MonthCells =>
+    Object.fromEntries(
+      MARK_COLUMNS.map((column) => [column, cells[column] ?? fullMarks[column]]),
+    ) as MonthCells;
+
+  /**
+   * What the draft starts out as: the saved marks, with full marks standing in
+   * for every row of the class that has none yet.
+   *
+   * A row that is partly marked is left as it was — someone was in the middle of
+   * it, and a stand-in there would read as a mark they had already given.
+   */
+  const opening = useMemo(() => {
+    const rows: Record<string, MonthCells> = { ...saved };
+    if (!canWrite) return rows;
+    for (const row of data?.rows ?? []) {
+      if (!row.isEnrolled) continue;
+      const cells = saved[row.studentId] ?? EMPTY;
+      if (MARK_COLUMNS.every((column) => cells[column] === null)) {
+        rows[row.studentId] = fullMarks;
+      }
+    }
+    return rows;
+  }, [saved, data, canWrite, fullMarks]);
+
   useEffect(() => {
-    setDraft(saved);
+    setDraft(opening);
     setOutcome(null);
-  }, [saved]);
+  }, [opening]);
 
   const dirty = Object.keys(draft).filter((studentId) =>
     MARK_COLUMNS.some((column) => draft[studentId]?.[column] !== saved[studentId]?.[column]),
   );
 
-  const isLocked = (data?.rows ?? []).some((row) =>
-    row.strands.some((cell) => (cell.strand ?? undefined) === activeStrand && cell.isLocked),
-  );
-  const canWrite = Boolean(data?.canEdit) && !isLocked;
+  /** A cell holding a stand-in rather than a mark anyone has given. */
+  const isSuggested = (studentId: string, column: MarkColumn) =>
+    saved[studentId]?.[column] == null && draft[studentId]?.[column] === fullMarks[column];
+
+  /** How many rows are sitting on untouched full marks — what ບັນທຶກ would write. */
+  const suggestedRows = (data?.rows ?? []).filter(
+    (row) => row.isEnrolled && MARK_COLUMNS.every((column) => isSuggested(row.studentId, column)),
+  ).length;
+
+  /** ໃສ່ຄະແນນເຕັມ — every blank on the sheet, including half-marked rows. */
+  function fillEveryBlank() {
+    setDraft((previous) => {
+      const next: Record<string, MonthCells> = { ...previous };
+      for (const row of data?.rows ?? []) {
+        if (!row.isEnrolled) continue;
+        next[row.studentId] = withFullMarks(previous[row.studentId] ?? EMPTY);
+      }
+      return next;
+    });
+  }
 
   async function handleSave() {
     if (!data || dirty.length === 0) return;
@@ -164,6 +225,22 @@ export function MonthGridForm() {
               )}
 
               <div className="ms-auto flex items-center gap-2">
+                {canWrite && (
+                  <>
+                    <Button variant="outline" onClick={fillEveryBlank}>
+                      <Wand2 />
+                      {t('monthlyMark.fillFull')}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={dirty.length === 0}
+                      onClick={() => setDraft(saved)}
+                    >
+                      <Eraser />
+                      {t('monthlyMark.clearDraft')}
+                    </Button>
+                  </>
+                )}
                 {isLocked && (
                   <Badge variant="secondary">
                     <Lock className="me-1 size-3" />
@@ -208,6 +285,12 @@ export function MonthGridForm() {
           )}
         </CardContent>
       </Card>
+
+      {canWrite && suggestedRows > 0 && (
+        <p className="rounded-md bg-info-subtle px-3 py-2 text-sm text-info print:hidden">
+          {t('monthlyMark.prefilledFull', { count: suggestedRows })}
+        </p>
+      )}
 
       {outcome && (
         <p
@@ -280,6 +363,7 @@ export function MonthGridForm() {
                             value={cells[column]}
                             max={data?.columnMax[column] ?? 10}
                             disabled={!canWrite || !row.isEnrolled}
+                            suggested={isSuggested(row.studentId, column)}
                             label={`${row.studentNameLo} · ${t(`monthlyMark.column.${column}`)}`}
                             onChange={(next) =>
                               setDraft((previous) => ({

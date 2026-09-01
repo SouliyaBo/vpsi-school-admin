@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post } from '@/lib/api-client';
 import { cleanParams } from '@/lib/utils';
-import type { PaginatedResponse } from '@/types/common';
+import { MAX_PAGE_SIZE, type PaginatedResponse } from '@/types/common';
 
 /**
  * ຜົນການຮຽນປະຈຳພາກ — every subject a student took, in one record.
@@ -111,11 +111,19 @@ export const termResultsApi = {
   publish: (body: ClassTarget) => post<PublishSummary>('/term-results/publish', body),
 };
 
-/** One classroom's results for a term, ranked. */
+/**
+ * One classroom's results for a term, ranked.
+ *
+ * The whole class in one page: the sheet ranks and averages across it, so a
+ * second page would be a sheet that adds up to the wrong thing. `MAX_PAGE_SIZE`
+ * is the API's hard cap and asking past it is a 400 — the largest class here is
+ * a third of it.
+ */
 export function useClassTermResults(target: Partial<ClassTarget>) {
   return useQuery({
     queryKey: ['term-results', 'class', target],
-    queryFn: () => termResultsApi.list({ ...target, limit: 200, sortBy: 'rank', sortOrder: 'asc' }),
+    queryFn: () =>
+      termResultsApi.list({ ...target, limit: MAX_PAGE_SIZE, sortBy: 'rank', sortOrder: 'asc' }),
     enabled: Boolean(target.classroomId && target.semesterId),
   });
 }

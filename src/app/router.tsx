@@ -101,6 +101,11 @@ const VaccinationsPage = lazyPage(
   'VaccinationsPage',
 );
 const UsersPage = lazyPage(() => import('@/features/users/pages/UsersPage'), 'UsersPage');
+const RolesPage = lazyPage(() => import('@/features/roles/pages/RolesPage'), 'RolesPage');
+const SettingsPage = lazyPage(
+  () => import('@/features/settings/pages/SettingsPage'),
+  'SettingsPage',
+);
 const ProfilePage = lazyPage(() => import('@/features/profile/pages/ProfilePage'), 'ProfilePage');
 
 /** Wraps an element in the permission gate for its resource. */
@@ -177,6 +182,8 @@ export const router = createBrowserRouter([
           { path: 'vaccinations', element: guarded(<VaccinationsPage />, 'vaccinations') },
 
           { path: 'users', element: guarded(<UsersPage />, 'users') },
+          { path: 'roles', element: guarded(<RolesPage />, 'roles') },
+          { path: 'settings', element: guarded(<SettingsPage />, 'settings') },
 
           { path: 'profile', element: <ProfilePage /> },
 

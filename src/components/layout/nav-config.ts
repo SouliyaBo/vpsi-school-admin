@@ -181,7 +181,7 @@ export const NAV_GROUPS: NavGroup[] = [
     labelKey: 'system',
     items: [
       { labelKey: 'users', to: '/users', icon: UserCog, resource: 'users' },
-      { labelKey: 'roles', to: '/roles', icon: ShieldCheck, resource: 'roles', comingSoon: true },
+      { labelKey: 'roles', to: '/roles', icon: ShieldCheck, resource: 'roles' },
       {
         labelKey: 'auditLogs',
         to: '/audit-logs',
@@ -189,13 +189,7 @@ export const NAV_GROUPS: NavGroup[] = [
         resource: 'audit-logs',
         comingSoon: true,
       },
-      {
-        labelKey: 'settings',
-        to: '/settings',
-        icon: Settings,
-        resource: 'settings',
-        comingSoon: true,
-      },
+      { labelKey: 'settings', to: '/settings', icon: Settings, resource: 'settings' },
     ],
   },
 ];

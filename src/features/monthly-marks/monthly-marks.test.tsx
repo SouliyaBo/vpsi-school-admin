@@ -51,6 +51,19 @@ const gridRow = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+/** A row nobody has marked yet — most of the class, on the day the sheet opens. */
+const blankRow = (cells: Record<string, number | null> = {}) =>
+  gridRow({
+    strands: [
+      {
+        strand: null,
+        cells: { attendance: null, notebook: null, activity: null, test: null, ...cells },
+        total: null,
+        isLocked: false,
+      },
+    ],
+  });
+
 const monthGrid = (overrides: Record<string, unknown> = {}) => ({
   subject,
   classroom,
@@ -207,6 +220,84 @@ describe('monthly marks — the entry form', () => {
     await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/);
 
     expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled();
+  });
+
+  it('opens an unmarked row on full marks, so only the losses get typed', async () => {
+    stubReads({ '/monthly-marks/month': monthGrid({ rows: [blankRow()] }) });
+    renderWithProviders(<MonthGridForm />);
+    await chooseSheet();
+
+    const row = (await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/)).closest('tr') as HTMLElement;
+    // Full marks of each column, not four blanks: 1 · 1 · 2 · 6.
+    expect(within(row).getByLabelText(/Attendance$/)).toHaveValue(1);
+    expect(within(row).getByLabelText(/Notebook$/)).toHaveValue(1);
+    expect(within(row).getByLabelText(/Activity$/)).toHaveValue(2);
+    expect(within(row).getByLabelText(/Test$/)).toHaveValue(6);
+    expect(within(row).getByText('10')).toBeInTheDocument();
+
+    // And it says so, because nothing of this is on the server yet.
+    expect(screen.getByText(/start on full marks/i)).toBeInTheDocument();
+  });
+
+  it('sends the full marks it filled in, alongside the corrections', async () => {
+    const post = vi
+      .spyOn(apiClient, 'post')
+      .mockResolvedValue({ saved: 1, skipped: 0, errors: [] });
+    stubReads({ '/monthly-marks/month': monthGrid({ rows: [blankRow()] }) });
+    renderWithProviders(<MonthGridForm />);
+    await chooseSheet();
+
+    const row = (await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/)).closest('tr') as HTMLElement;
+    const test = within(row).getByLabelText(/Test$/);
+    await userEvent.clear(test);
+    await userEvent.type(test, '4.5');
+
+    await userEvent.click(screen.getByRole('button', { name: /save 1 change/i }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post.mock.calls[0]![1]).toMatchObject({
+      entries: [{ studentId: 'stu-1', attendance: 1, notebook: 1, activity: 2, test: 4.5 }],
+    });
+  });
+
+  it('puts the sheet back to what is saved when the prefill is not wanted', async () => {
+    stubReads({ '/monthly-marks/month': monthGrid({ rows: [blankRow()] }) });
+    renderWithProviders(<MonthGridForm />);
+    await chooseSheet();
+
+    const row = (await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/)).closest('tr') as HTMLElement;
+    await userEvent.click(screen.getByRole('button', { name: /clear unsaved/i }));
+
+    expect(within(row).getByLabelText(/Test$/)).toHaveValue(null);
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled();
+  });
+
+  it('leaves a half-marked row alone until the teacher asks for the blanks', async () => {
+    stubReads({ '/monthly-marks/month': monthGrid({ rows: [blankRow({ attendance: 0 })] }) });
+    renderWithProviders(<MonthGridForm />);
+    await chooseSheet();
+
+    const row = (await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/)).closest('tr') as HTMLElement;
+    // Someone was in the middle of this row — a stand-in here would read as a
+    // mark they had already given, and ຂື້ນຫ້ອງ 0 was deliberate.
+    expect(within(row).getByLabelText(/Test$/)).toHaveValue(null);
+
+    await userEvent.click(screen.getByRole('button', { name: /fill full marks/i }));
+
+    expect(within(row).getByLabelText(/Attendance$/)).toHaveValue(0);
+    expect(within(row).getByLabelText(/Test$/)).toHaveValue(6);
+  });
+
+  it('fills in nothing on a sheet that cannot be written to', async () => {
+    stubReads({
+      '/monthly-marks/month': monthGrid({ canEdit: false, rows: [blankRow()] }),
+    });
+    renderWithProviders(<MonthGridForm />);
+    await chooseSheet();
+
+    const row = (await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/)).closest('tr') as HTMLElement;
+    expect(within(row).getByLabelText(/Test$/)).toHaveValue(null);
+    expect(screen.queryByText(/start on full marks/i)).not.toBeInTheDocument();
   });
 
   it('holds a teacher to their own classes, and says why', async () => {

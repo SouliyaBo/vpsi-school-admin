@@ -114,12 +114,15 @@ export function MarkInput({
   max,
   disabled,
   label,
+  suggested,
   onChange,
 }: {
   value: number | null;
   max: number;
   disabled?: boolean;
   label: string;
+  /** Full marks put there for the teacher, not yet saved — drawn faintly. */
+  suggested?: boolean;
   onChange: (next: number | null) => void;
 }) {
   const invalid = value !== null && (value < 0 || value > max);
@@ -143,6 +146,7 @@ export function MarkInput({
       }}
       className={cn(
         'h-9 w-16 px-2 text-center tabular-nums',
+        suggested && 'border-dashed text-muted-foreground',
         invalid && 'border-danger focus-visible:ring-danger',
       )}
     />
