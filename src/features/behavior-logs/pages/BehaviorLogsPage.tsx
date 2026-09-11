@@ -1,7 +1,8 @@
-import { BarChart3, CalendarCheck, ClipboardList, History } from 'lucide-react';
+import { BarChart3, CalendarCheck, ClipboardList, Clock, History } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCan } from '@/features/auth/hooks';
 import { CoverageReport } from '@/features/coverage/CoverageReport';
+import { TimelinessReport } from '@/features/timeliness/TimelinessReport';
 import { useActiveSchoolYear } from '@/features/school-years/api';
 import { localizedName } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -72,6 +73,12 @@ export function BehaviorLogsPage() {
               {t('behaviorLog.coverageTab')}
             </TabsTrigger>
           )}
+          {oversees && (
+            <TabsTrigger value="timeliness">
+              <Clock />
+              {t('behaviorLog.timelinessTab')}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="sheet">
@@ -86,6 +93,11 @@ export function BehaviorLogsPage() {
         {oversees && (
           <TabsContent value="coverage">
             <CoverageReport kind="behavior" />
+          </TabsContent>
+        )}
+        {oversees && (
+          <TabsContent value="timeliness">
+            <TimelinessReport kind="behavior" />
           </TabsContent>
         )}
       </Tabs>

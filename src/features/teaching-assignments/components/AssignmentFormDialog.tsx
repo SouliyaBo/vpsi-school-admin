@@ -14,11 +14,7 @@ import { Form } from '@/components/ui/form';
 import { EntitySelectField } from '@/components/common/EntitySelect';
 import { FieldSection, TextareaField } from '@/components/common/fields';
 import { FormDialog } from '@/components/common/FormDialog';
-import {
-  useCreateAssignment,
-  useUpdateAssignment,
-  type TeachingAssignmentInput,
-} from '../api';
+import { useCreateAssignment, useUpdateAssignment, type TeachingAssignmentInput } from '../api';
 import { assignmentSchema, EMPTY_ASSIGNMENT, type AssignmentFormValues } from '../schemas';
 import { ConflictAlert } from './ConflictAlert';
 import { ScheduleEditor } from './ScheduleEditor';
@@ -40,12 +36,7 @@ interface Props {
  * teacher means retiring this assignment and making a new one. They are shown
  * as read-only text so the row being edited is still identifiable.
  */
-export function AssignmentFormDialog({
-  open,
-  onOpenChange,
-  assignment,
-  defaultSemesterId,
-}: Props) {
+export function AssignmentFormDialog({ open, onOpenChange, assignment, defaultSemesterId }: Props) {
   const { t, i18n } = useTranslation();
   const activeYear = useActiveSchoolYear();
   const isEditing = assignment !== null;
@@ -68,11 +59,12 @@ export function AssignmentFormDialog({
   const classroom = classrooms.useDetail(classroomId || undefined);
   const gradeLevelId = refId(classroom.data?.gradeLevelId) ?? undefined;
 
-  const useSemestersForYear = (search: string) =>
-    useSemesterOptions(search, activeYear.data?.id);
-  const useClassroomsForYear = (search: string) =>
-    useClassroomOptions(search, activeYear.data?.id);
-  const useSubjectsForGrade = (search: string) => useSubjectOptions(search, gradeLevelId);
+  const useSemestersForYear = (search: string) => useSemesterOptions(search, activeYear.data?.id);
+  const useClassroomsForYear = (search: string) => useClassroomOptions(search, activeYear.data?.id);
+  // `taught` only: the timetable runs on the four ສາຍວິຊາ. From ມ.4 the mark
+  // sheet splits two of them, but nobody is assigned to teach ຟີຊິກສາດ — they are
+  // assigned to ທຳມະຊາດ, and that assignment is what lets them mark it.
+  const useSubjectsForGrade = (search: string) => useSubjectOptions(search, gradeLevelId, 'taught');
 
   useEffect(() => {
     if (!open) return;

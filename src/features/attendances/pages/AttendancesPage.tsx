@@ -1,7 +1,8 @@
-import { BarChart3, CalendarCheck, ClipboardCheck, History } from 'lucide-react';
+import { BarChart3, CalendarCheck, ClipboardCheck, Clock, History } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCan } from '@/features/auth/hooks';
 import { CoverageReport } from '@/features/coverage/CoverageReport';
+import { TimelinessReport } from '@/features/timeliness/TimelinessReport';
 import { useActiveSchoolYear } from '@/features/school-years/api';
 import { localizedName } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -69,6 +70,12 @@ export function AttendancesPage() {
               {t('attendance.coverageTab')}
             </TabsTrigger>
           )}
+          {oversees && (
+            <TabsTrigger value="timeliness">
+              <Clock />
+              {t('attendance.timelinessTab')}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="rollcall">
@@ -83,6 +90,11 @@ export function AttendancesPage() {
         {oversees && (
           <TabsContent value="coverage">
             <CoverageReport kind="attendance" />
+          </TabsContent>
+        )}
+        {oversees && (
+          <TabsContent value="timeliness">
+            <TimelinessReport kind="attendance" />
           </TabsContent>
         )}
       </Tabs>

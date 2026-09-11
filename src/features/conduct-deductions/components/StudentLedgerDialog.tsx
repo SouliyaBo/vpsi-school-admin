@@ -27,11 +27,12 @@ import {
 import { NotifyList } from './NotifyList';
 
 /**
- * One child's account for the term, oldest first.
+ * One child's account for the school year, oldest first.
  *
  * Read forwards, unlike every other log in the system: this is what a meeting
  * with the guardians is held over, and an account is read from the top — what
- * happened, then what happened next, then where that leaves them.
+ * happened, then what happened next, then where that leaves them. A year of it,
+ * because the 100 the rows come off is issued once a year and never reset.
  *
  * Withdrawing a row asks for a reason before it will do anything. The child was
  * told they had lost these points, so taking them back is a decision in its own
@@ -43,19 +44,19 @@ export function StudentLedgerDialog({
   open,
   onOpenChange,
   student,
-  semesterId,
+  schoolYearId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   student: ClassStandingRow | null;
-  semesterId: string | undefined;
+  schoolYearId: string | undefined;
 }) {
   const { t } = useTranslation();
   const can = useCan();
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [reason, setReason] = useState('');
 
-  const ledger = useStudentLedger(open ? student?.studentId : undefined, semesterId);
+  const ledger = useStudentLedger(open ? student?.studentId : undefined, schoolYearId);
   const revoke = useRevokeDeduction();
   const mayRevoke = can('conduct-scores', 'delete');
 

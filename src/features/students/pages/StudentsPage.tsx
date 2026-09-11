@@ -1,17 +1,22 @@
 import type { ColumnDef } from '@tanstack/react-table';
-import { Eye, Pencil, Plus, School, Trash2 } from 'lucide-react';
+import { Eye, FileSpreadsheet, Loader2, Pencil, Plus, School, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useCan } from '@/features/auth/hooks';
-import { useClassroomOptions } from '@/features/classrooms/api';
+import { classroomHeading, classroomsApi, useClassroomOptions } from '@/features/classrooms/api';
 import { EnrollDialog } from '@/features/enrollments/components/EnrollDialog';
 import { useGradeLevelOptions } from '@/features/grade-levels/api';
+import { useActiveSchoolYear } from '@/features/school-years/api';
+import { teachersApi } from '@/features/teachers/api';
 import { useCrudDialogs } from '@/hooks/use-crud-dialogs';
 import { useTableQueryState } from '@/hooks/use-table-query-state';
-import { calculateAge, formatDate, fullName, initials, nickname } from '@/lib/utils';
+import { fetchEveryPage, type ListParams } from '@/lib/crud';
+import { saveBlob } from '@/lib/save-blob';
+import { notify } from '@/lib/toast';
+import { calculateAge, formatDate, fullName, initials, nickname, refId } from '@/lib/utils';
 import { GENDERS, STUDENT_STATUSES } from '@/types/enums';
-import type { Student } from '@/types/entities';
+import type { Student, Teacher } from '@/types/entities';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,7 +27,12 @@ import { RowActions } from '@/components/common/RowActions';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { FilterSelect, SearchInput, TableToolbar } from '@/components/common/TableToolbar';
 import { StudentFormDialog } from '../components/StudentFormDialog';
-import { students } from '../api';
+import {
+  buildStudentListWorkbook,
+  studentListFileName,
+  type StudentListRow,
+} from '../lib/student-list-workbook';
+import { students, studentsApi } from '../api';
 
 export function StudentsPage() {
   const { t, i18n } = useTranslation();
@@ -47,6 +57,10 @@ export function StudentsPage() {
   const remove = students.useDelete();
   const gradeOptions = useGradeLevelOptions();
   const classroomOptions = useClassroomOptions();
+  /** The class the list is narrowed to, if any — it heads the exported file. */
+  const classLabel = classroomOptions.data?.find(
+    (option) => option.value === table.filters.classroomId,
+  )?.label;
 
   const columns = useMemo<ColumnDef<Student, unknown>[]>(
     () => [
@@ -198,12 +212,17 @@ export function StudentsPage() {
           list.data ? `${t('common.total')}: ${list.data.meta.total.toLocaleString()}` : undefined
         }
         actions={
-          can('students', 'create') && (
-            <Button onClick={dialogs.openCreate}>
-              <Plus />
-              {t('student.create')}
-            </Button>
-          )
+          <>
+            {/* Exports what the filters are showing, not the page — the office
+                asks for "the list", and a list of twenty is never it. */}
+            <ExportButton params={table.queryParams} classLabel={classLabel} />
+            {can('students', 'create') && (
+              <Button onClick={dialogs.openCreate}>
+                <Plus />
+                {t('student.create')}
+              </Button>
+            )}
+          </>
         }
       />
 
@@ -222,8 +241,15 @@ export function StudentsPage() {
         onRowClick={(row) => navigate(`/students/${row.id}`)}
         getRowId={(row) => row.id}
         toolbar={
-          <TableToolbar hasActiveFilters={table.hasActiveFilters} onClearFilters={table.clearFilters}>
-            <SearchInput value={table.search ?? ''} onChange={table.setSearch} className="w-full sm:w-64" />
+          <TableToolbar
+            hasActiveFilters={table.hasActiveFilters}
+            onClearFilters={table.clearFilters}
+          >
+            <SearchInput
+              value={table.search ?? ''}
+              onChange={table.setSearch}
+              className="w-full sm:w-64"
+            />
             {/* The API narrows to the current roll — `active` plus
                 `no_certificate`, since declining the certificate does not take a
                 child out of a classroom — when no status is given, so the trigger
@@ -329,5 +355,113 @@ export function StudentsPage() {
         }}
       />
     </div>
+  );
+}
+
+/**
+ * ບັນຊີລາຍຊື່ນັກຮຽນ as a workbook the office can print and hand round.
+ *
+ * Exports what the filters are showing rather than what the page is showing:
+ * the office asks for "the ມ.1/ຂ list" or "the whole school", and either of
+ * those is more rows than a page holds, so every page of the current query is
+ * fetched on the click.
+ *
+ * The homeroom teacher is not on a student — it belongs to the classroom — so
+ * the rooms and the staff are fetched alongside and joined here. Both are read
+ * through `refId`, because a classroom's `homeroomTeacherId` is a raw string on
+ * the rows the office created through the admin and a populated document on the
+ * rest; the id is the one thing both shapes agree on.
+ *
+ * `exceljs` and these three lists are all fetched at the moment of the click and
+ * never with the page — most people who open this screen are looking somebody up.
+ */
+function ExportButton({ params, classLabel }: { params: ListParams; classLabel?: string }) {
+  const { t, i18n } = useTranslation();
+  const [busy, setBusy] = useState(false);
+  const activeYear = useActiveSchoolYear();
+
+  async function exportRoster() {
+    setBusy(true);
+    try {
+      const [roster, rooms, staff] = await Promise.all([
+        // Paged with the filters, sort and search in force — but not the page
+        // the reader happens to be on.
+        fetchEveryPage(studentsApi.list, { ...params, page: undefined, limit: undefined }),
+        fetchEveryPage(classroomsApi.list),
+        fetchEveryPage(teachersApi.list),
+      ]);
+
+      const teacherById = new Map(staff.map((teacher) => [teacher.id, teacher]));
+      const homeroomByClassroom = new Map(
+        rooms.map((room) => [
+          room.id,
+          fullName(teacherById.get(refId<Teacher>(room.homeroomTeacherId) ?? ''), i18n.language),
+        ]),
+      );
+
+      const rows = roster.map<StudentListRow>((student) => {
+        const placement = student.currentEnrollment;
+        return {
+          studentCode: student.studentCode,
+          status: t(`studentStatus.${student.status}`),
+          title: student.title ?? '',
+          firstNameLo: student.firstNameLo,
+          lastNameLo: student.lastNameLo,
+          nickname: student.nickname ?? '',
+          nameEn: [student.firstNameEn, student.lastNameEn].filter(Boolean).join(' '),
+          nicknameEn: student.nicknameEn ?? '',
+          classroom: placement
+            ? classroomHeading({
+                name: placement.classroomName,
+                gradeLevelCode: placement.gradeLevelCode,
+              })
+            : t('enrollment.noClassroom'),
+          // A class with nobody assigned, and a child with no class at all, both
+          // print blank rather than a dash the office would have to explain.
+          homeroomTeacher: placement ? (homeroomByClassroom.get(placement.classroomId) ?? '') : '',
+        };
+      });
+
+      // `ບັນຊີລາຍຊື່ນັກຮຽນ ມ.1/ຂ 2025-2026` — what the list is, of whom, and when.
+      const heading = [t('student.exportTitle'), classLabel, activeYear.data?.code]
+        .filter(Boolean)
+        .join(' ');
+
+      const blob = await buildStudentListWorkbook(rows, {
+        schoolName:
+          (import.meta.env.VITE_SCHOOL_NAME_LO as string | undefined) ??
+          (import.meta.env.VITE_SCHOOL_NAME_EN as string | undefined) ??
+          '',
+        title: heading,
+        filters: classLabel ?? t('student.exportEveryStudent'),
+        sheetName: t('student.exportSheet'),
+        rowNumber: t('student.exportRowNumber'),
+        studentCode: t('student.exportStudentCode'),
+        status: t('person.status'),
+        honorific: t('student.exportHonorific'),
+        firstName: t('student.exportFirstName'),
+        lastName: t('student.exportLastName'),
+        nickname: t('student.exportNickname'),
+        nameEn: t('student.exportNameEn'),
+        nicknameEn: t('student.exportNicknameEn'),
+        classroom: t('enrollment.classroom'),
+        homeroomTeacher: t('classroom.homeroomTeacher'),
+        total: (count) => t('student.exportTotal', { count }),
+        printedOn: t('student.exportPrintedOn', { date: formatDate(new Date()) }),
+      });
+
+      saveBlob(blob, studentListFileName(heading));
+    } catch (error) {
+      notify.error(error, t('student.exportFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Button variant="outline" onClick={exportRoster} disabled={busy}>
+      {busy ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />}
+      {busy ? t('student.exporting') : t('student.exportExcel')}
+    </Button>
   );
 }

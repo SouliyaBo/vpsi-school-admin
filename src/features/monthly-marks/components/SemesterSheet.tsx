@@ -16,6 +16,7 @@ import {
 import { EmptyState } from '@/components/common/EmptyState';
 import { ErrorState } from '@/components/common/ErrorState';
 import { StudentName } from '@/components/common/StudentName';
+import { classroomHeading } from '@/features/classrooms/api';
 import {
   useSaveTermMarks,
   useSemesterSheet,
@@ -267,9 +268,7 @@ export function SheetHeading({
   rows?: SheetRow[];
 }) {
   const { t, i18n } = useTranslation();
-  const className = sheet.classroom.gradeLevelCode
-    ? `${sheet.classroom.gradeLevelCode}/${sheet.classroom.name}`
-    : sheet.classroom.name;
+  const className = classroomHeading(sheet.classroom);
 
   return (
     <header className="space-y-1 text-center">

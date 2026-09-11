@@ -4,6 +4,7 @@ import { NavLink } from 'react-router-dom';
 import { useCan } from '@/features/auth/hooks';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { VersionBadge } from '@/components/common/VersionBadge';
 import { NAV_GROUPS } from './nav-config';
 
 interface SidebarProps {
@@ -51,7 +52,19 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold leading-tight">{schoolName}</p>
-            <p className="truncate text-xs text-sidebar-muted-foreground">{t('common.appName')}</p>
+            {/* The version sits beside the app name rather than under it: the
+                header is a fixed 14 units tall, and a third line would push the
+                school's own name out of it. `shrink-0` on the badge and
+                `truncate` on the name settle the collision the right way round —
+                a long school name gives up characters before the build number
+                disappears, since the name is on screen everywhere and the
+                version is only here. */}
+            <div className="flex items-center gap-1.5">
+              <p className="truncate text-xs text-sidebar-muted-foreground">
+                {t('common.appName')}
+              </p>
+              <VersionBadge className="shrink-0 rounded bg-sidebar-foreground/10 px-1.5 py-px text-sidebar-foreground/80" />
+            </div>
           </div>
           <Button
             variant="ghost"

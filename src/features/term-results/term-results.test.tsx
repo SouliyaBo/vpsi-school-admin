@@ -5,6 +5,7 @@ import * as apiClient from '@/lib/api-client';
 import { paginated, renderWithProviders } from '@/test/utils';
 import { MAX_PAGE_SIZE } from '@/types/common';
 import { ClassResultSheet } from './components/ClassResultSheet';
+import { StudentResultCard } from './components/StudentResultCard';
 
 /**
  * ໃບຄະແນນລວມ — the sheet that crosses every subject of a class.
@@ -327,5 +328,114 @@ describe('class results — results that have gone out of date', () => {
     expect(
       await screen.findByText(/3 withdrawn from publication because the figures moved/i),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * ໃບຄະແນນລາຍບຸກຄົນ — the same stored result, turned round for one child.
+ *
+ * The card's own responsibility is the breakdown: the components the API carried
+ * through are already the school's own marks out of 10 and must be printed as
+ * they stand, while the term mark beside them is a percentage and has to be
+ * divided — getting those two the same way round is the whole bug this guards.
+ */
+describe('student result card', () => {
+  beforeEach(() => stubReads());
+  afterEach(() => vi.restoreAllMocks());
+
+  const withComponents = () =>
+    termResult({
+      subjects: [
+        subjectResult({
+          components: [
+            { componentId: null, nameLo: 'ກັນຍາ', score: 8, maxScore: 10, weight: 16.67, weightedScore: 13.34 },
+            { componentId: null, nameLo: 'ຕຸລາ', score: 9, maxScore: 10, weight: 16.67, weightedScore: 15 },
+            { componentId: 'exam', nameLo: 'ສອບເສັງ', score: 8.5, maxScore: 10, weight: 50, weightedScore: 42.5 },
+          ],
+        }),
+      ],
+    });
+
+  /** Class, then the child — the office reads one class at a time. */
+  async function chooseStudent() {
+    await chooseClass();
+    await userEvent.click(await screen.findByRole('combobox', { name: /student/i }));
+    await userEvent.click(await screen.findByRole('option', { name: /762 — ເກວະລິນ/ }));
+  }
+
+  it('prints the months and the exam as marked, and the term mark divided', async () => {
+    stubReads({ '/term-results': paginated([withComponents()]) });
+
+    renderWithProviders(<StudentResultCard />);
+    await chooseStudent();
+
+    const row = (await screen.findByText('ພາສາລາວ')).closest('tr') as HTMLElement;
+    // The components are already out of 10 — dividing them again would print
+    // 0.80 where the teacher wrote 8.
+    expect(within(row).getByText('8.00')).toBeInTheDocument();
+    expect(within(row).getByText('9.00')).toBeInTheDocument();
+    expect(within(row).getByText('8.50')).toBeInTheDocument();
+    // …and the term mark beside them is the stored 83.1 read back as 8.31.
+    expect(within(row).getByText('8.31')).toBeInTheDocument();
+  });
+
+  it('gives every component a column, even one only some subjects carry', async () => {
+    stubReads({
+      '/term-results': paginated([
+        termResult({
+          subjects: [
+            subjectResult({
+              components: [
+                { componentId: null, nameLo: 'ກັນຍາ', score: 8, maxScore: 10, weight: 50, weightedScore: 40 },
+              ],
+            }),
+            subjectResult({
+              subjectId: 'sub-2',
+              subjectNameLo: 'ຄະນິດສາດ',
+              components: [
+                { componentId: 'bonus', nameLo: 'ເພີ່ມ', score: 1, maxScore: 10, weight: 0, weightedScore: 0 },
+              ],
+            }),
+          ],
+        }),
+      ]),
+    });
+
+    renderWithProviders(<StudentResultCard />);
+    await chooseStudent();
+
+    for (const column of ['ກັນຍາ', 'ເພີ່ມ']) {
+      expect(await screen.findByRole('columnheader', { name: column })).toBeInTheDocument();
+    }
+    // A subject that was not marked on that instrument gets a dash, not a zero.
+    const maths = (await screen.findByText('ຄະນິດສາດ')).closest('tr') as HTMLElement;
+    expect(within(maths).getByText('—')).toBeInTheDocument();
+  });
+
+  it('says a result is not published, because that is what a family can see', async () => {
+    stubReads({ '/term-results': paginated([termResult()]) });
+
+    renderWithProviders(<StudentResultCard />);
+    await chooseStudent();
+
+    expect(await screen.findByText(/not published yet/i)).toBeInTheDocument();
+  });
+
+  it('drops the student on screen when another class is picked', async () => {
+    stubReads({
+      '/term-results': paginated([withComponents()]),
+      '/classrooms': paginated([classroom, { ...classroom, id: 'cls-2', name: 'ຂ' }]),
+    });
+
+    renderWithProviders(<StudentResultCard />);
+    await chooseStudent();
+    await screen.findByText('ພາສາລາວ');
+
+    // The children of the old class are not in the new one; leaving the card up
+    // would show one class's picker over another class's marks.
+    await userEvent.click(screen.getByRole('combobox', { name: /^class$/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /ມ\.1 ຂ/ }));
+
+    expect(await screen.findByText(/choose a student to see their card/i)).toBeInTheDocument();
   });
 });

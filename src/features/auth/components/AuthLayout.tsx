@@ -2,6 +2,7 @@ import { GraduationCap } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LocaleSwitcher } from '@/components/layout/LocaleSwitcher';
+import { VersionBadge } from '@/components/common/VersionBadge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 /**
@@ -54,6 +55,11 @@ export function AuthLayout({
           </Card>
 
           {footer && <div className="text-center text-sm text-primary-foreground/80">{footer}</div>}
+
+          {/* Last thing on the page, so signing in is never competing with it —
+              but on the one screen everybody sees, which is what makes it a
+              usable answer to "is the new build actually out?". */}
+          <VersionBadge tone="onPrimary" className="text-center" />
         </div>
       </div>
     </div>

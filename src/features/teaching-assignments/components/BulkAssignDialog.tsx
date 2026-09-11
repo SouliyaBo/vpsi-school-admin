@@ -74,7 +74,8 @@ export function BulkAssignDialog({ open, onOpenChange, defaultSemesterId }: Prop
 
   const classroom = classrooms.useDetail(classroomId || undefined);
   const gradeLevelId = refId(classroom.data?.gradeLevelId) ?? undefined;
-  const gradeSubjects = useSubjectsByGrade(gradeLevelId);
+  // The four ສາຍວິຊາ the timetable runs on — see `AssignmentFormDialog`.
+  const gradeSubjects = useSubjectsByGrade(gradeLevelId, 'taught');
 
   // Which subjects this class is already taught, and by whom, so a duplicate is
   // visible before it is submitted rather than after the API rejects it.
@@ -90,8 +91,7 @@ export function BulkAssignDialog({ open, onOpenChange, defaultSemesterId }: Prop
   }
 
   const useSemestersForYear = (search: string) => useSemesterOptions(search, activeYear.data?.id);
-  const useClassroomsForYear = (search: string) =>
-    useClassroomOptions(search, activeYear.data?.id);
+  const useClassroomsForYear = (search: string) => useClassroomOptions(search, activeYear.data?.id);
 
   useEffect(() => {
     if (!open) return;
@@ -123,7 +123,8 @@ export function BulkAssignDialog({ open, onOpenChange, defaultSemesterId }: Prop
   }
 
   /** Never attempted, or attempted and rejected — either way it still has to go. */
-  const stillPending = (subjectId: string) => Boolean(outcomes[subjectId]?.error ?? !outcomes[subjectId]);
+  const stillPending = (subjectId: string) =>
+    Boolean(outcomes[subjectId]?.error ?? !outcomes[subjectId]);
 
   async function submit(values: BulkAssignmentFormValues) {
     const pending = values.targets.filter((target) => stillPending(target.subjectId));

@@ -1,11 +1,15 @@
 import type { Ref, Timestamped, WithId } from './common';
 import type {
   AttendanceStatus,
+  CalendarEventType,
+  DayState,
+  SchoolDayEffect,
   EnrollmentStatus,
   Gender,
   GuardianRelationship,
   HousingType,
   LessonPlanStatus,
+  TeachingObservationStatus,
   LocationType,
   MaritalStatus,
   ConsentStatus,
@@ -125,9 +129,22 @@ export interface Subject extends BaseDocument {
   gradeLevelId: Ref<GradeLevel>;
   /** `null` for a subject not yet filed under a department. */
   subjectGroupId?: Ref<SubjectGroup>;
+  /**
+   * The ສາຍວິຊາ this subject is marked under, when the school splits it.
+   *
+   * The school teaches four ສາຍວິຊາ — that is what a teacher is assigned to and
+   * what roll call is taken against — but from ມ.4 the mark sheet splits two of
+   * them: ທຳມະຊາດ into ຟີຊິກສາດ / ເຄມີສາດ / ຊີວະສາດ and ສັງຄົມ into
+   * ສຶກສາພົນລະເມືອງ / ພູມສາດ / ປະຫວັດສາດ. Set here, the subject carries marks and
+   * the parent does not; `null` and nothing pointing at it is an ordinary
+   * subject, both taught and marked.
+   */
+  parentSubjectId?: Ref<Subject> | null;
   type: SubjectType;
   credits: number;
   hoursPerWeek: number;
+  /** Where the subject sits in the printed order of the mark sheet, low first. */
+  sortOrder: number;
   passingPercentage?: number | null;
   /**
    * The strands the monthly mark sheet splits this subject into — ຟີຊິກ / ເຄມີ /
@@ -566,6 +583,45 @@ export interface LessonPlan extends BaseDocument {
   lastReviewedAt?: string | null;
 }
 
+// ── Teaching observation (ຕິດຕາມການສອນຂອງຄູ) ─────────────────────────────────
+
+/** One row of the sheet. `score` is `null` while the observer has not marked it. */
+export interface ObservationScore {
+  /** A rubric key — see `GET /teaching-observations/rubric`. */
+  criterion: string;
+  score?: number | null;
+}
+
+/**
+ * ຕິດຕາມການສອນຂອງຄູ — one classroom visit, scored out of ten on six criteria.
+ *
+ * `observerId` is the line the school's paper form does not have: it names the
+ * teacher who did the observing, as distinct from `teacherId`, the teacher whose
+ * lesson was watched.
+ */
+export interface TeachingObservation extends BaseDocument {
+  teacherId: Ref<Teacher>;
+  observerId: Ref<Teacher>;
+  /** The account that keyed the sheet in — not necessarily the observer's. */
+  recordedById?: Ref<User> | null;
+  subjectId: Ref<Subject>;
+  subjectGroupId?: Ref<SubjectGroup> | null;
+  classroomId: Ref<Classroom>;
+  semesterId: Ref<Semester>;
+  observedAt: string;
+  /** ປະເມີນຄັ້ງທີ — which visit of the term this is for this teacher. */
+  visitNumber: number;
+  scores: ObservationScore[];
+  /** ລວມຄະແນນປະເມີນ. */
+  totalScore: number;
+  /** 10 × the rows actually marked, so a draft's total reads honestly. */
+  maxScore: number;
+  note?: string | null;
+  status: TeachingObservationStatus;
+  submittedAt?: string | null;
+  acknowledgedAt?: string | null;
+}
+
 // ── Accounts ────────────────────────────────────────────────────────────────
 
 export interface Role extends BaseDocument {
@@ -605,10 +661,39 @@ export interface Announcement extends BaseDocument {
 export interface CalendarEvent extends BaseDocument {
   titleLo: string;
   titleEn?: string | null;
-  type: string;
+  description?: string | null;
+  type: CalendarEventType;
+  /** Whether the school is open, staffed but not teaching, or shut. */
+  dayEffect: SchoolDayEffect;
   startDate: string;
-  endDate?: string | null;
+  /** Inclusive — equal to `startDate` for a one-day event. */
+  endDate: string;
   isAllDay?: boolean;
+  /** ຄຶ່ງວັນ — a morning only. The sheet prints exactly one. */
+  isHalfDay?: boolean;
+  location?: string | null;
+  schoolYearId?: Ref<SchoolYear>;
+}
+
+/**
+ * One day of the year as the school works it — `GET /calendar/school-days`.
+ *
+ * The API's own classification rather than the screen's: whether a day was taught
+ * is what the roll-call reports count against, and a second implementation of it
+ * in the browser would be a second answer to the same question.
+ */
+export interface SchoolDay {
+  /** `yyyy-MM-dd`. */
+  date: string;
+  state: DayState;
+  isTeachingDay: boolean;
+  isWorkingDay: boolean;
+  isHalfDay: boolean;
+  /** The events covering the day, most restrictive first. */
+  events: Pick<
+    CalendarEvent,
+    'id' | 'titleLo' | 'titleEn' | 'type' | 'dayEffect' | 'startDate' | 'endDate' | 'isHalfDay'
+  >[];
 }
 
 // ── Health ──────────────────────────────────────────────────────────────────

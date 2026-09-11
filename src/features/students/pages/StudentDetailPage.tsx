@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   ArrowRightLeft,
   BarChart3,
+  CalendarRange,
   CheckSquare,
   FileText,
   Pencil,
@@ -15,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useStudentAttendanceSummary } from '@/features/attendances/api';
 import { StudyCertificateDialog } from '@/features/certificates/components/StudyCertificateDialog';
+import { StudentMonthlyMarks } from '@/features/monthly-marks/components/StudentMonthlyMarks';
 import { StudentVaccinations } from '@/features/vaccinations/components/StudentVaccinations';
 import { useCan } from '@/features/auth/hooks';
 import { EnrollDialog } from '@/features/enrollments/components/EnrollDialog';
@@ -61,6 +63,7 @@ import { FileUpload } from '@/components/common/FileUpload';
 import { PageHeader } from '@/components/common/PageHeader';
 import { RowActions } from '@/components/common/RowActions';
 import { StatusBadge } from '@/components/common/StatusBadge';
+import { toTenPoint } from '@/features/term-results/api';
 import { GuardianLinksDialog } from '../components/GuardianLinksDialog';
 import { StudentFormDialog } from '../components/StudentFormDialog';
 import {
@@ -103,6 +106,8 @@ export function StudentDetailPage() {
   // role without `enrollments:read`, which would only 403.
   const canReadEnrollments = can('enrollments');
   const canReadVaccinations = can('vaccinations');
+  // ຄະແນນປະຈຳເດືອນ is filed under `scores`, like the mark sheets themselves.
+  const canReadScores = can('scores');
   const history = useEnrollmentHistory(canReadEnrollments ? id : undefined);
 
   // Both summaries are per-semester; without an active semester there is nothing
@@ -257,6 +262,12 @@ export function StudentDetailPage() {
             <BarChart3 />
             {t('student.academicSummary')}
           </TabsTrigger>
+          {canReadScores && (
+            <TabsTrigger value="monthlyMarks">
+              <CalendarRange />
+              {t('monthlyMark.studentTab')}
+            </TabsTrigger>
+          )}
           <TabsTrigger value="attendance">
             <CheckSquare />
             {t('student.attendanceSummary')}
@@ -539,13 +550,17 @@ export function StudentDetailPage() {
                 <div className="space-y-4">
                   <div className="grid gap-3 sm:grid-cols-4">
                     <StatTile label="GPA" value={termResult.data.gpa?.toFixed(2) ?? '—'} />
+                    {/* The API stores marks as percentages so a class can be
+                        ranked; this school marks out of 10, and a card that says
+                        66.0 beside a sheet that says 6.60 reads as two different
+                        terms. Same division as the result sheets — `toTenPoint`. */}
                     <StatTile
-                      label={t('common.total')}
-                      value={termResult.data.average?.toFixed(1) ?? '—'}
+                      label={t('termResult.average')}
+                      value={toTenPoint(termResult.data.average)?.toFixed(2) ?? '—'}
                     />
-                    <StatTile label={t('person.status')} value={termResult.data.grade ?? '—'} />
+                    <StatTile label={t('termResult.grade')} value={termResult.data.grade ?? '—'} />
                     <StatTile
-                      label="Rank"
+                      label={t('termResult.rank')}
                       value={
                         termResult.data.rank
                           ? `${termResult.data.rank}/${termResult.data.totalStudents ?? '—'}`
@@ -559,8 +574,8 @@ export function StudentDetailPage() {
                       <TableRow>
                         <TableHead>{t('subject.title')}</TableHead>
                         <TableHead className="text-end">{t('subject.credits')}</TableHead>
-                        <TableHead className="text-end">%</TableHead>
-                        <TableHead>{t('person.status')}</TableHead>
+                        <TableHead className="text-end">{t('termResult.termMark')}</TableHead>
+                        <TableHead>{t('termResult.grade')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -568,7 +583,9 @@ export function StudentDetailPage() {
                         <TableRow key={subject.subjectId}>
                           <TableCell className="font-medium">{subject.subjectNameLo}</TableCell>
                           <TableCell className="text-end">{subject.credits}</TableCell>
-                          <TableCell className="text-end">{subject.percentage?.toFixed(1)}</TableCell>
+                          <TableCell className="text-end tabular-nums">
+                            {toTenPoint(subject.percentage)?.toFixed(2) ?? '—'}
+                          </TableCell>
                           <TableCell>
                             <Badge variant={subject.isPassed ? 'success' : 'danger'}>
                               {subject.grade}
@@ -583,6 +600,22 @@ export function StudentDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {canReadScores && (
+          <TabsContent value="monthlyMarks">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">{t('monthlyMark.studentTab')}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {/* Held back until the tab is open: the read costs the whole
+                    class's marks, because ລຳດັບ cannot be worked out from one
+                    student's row alone. */}
+                <StudentMonthlyMarks studentId={id} enabled={tab === 'monthlyMarks'} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         <TabsContent value="attendance">
           <Card>

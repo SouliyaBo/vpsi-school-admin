@@ -100,6 +100,11 @@ export const SETTING_CATALOG: Readonly<Record<string, SettingMeta>> = {
     name: 'semesterMonths',
     cautionKey: 'setting.caution.semesterMonths',
   },
+  'grading.monthlyBands': {
+    kind: 'json',
+    name: 'monthlyBands',
+    cautionKey: 'setting.caution.monthlyBands',
+  },
   'grading.passingPercentage': {
     kind: 'number',
     name: 'passingPercentage',

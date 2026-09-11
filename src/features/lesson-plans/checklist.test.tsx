@@ -40,10 +40,20 @@ vi.mock('@/features/auth/hooks', () => ({
   useSeesEveryStudent: () => true,
 }));
 
+/**
+ * The month on screen, which is **this** month.
+ *
+ * `MonthlyChecklist` opens on the current calendar month and shows nothing at
+ * all when the list holds no entry for it. Pinning the fixture to a literal
+ * ສິງຫາ 2026 made the office's side pass only during August of that year and
+ * silently stop testing anything afterwards.
+ */
+const today = new Date();
+
 const month = {
   id: '507f1f77bcf86cd799439071',
-  year: 2026,
-  month: 8,
+  year: today.getFullYear(),
+  month: today.getMonth() + 1,
   status: 'published' as const,
   publishedAt: '2026-08-01T03:00:00.000Z',
   note: 'ບໍ່ຕ້ອງສົ່ງອາທິດສອບເສັງ',

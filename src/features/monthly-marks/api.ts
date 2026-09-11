@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post } from '@/lib/api-client';
 import { cleanParams } from '@/lib/utils';
+import type { Grade } from '@/types/enums';
 
 /**
  * ຄະແນນປະຈຳເດືອນ — the school's own mark sheet, out of 10.
@@ -135,6 +136,128 @@ export interface AnnualSheet {
   rows: AnnualRow[];
 }
 
+/** One column of the monthly summary — a subject the grade is marked in. */
+export interface MonthSubjectHeader {
+  id: string;
+  code: string;
+  nameLo: string;
+  nameEn: string | null;
+}
+
+/** ຈັດປະເພດ — ເກັ່ງ / ກາງ / ອ່ອນ, banded by the API on the office's own cuts. */
+export type MonthlyBand = 'strong' | 'middling' | 'weak';
+
+/** Where the school cuts those bands, in the 10-point mark the sheet is written in. */
+export interface MonthlyBandCuts {
+  strongFrom: number;
+  weakBelow: number;
+}
+
+export interface ClassMonthRow extends StudentIdentity {
+  /** One mark per subject, in the order the columns are listed. */
+  scores: (number | null)[];
+  /** ລວມ — the marks as written, before they are divided. */
+  total: number | null;
+  /** ສະເລ່ຍ — ລວມ over the subjects the grade sits, not over the ones marked. */
+  average: number | null;
+  /** False while any subject of the grade is still unmarked. */
+  isComplete: boolean;
+  subjectsRecorded: number;
+  /**
+   * ເກຣດ — the school's band for the average, `null` until the month is
+   * finished. An average divided by subjects that are not all marked would band
+   * low for a reason that is not the student's marks.
+   */
+  grade: Grade | null;
+  /**
+   * ຈັດປະເພດ — the band the month puts the student in, `null` until it is
+   * finished, for the same reason ເກຣດ is withheld.
+   */
+  classification: MonthlyBand | null;
+  /** ລຳດັບ within the class; `null` for a student with nothing recorded. */
+  rank: number | null;
+  isPassing: boolean | null;
+}
+
+/** `GET /monthly-marks/class-month` — ສະຫຼຸບປະຈຳເດືອນ for a whole class. */
+export interface ClassMonthSheet {
+  classroom: ClassroomHeader;
+  semester: SemesterHeader;
+  month: number;
+  months: number[];
+  /** The ຈັດປະເພດ cuts this sheet was banded on, as settings had them. */
+  bands: MonthlyBandCuts;
+  subjects: MonthSubjectHeader[];
+  rows: ClassMonthRow[];
+  summary: {
+    students: number;
+    marked: number;
+    passed: number;
+    failed: number;
+    incomplete: number;
+    average: number | null;
+  };
+}
+
+/** One month of one student, as the summary ranks it. */
+export interface StudentMonthSummary {
+  month: number;
+  /** One mark per subject, in the order the columns are listed. */
+  scores: (number | null)[];
+  /** ລວມ — the marks as written, before they are divided. */
+  total: number | null;
+  /** ສະເລ່ຍ — ລວມ over the subjects the grade sits, not over the ones marked. */
+  average: number | null;
+  isComplete: boolean;
+  subjectsRecorded: number;
+  /** ເກຣດ, `null` until the month is finished. */
+  grade: Grade | null;
+  /** ລຳດັບ within the class that month. */
+  rank: number | null;
+  /** How many of the class were ranked — what ລຳດັບ is out of. */
+  rankedStudents: number;
+  isPassing: boolean | null;
+}
+
+/** One subject across the term, as the term sheet lays it out. */
+export interface StudentSubjectRow {
+  subject: MonthSubjectHeader;
+  /** Aligned with `months`. */
+  monthScores: (number | null)[];
+  threeMonth: number | null;
+  threeMonthComplete: boolean;
+  examScore: number | null;
+  bonus: number | null;
+  semesterMark: number | null;
+  isPassing: boolean | null;
+}
+
+/**
+ * `GET /monthly-marks/student` — one child's term, both ways round.
+ *
+ * `classroom` is `null` for a student the register has not placed this year,
+ * which is an ordinary state rather than an error: the rest comes back empty.
+ */
+export interface StudentMonthlySheet {
+  classroom: ClassroomHeader | null;
+  semester: SemesterHeader;
+  rollNumber: number | null;
+  isEnrolled: boolean;
+  months: number[];
+  subjects: MonthSubjectHeader[];
+  monthly: StudentMonthSummary[];
+  subjectRows: StudentSubjectRow[];
+  summary: {
+    subjects: number;
+    monthsRecorded: number;
+    /** ສະເລ່ຍ across the term marks. */
+    termAverage: number | null;
+    termComplete: boolean;
+    /** False for a student who has left the room the marks were earned in. */
+    onRoster?: boolean;
+  };
+}
+
 export interface SaveMarksResult {
   saved: number;
   skipped: number;
@@ -169,6 +292,12 @@ export const monthlyMarksApi = {
 
   annualSheet: (target: Record<string, unknown>) =>
     get<AnnualSheet>('/monthly-marks/annual', { params: cleanParams(target) }),
+
+  classMonth: (target: Record<string, unknown>) =>
+    get<ClassMonthSheet>('/monthly-marks/class-month', { params: cleanParams(target) }),
+
+  studentMonths: (target: Record<string, unknown>) =>
+    get<StudentMonthlySheet>('/monthly-marks/student', { params: cleanParams(target) }),
 
   saveMonth: (body: SaveMonthGridInput) => post<SaveMarksResult>('/monthly-marks/month', body),
 
@@ -208,6 +337,36 @@ export function useAnnualSheet(target: {
     queryKey: ['monthly-marks', 'annual', target],
     queryFn: () => monthlyMarksApi.annualSheet(target),
     enabled: Boolean(target.subjectId && target.classroomId),
+  });
+}
+
+export function useClassMonth(target: {
+  classroomId?: string;
+  month: number;
+  semesterId?: string;
+}) {
+  return useQuery({
+    queryKey: ['monthly-marks', 'class-month', target],
+    queryFn: () => monthlyMarksApi.classMonth(target),
+    enabled: Boolean(target.classroomId),
+  });
+}
+
+/**
+ * One student's months, for their own page.
+ *
+ * `enabled` so the tab pays for itself only when it is opened — the read costs
+ * the whole class's marks, since ລຳດັບ cannot be worked out from one row.
+ */
+export function useStudentMonths(
+  studentId: string | undefined,
+  semesterId: string | undefined,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['monthly-marks', 'student', studentId, semesterId],
+    queryFn: () => monthlyMarksApi.studentMonths({ studentId, semesterId }),
+    enabled: Boolean(studentId) && enabled,
   });
 }
 

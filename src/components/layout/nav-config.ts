@@ -24,6 +24,7 @@ import {
   Settings,
   ShieldCheck,
   Syringe,
+  Telescope,
   UserCog,
   Users,
   UsersRound,
@@ -123,7 +124,6 @@ export const NAV_GROUPS: NavGroup[] = [
         to: '/term-results',
         icon: FileBadge,
         resource: 'term-results',
-        comingSoon: true,
       },
       {
         labelKey: 'reports',
@@ -133,6 +133,12 @@ export const NAV_GROUPS: NavGroup[] = [
         comingSoon: true,
       },
       { labelKey: 'lessonPlans', to: '/lesson-plans', icon: BookMarked, resource: 'lesson-plans' },
+      {
+        labelKey: 'teachingObservations',
+        to: '/teaching-observations',
+        icon: Telescope,
+        resource: 'teaching-observations',
+      },
       { labelKey: 'exams', to: '/exams', icon: ScrollText, resource: 'exams', comingSoon: true },
       {
         labelKey: 'certificates',
@@ -159,7 +165,6 @@ export const NAV_GROUPS: NavGroup[] = [
         to: '/calendar',
         icon: CalendarDays,
         resource: 'calendar',
-        comingSoon: true,
       },
       {
         labelKey: 'documents',

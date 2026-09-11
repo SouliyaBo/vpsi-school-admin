@@ -42,6 +42,8 @@ const TONES: Record<string, Tone> = {
   under_review: 'warning',
   approved: 'success',
   returned: 'danger',
+  // teaching observation — `draft` and `submitted` are shared with lesson plans
+  acknowledged: 'success',
   // jobs / exams
   queued: 'info',
   processing: 'warning',

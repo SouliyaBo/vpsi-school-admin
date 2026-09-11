@@ -1,12 +1,12 @@
-import { CalendarRange, FileBarChart, LayoutGrid, PencilLine } from 'lucide-react';
+import { CalendarDays, CalendarRange, FileBarChart, PencilLine } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useActiveSchoolYear } from '@/features/school-years/api';
-import { ClassResultSheet } from '@/features/term-results/components/ClassResultSheet';
 import { localizedName } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/common/PageHeader';
 import { AnnualSheet } from '../components/AnnualSheet';
+import { ClassMonthSheet } from '../components/ClassMonthSheet';
 import { MonthGridForm } from '../components/MonthGridForm';
 import { SemesterSheet } from '../components/SemesterSheet';
 
@@ -19,9 +19,13 @@ import { SemesterSheet } from '../components/SemesterSheet';
  * nothing here is a second copy of a mark, so a cell corrected in the form moves
  * the term, the year and the class result with it.
  *
- * The last tab crosses the subjects with each other — one class, every subject,
- * ranked — which none of the per-subject sheets can do. It reads the stored term
- * result, so it is also where the office computes and publishes.
+ * ສະຫຼຸບປະຈຳເດືອນ is the one tab that crosses the subjects with each other, which
+ * none of the per-subject sheets can do: it is the month the school reads out and
+ * ranks on, derived live from the same cells.
+ *
+ * Where the term is *closed* is next door, under ຜົນການຮຽນ: that result is stored
+ * rather than derived, and computing and publishing it is the office's job, not a
+ * teacher's. Nothing on this page publishes anything.
  */
 export function MonthlyMarksPage() {
   const { t, i18n } = useTranslation();
@@ -47,6 +51,10 @@ export function MonthlyMarksPage() {
             <PencilLine />
             {t('monthlyMark.entryTab')}
           </TabsTrigger>
+          <TabsTrigger value="month">
+            <CalendarDays />
+            {t('monthlyMark.monthTab')}
+          </TabsTrigger>
           <TabsTrigger value="semester">
             <CalendarRange />
             {t('monthlyMark.semesterTab')}
@@ -55,23 +63,19 @@ export function MonthlyMarksPage() {
             <FileBarChart />
             {t('monthlyMark.annualTab')}
           </TabsTrigger>
-          <TabsTrigger value="class">
-            <LayoutGrid />
-            {t('termResult.tab')}
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="entry">
           <MonthGridForm />
+        </TabsContent>
+        <TabsContent value="month">
+          <ClassMonthSheet />
         </TabsContent>
         <TabsContent value="semester">
           <SemesterSheet />
         </TabsContent>
         <TabsContent value="annual">
           <AnnualSheet />
-        </TabsContent>
-        <TabsContent value="class">
-          <ClassResultSheet />
         </TabsContent>
       </Tabs>
     </div>

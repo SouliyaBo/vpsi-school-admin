@@ -15,9 +15,13 @@ export interface SubjectInput {
   type?: 'core' | 'elective' | 'extracurricular';
   credits?: number;
   hoursPerWeek?: number;
+  /** Column order on the mark sheet, low first. */
+  sortOrder?: number;
   passingPercentage?: number;
   /** Strands of the monthly mark sheet; an empty list marks the subject as one. */
   strands?: string[];
+  /** The ສາຍວິຊາ this subject is marked under; `null` detaches it. */
+  parentSubjectId?: string | null;
 }
 
 export const subjectsApi = createCrudApi<Subject, SubjectInput>('/subjects');
@@ -31,13 +35,25 @@ export function subjectLabel(subject: Subject, locale: string): string {
   return `${subject.code} — ${localizedName(subject, locale)}`;
 }
 
-export function useSubjectOptions(search = '', gradeLevelId?: string) {
+/**
+ * Which of the two jobs a subject does — see `Subject.parentSubjectId` on the API.
+ *
+ * `taught` is the four ສາຍວິຊາ a teacher is assigned to and roll call is taken
+ * against; `marked` is what a mark is recorded against, which from ມ.4 up is the
+ * eight (or seven) subjects those split into. A picker almost always wants one
+ * or the other: offering the union would let the office assign a teacher to
+ * ຟີຊິກສາດ, which the timetable has no room for, or open a mark sheet on
+ * ທຳມະຊາດ, which is not marked as a whole.
+ */
+export type SubjectRole = 'taught' | 'marked';
+
+export function useSubjectOptions(search = '', gradeLevelId?: string, role?: SubjectRole) {
   const { i18n } = useTranslation();
   const query = useLookupQuery(
     'subjects',
     subjectsApi.list,
     search,
-    gradeLevelId ? { gradeLevelId } : {},
+    { ...(gradeLevelId ? { gradeLevelId } : {}), ...(role ? { role } : {}) },
     // The API's ceiling. A subject exists per grade level, so a school teaching
     // seven grades has seven rows for maths alone — at 50 the tail of the
     // alphabet fell off the unfiltered lists, unreachable without searching.
@@ -60,12 +76,13 @@ export function useSubjectOptions(search = '', gradeLevelId?: string) {
  * searching for one, so this returns whole records and takes no search term. A
  * grade teaches a dozen or so subjects, well inside one page.
  */
-export function useSubjectsByGrade(gradeLevelId?: string) {
+export function useSubjectsByGrade(gradeLevelId?: string, role?: SubjectRole) {
   return useQuery({
-    queryKey: ['subjects', 'by-grade', gradeLevelId],
+    queryKey: ['subjects', 'by-grade', gradeLevelId, role],
     queryFn: () =>
       subjectsApi.list({
         gradeLevelId,
+        role,
         isActive: true,
         limit: 100,
         sortBy: 'code',

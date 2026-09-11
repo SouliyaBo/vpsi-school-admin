@@ -227,6 +227,150 @@ describe('StudentsPage — list', () => {
 });
 
 /**
+ * ບັນຊີລາຍຊື່ນັກຮຽນ — the roster as a workbook, which is what the office hands
+ * round and files.
+ *
+ * Two things are worth pinning and neither is visible in the file: that the
+ * export asks for every page of the current filters rather than the page on
+ * screen, and that it joins the homeroom teacher through the classroom — the
+ * one column on the sheet that is on neither the student nor their placement.
+ */
+describe('StudentsPage — the roster export', () => {
+  const classroom = {
+    id: 'cls-1',
+    name: 'ຂ',
+    gradeLevelId: { id: 'g1', code: 'm1' },
+    // Half the rooms hold a populated teacher and half a bare id, depending on
+    // who created them; the export reads both through `refId`.
+    homeroomTeacherId: 'tea-1',
+    capacity: 30,
+    currentCount: 2,
+    isActive: true,
+  };
+  const teacher = { id: 'tea-1', teacherCode: 'T-1', firstNameLo: 'ນູລີ', lastNameLo: 'ສີສະຫວາດ' };
+  const placed = {
+    ...student,
+    nickname: 'ລິຕ້າ',
+    nicknameEn: 'RITA',
+    firstNameEn: 'Somchit',
+    lastNameEn: 'Vongsa',
+    title: 'ທ້າວ',
+    currentEnrollment: {
+      enrollmentId: 'enr-1',
+      classroomId: 'cls-1',
+      classroomName: 'ມ.1/ຂ',
+      gradeLevelId: 'g1',
+      gradeLevelCode: 'm1',
+      schoolYearId: 'sy-1',
+      rollNumber: 4,
+      enrolledAt: '2026-08-11T00:00:00.000Z',
+    },
+  };
+
+  beforeEach(() => {
+    vi.spyOn(apiClient, 'get').mockImplementation((path: string, config?: unknown) => {
+      const params = (config as { params?: Record<string, unknown> } | undefined)?.params ?? {};
+      if (path === '/classrooms') return Promise.resolve(paginated([classroom]));
+      if (path === '/teachers') return Promise.resolve(paginated([teacher]));
+      if (path === '/school-years/active')
+        return Promise.resolve({ id: 'sy-1', code: '2025-2026' });
+      // A second page of students, so the export has to ask for both.
+      // `cleanParams` renders every query value as a string; the DTO parses it back.
+      if (path === '/students' && Number(params.limit) === 100) {
+        return Promise.resolve(
+          Number(params.page) === 1
+            ? paginated([placed], { page: 1, limit: 100, total: 101 })
+            : paginated([{ ...placed, id: 'stu-2', studentCode: 'S-0002' }], {
+                page: 2,
+                limit: 100,
+                total: 101,
+              }),
+        );
+      }
+      return Promise.resolve(paginated([placed]));
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('exports every page of the current filters, teacher and all', async () => {
+    const created = vi.fn((_blob: Blob) => 'blob:roster');
+    vi.stubGlobal('URL', { ...URL, createObjectURL: created, revokeObjectURL: vi.fn() });
+    const filenames: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      filenames.push(this.download);
+    });
+
+    renderWithProviders(<StudentsPage />);
+    await userEvent.click(await screen.findByRole('button', { name: /export excel/i }));
+    await waitFor(() => expect(created).toHaveBeenCalled());
+
+    // Both pages were asked for, and the reader's own page was not carried in.
+    const pages = vi
+      .mocked(apiClient.get)
+      .mock.calls.filter(([path]) => path === '/students')
+      .map(([, config]) => (config as { params: Record<string, unknown> }).params)
+      .filter((params) => Number(params.limit) === 100)
+      .map((params) => Number(params.page));
+    expect(pages).toEqual([1, 2]);
+
+    const [blob] = created.mock.calls[0];
+    const bytes = await new Promise<Uint8Array>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(blob);
+    });
+
+    const { default: ExcelJS } = await import('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(bytes.buffer as ArrayBuffer);
+    const worksheet = workbook.worksheets[0];
+
+    // The columns the office asked for, in the order it reads them.
+    expect(worksheet.getRow(5).values).toEqual([
+      undefined,
+      'ລ/ດ',
+      'ລ/ຕ',
+      'Status',
+      'ທ້າວ/ນາງ',
+      'ຊື່',
+      'ນາມສະກຸນ',
+      'ຊື່ຫຼິ້ນ',
+      'Student name',
+      'Nickname',
+      'Classroom',
+      'Homeroom teacher',
+    ]);
+    expect(worksheet.getRow(6).values).toEqual([
+      undefined,
+      1,
+      'S-0001',
+      'Active',
+      'ທ້າວ',
+      'ສົມຈິດ',
+      'ວົງສາ',
+      'ລິຕ້າ',
+      'Somchit Vongsa',
+      'RITA',
+      // The grade code is latin in the database and ມ.1 on every sheet the
+      // school prints, and the room's own name already carries it.
+      'ມ.1/ຂ',
+      'ນູລີ ສີສະຫວາດ',
+    ]);
+    // Both pages are in the file, numbered straight through.
+    expect(worksheet.getCell('A7').value).toBe(2);
+    expect(worksheet.getCell('B7').value).toBe('S-0002');
+
+    expect(filenames).toEqual(['Student roster 2025-2026.xlsx']);
+  });
+});
+
+/**
  * `GET /students` narrows to the current roll when no status is given — `active`
  * together with `no_certificate`, since declining the certificate leaves a child
  * in their classroom — so the dropdown has to show that default rather than

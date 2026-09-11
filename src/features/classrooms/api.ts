@@ -51,6 +51,26 @@ export function classroomLabel(classroom: Classroom): string {
 }
 
 /**
+ * `ມ.1/ກ` — the class as the school writes it at the head of a sheet.
+ *
+ * Two things have to be reconciled. The grade's `code` is stored latin (`m1`),
+ * because that is what the exam and timetable modules key on, while every sheet
+ * the school prints says ມ.1; and the office types the full name into some rooms
+ * ("ມ.1/ກ") and only the section into others ("ກ"), depending on who created
+ * them. Prefixing blindly gives "m1/ມ.1/ກ", which is what was being printed.
+ */
+export function classroomHeading(classroom: {
+  name: string;
+  gradeLevelCode?: string | null;
+}): string {
+  const grade = classroom.gradeLevelCode
+    ? classroom.gradeLevelCode.replace(/^m(\d+)$/i, 'ມ.$1')
+    : null;
+  if (!grade) return classroom.name;
+  return classroom.name.startsWith(grade) ? classroom.name : `${grade}/${classroom.name}`;
+}
+
+/**
  * Classroom picker options.
  *
  * `onlyMine` narrows the list to the rooms the signed-in teacher is homeroom
@@ -72,7 +92,8 @@ export function useClassroomOptions(search = '', schoolYearId?: string, onlyMine
 
   const rooms = query.data?.data.filter(
     (classroom) =>
-      !onlyMine || (user?.personId && refId<Teacher>(classroom.homeroomTeacherId) === user.personId),
+      !onlyMine ||
+      (user?.personId && refId<Teacher>(classroom.homeroomTeacherId) === user.personId),
   );
 
   return {

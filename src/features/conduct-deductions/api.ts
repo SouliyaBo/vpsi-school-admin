@@ -77,7 +77,8 @@ export interface DeductionOutcome {
   grade: ConductGrade;
   /**
    * `false` when the office has set this term's conduct mark by hand: the
-   * deduction still counts, but the report card keeps the manual figure.
+   * deduction still counts against the year, but the report card for the term
+   * the act falls in keeps the manual figure.
    */
   publishedToConductScore: boolean;
   level: ConductEscalationLevel;
@@ -114,7 +115,7 @@ export interface StudentLedgerEntry {
 
 export interface StudentLedger {
   studentId: string;
-  semesterId: string;
+  schoolYearId: string;
   baseScore: number;
   deducted: number;
   remaining: number;
@@ -151,30 +152,40 @@ export const conductDeductionsApi = {
   revoke: (id: string, reason: string) =>
     del<DeductionOutcome>(`/conduct-deductions/${id}`, { data: { reason } }),
 
-  classroomStanding: (classroomId: string, semesterId: string) =>
+  /**
+   * Where a class stands over the school year — the only window there is.
+   *
+   * ຄະແນນຄຸນສົມບັດ is a year's budget: the school issues the 100 once and reads
+   * the balance forward through both terms, so a per-term standing would show a
+   * figure that resets in ກຸມພາ and nothing in the school's rules resets.
+   */
+  classroomStanding: (classroomId: string, schoolYearId: string) =>
     get<ClassStandingRow[]>(
-      `/conduct-deductions/summary/classroom/${classroomId}/semester/${semesterId}`,
+      `/conduct-deductions/summary/classroom/${classroomId}/school-year/${schoolYearId}`,
     ),
 
-  studentLedger: (studentId: string, semesterId: string) =>
-    get<StudentLedger>(`/conduct-deductions/student/${studentId}/semester/${semesterId}`),
+  studentLedger: (studentId: string, schoolYearId: string) =>
+    get<StudentLedger>(`/conduct-deductions/student/${studentId}/school-year/${schoolYearId}`),
 
   ladder: () => get<EscalationLadder>('/conduct-deductions/ladder'),
 };
 
-export function useClassStanding(classroomId: string | undefined, semesterId: string | undefined) {
+export function useClassStanding(
+  classroomId: string | undefined,
+  schoolYearId: string | undefined,
+) {
   return useQuery({
-    queryKey: ['conduct-deductions', 'standing', classroomId, semesterId],
-    queryFn: () => conductDeductionsApi.classroomStanding(classroomId!, semesterId!),
-    enabled: Boolean(classroomId && semesterId),
+    queryKey: ['conduct-deductions', 'standing', classroomId, schoolYearId],
+    queryFn: () => conductDeductionsApi.classroomStanding(classroomId!, schoolYearId!),
+    enabled: Boolean(classroomId && schoolYearId),
   });
 }
 
-export function useStudentLedger(studentId: string | undefined, semesterId: string | undefined) {
+export function useStudentLedger(studentId: string | undefined, schoolYearId: string | undefined) {
   return useQuery({
-    queryKey: ['conduct-deductions', 'ledger', studentId, semesterId],
-    queryFn: () => conductDeductionsApi.studentLedger(studentId!, semesterId!),
-    enabled: Boolean(studentId && semesterId),
+    queryKey: ['conduct-deductions', 'ledger', studentId, schoolYearId],
+    queryFn: () => conductDeductionsApi.studentLedger(studentId!, schoolYearId!),
+    enabled: Boolean(studentId && schoolYearId),
   });
 }
 
@@ -196,8 +207,8 @@ export function useRecordDeduction() {
     meta: { silentError: true },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['conduct-deductions'] });
-      // The term mark is republished from the ledger, so the conduct score and
-      // anything derived from it are now stale.
+      // Every term of the year is republished from the ledger, so the conduct
+      // scores and anything derived from them are now stale.
       void queryClient.invalidateQueries({ queryKey: ['conduct-scores'] });
     },
   });

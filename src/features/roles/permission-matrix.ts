@@ -63,7 +63,7 @@ export interface ResourceGroup {
 }
 
 /**
- * The 32 resources arranged the way the sidebar is, so an administrator reading
+ * The 33 resources arranged the way the sidebar is, so an administrator reading
  * the grid recognises the shape of the menu they are granting access to.
  *
  * Every resource appears exactly once — asserted by `ungroupedResources()`,
@@ -98,6 +98,7 @@ export const RESOURCE_GROUPS: ResourceGroup[] = [
       'attendances',
       'term-results',
       'lesson-plans',
+      'teaching-observations',
       'exams',
       'certificates',
       'reports',

@@ -137,7 +137,14 @@ export const SCORE_COMPONENT_TYPES = [
 ] as const;
 export type ScoreComponentType = (typeof SCORE_COMPONENT_TYPES)[number];
 
-export const GRADES = ['A', 'B+', 'B', 'C+', 'C', 'D+', 'D', 'F'] as const;
+/**
+ * The school's letter grades, best first — A–F with an E and no `+` bands.
+ *
+ * The office's own bands, as marks out of 10: A 8.5–10 · B 7–8.4 · C 5.5–6.9 ·
+ * D 4.5–5.4 · E 3.5–4.4 · F 0–3.4. The API holds the thresholds as percentages
+ * (`grading.scale`), which is the same numbers times ten.
+ */
+export const GRADES = ['A', 'B', 'C', 'D', 'E', 'F'] as const;
 export type Grade = (typeof GRADES)[number];
 
 export const CONDUCT_GRADES = ['excellent', 'very_good', 'good', 'fair', 'poor'] as const;
@@ -215,6 +222,17 @@ export const LESSON_PLAN_STATUSES = [
 ] as const;
 export type LessonPlanStatus = (typeof LESSON_PLAN_STATUSES)[number];
 
+/**
+ * ຕິດຕາມການສອນຂອງຄູ — the life of one observation sheet.
+ *
+ * `draft` is the observer's own copy, visible to nobody else; `submitted` is a
+ * filed record about a colleague, which is why the API refuses it until all six
+ * criteria carry a mark; `acknowledged` is the observed teacher saying they have
+ * read it, and only they can set it.
+ */
+export const TEACHING_OBSERVATION_STATUSES = ['draft', 'submitted', 'acknowledged'] as const;
+export type TeachingObservationStatus = (typeof TEACHING_OBSERVATION_STATUSES)[number];
+
 export const EXAM_LEVELS = ['m4', 'm7'] as const;
 export type ExamLevel = (typeof EXAM_LEVELS)[number];
 
@@ -248,15 +266,62 @@ export type AnnouncementTargetType = (typeof ANNOUNCEMENT_TARGET_TYPES)[number];
 export const ANNOUNCEMENT_PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 export type AnnouncementPriority = (typeof ANNOUNCEMENT_PRIORITIES)[number];
 
+/**
+ * The legend of the school's own printed calendar, in its printed order, followed
+ * by the general-purpose types the module started with. Mirrors
+ * `CALENDAR_EVENT_TYPES` on the API — the office files a row by matching the paper.
+ */
 export const CALENDAR_EVENT_TYPES = [
+  'first_day',
+  'year_end_program',
   'holiday',
+  'celebration',
   'exam',
+  'lao_exam',
+  'report_card',
+  'open_house',
+  'professional_development',
   'meeting',
   'activity',
   'deadline',
   'other',
 ] as const;
 export type CalendarEventType = (typeof CALENDAR_EVENT_TYPES)[number];
+
+/**
+ * What an event does to the school day — `open` teaches, `no_classes` is staffed
+ * with the timetable suspended, `closed` is shut. The roll-call and behaviour
+ * reports read this and nothing else off the calendar.
+ */
+export const SCHOOL_DAY_EFFECTS = ['open', 'no_classes', 'closed'] as const;
+export type SchoolDayEffect = (typeof SCHOOL_DAY_EFFECTS)[number];
+
+/** Mirrors `DEFAULT_DAY_EFFECT` on the API, so the form can pre-fill the picker. */
+export const DEFAULT_DAY_EFFECT: Record<CalendarEventType, SchoolDayEffect> = {
+  first_day: 'open',
+  year_end_program: 'open',
+  holiday: 'closed',
+  celebration: 'open',
+  exam: 'no_classes',
+  lao_exam: 'no_classes',
+  report_card: 'open',
+  open_house: 'open',
+  professional_development: 'no_classes',
+  meeting: 'open',
+  activity: 'open',
+  deadline: 'open',
+  other: 'open',
+};
+
+/** How a day came out once the calendar was read over it — see `SchoolDay`. */
+export const DAY_STATES = [
+  'teaching',
+  'no_classes',
+  'closed',
+  'weekend',
+  'out_of_year',
+] as const;
+export type DayState = (typeof DAY_STATES)[number];
 
 export const FEEDBACK_STATUSES = ['new', 'read', 'resolved', 'archived'] as const;
 export type FeedbackStatus = (typeof FEEDBACK_STATUSES)[number];
@@ -297,6 +362,7 @@ export const PERMISSION_RESOURCES = [
   'term-results',
   'reports',
   'lesson-plans',
+  'teaching-observations',
   'exams',
   'certificates',
   'announcements',

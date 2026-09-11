@@ -253,7 +253,9 @@ describe('conduct deductions — the class standing', () => {
 
   it('lists a student with nothing against them on their full 100', async () => {
     stubReads({
-      [`/conduct-deductions/summary/classroom/${classroom.id}/semester/${semester.id}`]: [
+      // The standing is the school year's: the 100 is issued once a year and
+      // does not reset when ພາກຮຽນ II opens.
+      [`/conduct-deductions/summary/classroom/${classroom.id}/school-year/${activeYear.id}`]: [
         {
           studentId: 'stu-1',
           studentCode: 'S-0001',

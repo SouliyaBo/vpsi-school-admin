@@ -44,6 +44,10 @@ const AttendancesPage = lazyPage(
   () => import('@/features/attendances/pages/AttendancesPage'),
   'AttendancesPage',
 );
+const CalendarPage = lazyPage(
+  () => import('@/features/calendar/pages/CalendarPage'),
+  'CalendarPage',
+);
 const BehaviorLogsPage = lazyPage(
   () => import('@/features/behavior-logs/pages/BehaviorLogsPage'),
   'BehaviorLogsPage',
@@ -55,6 +59,10 @@ const ConductDeductionsPage = lazyPage(
 const MonthlyMarksPage = lazyPage(
   () => import('@/features/monthly-marks/pages/MonthlyMarksPage'),
   'MonthlyMarksPage',
+);
+const TermResultsPage = lazyPage(
+  () => import('@/features/term-results/pages/TermResultsPage'),
+  'TermResultsPage',
 );
 const EnrollmentsPage = lazyPage(
   () => import('@/features/enrollments/pages/EnrollmentsPage'),
@@ -91,6 +99,10 @@ const SubjectsPage = lazyPage(
 const LessonPlansPage = lazyPage(
   () => import('@/features/lesson-plans/pages/LessonPlansPage'),
   'LessonPlansPage',
+);
+const TeachingObservationsPage = lazyPage(
+  () => import('@/features/teaching-observations/pages/TeachingObservationsPage'),
+  'TeachingObservationsPage',
 );
 const TeachingAssignmentsPage = lazyPage(
   () => import('@/features/teaching-assignments/pages/TeachingAssignmentsPage'),
@@ -165,7 +177,10 @@ export const router = createBrowserRouter([
             element: guarded(<ConductDeductionsPage />, 'conduct-scores'),
           },
           { path: 'scores', element: guarded(<MonthlyMarksPage />, 'scores') },
+          { path: 'term-results', element: guarded(<TermResultsPage />, 'term-results') },
           { path: 'locations', element: guarded(<LocationsPage />, 'locations') },
+
+          { path: 'calendar', element: guarded(<CalendarPage />, 'calendar') },
 
           { path: 'school-years', element: guarded(<SchoolYearsPage />, 'school-years') },
           { path: 'semesters', element: guarded(<SemestersPage />, 'semesters') },
@@ -174,6 +189,10 @@ export const router = createBrowserRouter([
           { path: 'subject-groups', element: guarded(<SubjectGroupsPage />, 'subject-groups') },
           { path: 'subjects', element: guarded(<SubjectsPage />, 'subjects') },
           { path: 'lesson-plans', element: guarded(<LessonPlansPage />, 'lesson-plans') },
+          {
+            path: 'teaching-observations',
+            element: guarded(<TeachingObservationsPage />, 'teaching-observations'),
+          },
           {
             path: 'teaching-assignments',
             element: guarded(<TeachingAssignmentsPage />, 'teaching-assignments'),

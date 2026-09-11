@@ -1,18 +1,22 @@
 {
   "name": "vpsischool-admin",
-  "version": "0.1.0",
+  "version": "0.1.5",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/bump-version.mjs",
     "build": "tsc -b && vite build",
+    "build:norelease": "vite build",
     "preview": "vite preview",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "gen:api": "openapi-typescript ${VITE_OPENAPI_URL:-http://localhost:3000/api/docs-json} -o src/types/api-schema.d.ts"
+    "gen:api": "openapi-typescript ${VITE_OPENAPI_URL:-http://localhost:3000/api/docs-json} -o src/types/api-schema.d.ts",
+    "version:minor": "node scripts/bump-version.mjs --minor",
+    "version:major": "node scripts/bump-version.mjs --major"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -39,6 +43,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "exceljs": "^4.4.0",
     "i18next": "^24.2.1",
     "lucide-react": "^0.469.0",
     "react": "^18.3.1",

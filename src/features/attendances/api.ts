@@ -132,9 +132,16 @@ export const attendancesApi = {
       `/attendances/summary/student/${studentId}/semester/${semesterId}/by-subject`,
     ),
 
-  classroomSummary: (classroomId: string, semesterId: string) =>
+  /**
+   * `month` narrows the counts to one calendar month of the term, which is what
+   * the monthly mark sheet's ວັນຂາດ column is counted over. Students with
+   * nothing recorded are not listed, so a caller holding the roll reads a
+   * missing student as a clean one.
+   */
+  classroomSummary: (classroomId: string, semesterId: string, month?: number) =>
     get<AttendanceSummary[]>(
       `/attendances/summary/classroom/${classroomId}/semester/${semesterId}`,
+      { params: cleanParams({ month }) },
     ),
 };
 

@@ -1,12 +1,7 @@
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-  type UseQueryOptions,
-} from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from '@tanstack/react-query';
 import { del, get, patch, post } from './api-client';
 import { cleanParams } from './utils';
-import type { PaginatedResponse } from '@/types/common';
+import { MAX_PAGE_SIZE, type PaginatedResponse } from '@/types/common';
 
 /**
  * Factories for the CRUD surface every master-data module shares.
@@ -41,13 +36,38 @@ export function createCrudApi<TEntity, TCreate, TUpdate = Partial<TCreate>>(
   path: string,
 ): CrudApi<TEntity, TCreate, TUpdate> {
   return {
-    list: (params = {}) =>
-      get<PaginatedResponse<TEntity>>(path, { params: cleanParams(params) }),
+    list: (params = {}) => get<PaginatedResponse<TEntity>>(path, { params: cleanParams(params) }),
     byId: (id) => get<TEntity>(`${path}/${id}`),
     create: (body) => post<TEntity>(path, body),
     update: (id, body) => patch<TEntity>(`${path}/${id}`, body),
     remove: (id) => del<void>(`${path}/${id}`),
   };
+}
+
+/**
+ * Every page of a list endpoint, for the callers that need the whole thing.
+ *
+ * The screens page, because a table of 250 rows is not a screen anybody reads;
+ * an export does not, because a file of the first twenty is not the list the
+ * office asked for. The API caps a page at `MAX_PAGE_SIZE`, so "all of it" is a
+ * loop whichever way you write it — kept here so each export does not write the
+ * loop again, and does not have to remember the cap.
+ *
+ * Pages are fetched in order rather than at once: the totals move as people
+ * save, and a parallel fetch would page against a list that shifted underneath
+ * it. `meta.hasNextPage` is what stops it, so a shrinking list ends the loop
+ * rather than running past the end.
+ */
+export async function fetchEveryPage<T>(
+  list: (params?: ListParams) => Promise<PaginatedResponse<T>>,
+  params: ListParams = {},
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let page = 1; ; page += 1) {
+    const response = await list({ ...params, page, limit: MAX_PAGE_SIZE });
+    rows.push(...response.data);
+    if (!response.meta.hasNextPage) return rows;
+  }
 }
 
 export function crudKeys(scope: string) {

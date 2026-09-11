@@ -33,7 +33,7 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { RowActions } from '@/components/common/RowActions';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { FilterSelect, SearchInput, TableToolbar } from '@/components/common/TableToolbar';
-import { subjects, type SubjectInput } from '../api';
+import { subjects, useSubjectOptions, type SubjectInput } from '../api';
 
 const schema = z.object({
   code: requiredText(30),
@@ -43,9 +43,11 @@ const schema = z.object({
   // Optional, not required: the subject rows predate the departments, so the
   // form must be able to save one that has not been filed yet.
   subjectGroupId: optionalId(),
+  parentSubjectId: optionalId(),
   type: z.enum(SUBJECT_TYPES),
   credits: requiredNumber({ min: 0 }),
   hoursPerWeek: requiredNumber({ min: 0 }),
+  sortOrder: requiredNumber({ min: 0 }),
   // Left blank, the API falls back to the global grading setting.
   passingPercentage: optionalNumber({ min: 0, max: 100 }),
   // Comma-separated on the form, a list on the wire: they are columns on the
@@ -61,9 +63,11 @@ const EMPTY: FormValues = {
   nameEn: '',
   gradeLevelId: '',
   subjectGroupId: undefined,
+  parentSubjectId: undefined,
   type: 'core',
   credits: 1,
   hoursPerWeek: 0,
+  sortOrder: 0,
   passingPercentage: undefined,
   strands: '',
 };
@@ -87,6 +91,16 @@ export function SubjectsPage() {
 
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: EMPTY });
 
+  /**
+   * A parent has to be a ສາຍວິຊາ of the same grade, which is what the API
+   * enforces; offering anything else would be a picker full of choices that are
+   * rejected on save. `taught` also keeps a split subject from being offered as
+   * a parent, since the register is one level deep by design.
+   */
+  const formGradeLevelId = form.watch('gradeLevelId');
+  const useParentOptions = (search: string) =>
+    useSubjectOptions(search, formGradeLevelId || undefined, 'taught');
+
   useEffect(() => {
     if (!dialogs.formOpen) return;
     form.reset(
@@ -97,9 +111,11 @@ export function SubjectsPage() {
             nameEn: dialogs.record.nameEn ?? '',
             gradeLevelId: refId(dialogs.record.gradeLevelId) ?? '',
             subjectGroupId: refId(dialogs.record.subjectGroupId) ?? undefined,
+            parentSubjectId: refId(dialogs.record.parentSubjectId) ?? undefined,
             type: dialogs.record.type,
             credits: dialogs.record.credits,
             hoursPerWeek: dialogs.record.hoursPerWeek,
+            sortOrder: dialogs.record.sortOrder ?? 0,
             passingPercentage: dialogs.record.passingPercentage ?? undefined,
             strands: (dialogs.record.strands ?? []).join(', '),
           }
@@ -143,6 +159,17 @@ export function SubjectsPage() {
             <span className="text-warning">{t('subject.noGroup')}</span>
           );
         },
+      },
+      {
+        id: 'parentSubject',
+        header: t('subject.parent'),
+        cell: ({ row }) => {
+          // The four ສາຍວິຊາ show a dash; a subject the mark sheet splits out
+          // names the one it is marked under, which is also who may mark it.
+          const parent = refObject<Subject>(row.original.parentSubjectId);
+          return parent ? parent.nameLo : <span className="text-muted-foreground">—</span>;
+        },
+        meta: { hideOnMobile: true } satisfies DataTableColumnMeta,
       },
       {
         accessorKey: 'type',
@@ -217,6 +244,10 @@ export function SubjectsPage() {
           body: {
             ...stripEmpty(updatable),
             subjectGroupId: values.subjectGroupId ?? null,
+            // Sent explicitly for the same reason as the department: clearing it
+            // makes the subject stand on its own again rather than leaving it
+            // filed under a ສາຍວິຊາ it is no longer marked with.
+            parentSubjectId: values.parentSubjectId ?? null,
             strands,
           },
         })
@@ -353,11 +384,30 @@ export function SubjectsPage() {
             />
             <NumberField
               control={form.control}
+              name="sortOrder"
+              label={t('subject.sortOrder')}
+              description={t('subject.sortOrderHint')}
+              min={0}
+            />
+            <NumberField
+              control={form.control}
               name="passingPercentage"
               label={t('subject.passingPercentage')}
               description={t('subject.passingHint')}
               min={0}
               max={100}
+            />
+            {/* The ສາຍວິຊາ this subject is marked under — ຟີຊິກສາດ under ທຳມະຊາດ.
+                Offered from the same grade only, and the parent itself stops
+                being markable once anything points at it. */}
+            <EntitySelectField
+              control={form.control}
+              name="parentSubjectId"
+              label={t('subject.parent')}
+              description={t('subject.parentHint')}
+              useOptions={useParentOptions}
+              disabled={!formGradeLevelId}
+              className="sm:col-span-2"
             />
             <TextField
               control={form.control}

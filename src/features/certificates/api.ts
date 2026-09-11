@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiClient, download, get, post } from '@/lib/api-client';
+import { saveBlob } from '@/lib/save-blob';
 
 /** The editable body of a ໃບຢັ້ງຢືນການສຶກສາ. */
 export interface StudyCertificateFields {
@@ -47,18 +48,6 @@ export function useStudyCertificatePrefill(studentId: string | undefined, enable
   });
 }
 
-/** Downloads a PDF blob and hands it to the browser as a file. */
-function saveBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  // Revoking immediately can cancel the download in Safari, so the object URL is
-  // released on the next tick instead.
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
 /**
  * Renders the letter without issuing it.
  *
@@ -91,7 +80,10 @@ export function useIssueStudyCertificate() {
     // The download itself happens here so every caller gets the file; the
     // caller adds whatever it wants to say about the number it was given.
     onSuccess: ({ blob, certificateNumber }) =>
-      saveBlob(blob, `${(certificateNumber ?? 'certificate').replace(/[^\p{L}\p{N}]+/gu, '-')}.pdf`),
+      saveBlob(
+        blob,
+        `${(certificateNumber ?? 'certificate').replace(/[^\p{L}\p{N}]+/gu, '-')}.pdf`,
+      ),
   });
 }
 

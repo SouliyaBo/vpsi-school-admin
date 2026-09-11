@@ -3,18 +3,10 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useClassroomOptions } from '@/features/classrooms/api';
 import { useActiveSchoolYear } from '@/features/school-years/api';
-import { useActiveSemester, useSemesterOptions } from '@/features/semesters/api';
 import { formatDate } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -33,7 +25,7 @@ import { NotifyList } from './NotifyList';
 import { StudentLedgerDialog } from './StudentLedgerDialog';
 
 /**
- * ສະຫຼຸບຄະແນນກົດລະບຽບ — where a class stands this term.
+ * ສະຫຼຸບຄະແນນກົດລະບຽບ — where a class stands this school year.
  *
  * Built from the roll, so a child with nothing against them is listed on their
  * full 100 rather than being absent from the page: on a discipline sheet the
@@ -43,29 +35,30 @@ import { StudentLedgerDialog } from './StudentLedgerDialog';
  * Ordered worst first, because that is the order it is acted on. The rung, not
  * the number, carries the colour — two children on ຂັ້ນ 1 need the same thing
  * done about them whether they got there in two deductions or six.
+ *
+ * There is no term to pick. The school issues the 100 once a school year and
+ * reads the balance forward through both terms, so a term picker here would be
+ * offering a window the rules do not have — and a child who lost 20 in
+ * ພາກຮຽນ I would read as clean in ພາກຮຽນ II.
  */
 export function ClassStanding() {
   const { t } = useTranslation();
   const activeYear = useActiveSchoolYear();
-  const activeSemester = useActiveSemester();
 
   const [classroomId, setClassroomId] = useState<string | undefined>();
-  const [semesterId, setSemesterId] = useState<string | undefined>();
   const [openStudent, setOpenStudent] = useState<ClassStandingRow | null>(null);
-  const effectiveSemesterId = semesterId ?? activeSemester.data?.id;
 
-  const semesterOptions = useSemesterOptions('', activeYear.data?.id);
   const useClassroomsForYear = (search: string) => useClassroomOptions(search, activeYear.data?.id);
 
-  const standing = useClassStanding(classroomId, effectiveSemesterId);
+  const standing = useClassStanding(classroomId, activeYear.data?.id);
   const rows = standing.data ?? [];
   const flagged = rows.filter((row) => row.level !== 'none').length;
 
   return (
     <div className="space-y-3">
       <Card>
-        <CardContent className="grid gap-3 pt-5 sm:grid-cols-2">
-          <div className="space-y-1.5">
+        <CardContent className="space-y-3 pt-5">
+          <div className="space-y-1.5 sm:max-w-sm">
             <Label htmlFor="standing-classroom">{t('conductDeduction.classroom')}</Label>
             <EntitySelect
               id="standing-classroom"
@@ -75,28 +68,13 @@ export function ClassStanding() {
               placeholder={t('conductDeduction.selectClassroom')}
             />
           </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="standing-semester">{t('conductDeduction.semester')}</Label>
-            <Select value={effectiveSemesterId ?? ''} onValueChange={setSemesterId}>
-              <SelectTrigger id="standing-semester">
-                <SelectValue placeholder={t('conductDeduction.semester')} />
-              </SelectTrigger>
-              <SelectContent>
-                {(semesterOptions.data ?? []).map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <p className="text-xs text-muted-foreground">{t('conductDeduction.yearScopeNote')}</p>
         </CardContent>
       </Card>
 
       <Card>
         <CardContent className="pt-5">
-          {!classroomId || !effectiveSemesterId ? (
+          {!classroomId || !activeYear.data ? (
             <EmptyState icon={ShieldCheck} title={t('conductDeduction.standingHint')} />
           ) : standing.isLoading ? (
             <div className="space-y-2">
@@ -196,7 +174,7 @@ export function ClassStanding() {
         open={openStudent !== null}
         onOpenChange={(open) => !open && setOpenStudent(null)}
         student={openStudent}
-        semesterId={effectiveSemesterId}
+        schoolYearId={activeYear.data?.id}
       />
     </div>
   );
