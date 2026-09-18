@@ -78,7 +78,11 @@ it('previews without issuing, so the wording can be checked for free', async () 
     .spyOn(apiClient, 'post')
     .mockResolvedValue(new Blob(['%PDF-'], { type: 'application/pdf' }) as never);
   // jsdom implements neither, and the download helper uses both.
-  vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:x'), revokeObjectURL: vi.fn() });
+  vi.stubGlobal('URL', {
+    ...URL,
+    createObjectURL: vi.fn(() => 'blob:x'),
+    revokeObjectURL: vi.fn(),
+  });
 
   renderWithProviders(<StudyCertificateDialog student={student} onClose={vi.fn()} />);
   const dialog = await screen.findByRole('dialog');
@@ -101,7 +105,11 @@ it('carries a corrected study period through to the issue call', async () => {
     data: new Blob(['%PDF-'], { type: 'application/pdf' }),
     headers: { 'x-certificate-number': encodeURIComponent('99/ວຈພທນ(ຄນຮ)') },
   } as never);
-  vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:x'), revokeObjectURL: vi.fn() });
+  vi.stubGlobal('URL', {
+    ...URL,
+    createObjectURL: vi.fn(() => 'blob:x'),
+    revokeObjectURL: vi.fn(),
+  });
 
   renderWithProviders(<StudyCertificateDialog student={student} onClose={onClose} />);
   const dialog = await screen.findByRole('dialog');

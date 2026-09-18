@@ -109,10 +109,27 @@ apiClient.interceptors.request.use(async (config: RetriableRequest) => {
   return config;
 });
 
+/**
+ * A request made with `responseType: 'blob'` gets its *error* body as a Blob
+ * too, so the server's message (a validation failure, say) arrives unreadable
+ * and the toast falls back to "Request failed with status code 400". Read it
+ * back into JSON before the error is normalised.
+ */
+async function decodeBlobErrorBody(error: AxiosError): Promise<void> {
+  const body = error.response?.data;
+  if (!(body instanceof Blob) || !body.type.includes('json') || !error.response) return;
+  try {
+    error.response.data = JSON.parse(await body.text());
+  } catch {
+    // Leave the Blob in place; the generic message is still better than nothing.
+  }
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const request = error.config as RetriableRequest | undefined;
+    await decodeBlobErrorBody(error);
 
     const shouldRefresh =
       error.response?.status === 401 &&
@@ -188,8 +205,18 @@ export async function upload<T>(
   url: string,
   formData: FormData,
   onProgress?: (percent: number) => void,
+  options: {
+    /**
+     * How long the server may take once the bytes are up. The default suits
+     * a photo; a Word paper full of MathType equations is drawn one by one
+     * and can take a minute, and giving up on it leaves a paper the client
+     * never hears about.
+     */
+    timeoutMs?: number;
+  } = {},
 ): Promise<T> {
   const { data } = await apiClient.post<T>(url, formData, {
+    timeout: options.timeoutMs,
     onUploadProgress: (event) => {
       if (!onProgress || !event.total) return;
       onProgress(Math.round((event.loaded * 100) / event.total));

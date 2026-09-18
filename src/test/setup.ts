@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
-import { afterEach, vi } from 'vitest';
+import { afterEach } from 'vitest';
 import i18n from '@/i18n';
 
 // The app defaults to Lao. Tests assert against the English catalogue so the
@@ -33,14 +33,18 @@ Element.prototype.scrollIntoView ??= () => {};
 URL.createObjectURL ??= () => 'blob:preview';
 URL.revokeObjectURL ??= () => {};
 
+// A plain function, not a `vi.fn()`: a suite's `vi.restoreAllMocks()` would
+// strip a mock's implementation and every `useMediaQuery` after it would throw.
+// A test that needs a width spies on it with `vi.spyOn(window, 'matchMedia')`,
+// which the same restore puts back.
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
-  value: vi.fn().mockImplementation((query: string) => ({
+  value: (query: string) => ({
     matches: false,
     media: query,
     onchange: null,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })),
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }),
 });

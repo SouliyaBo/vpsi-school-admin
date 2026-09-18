@@ -363,6 +363,7 @@ export const PERMISSION_RESOURCES = [
   'reports',
   'lesson-plans',
   'teaching-observations',
+  'exam-papers',
   'exams',
   'certificates',
   'announcements',
@@ -397,3 +398,7 @@ export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
 export const LOCALES = ['lo', 'en'] as const;
 export type Locale = (typeof LOCALES)[number];
+
+/** How an exam paper letters its options — `A. B. C.` or `ກ. ຂ. ຄ.`. */
+export const EXAM_OPTION_LABEL_STYLES = ['latin', 'lao'] as const;
+export type ExamOptionLabelStyle = (typeof EXAM_OPTION_LABEL_STYLES)[number];

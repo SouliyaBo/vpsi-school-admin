@@ -23,6 +23,7 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
+  Shuffle,
   Syringe,
   Telescope,
   UserCog,
@@ -139,6 +140,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Telescope,
         resource: 'teaching-observations',
       },
+      { labelKey: 'examPapers', to: '/exam-papers', icon: Shuffle, resource: 'exam-papers' },
       { labelKey: 'exams', to: '/exams', icon: ScrollText, resource: 'exams', comingSoon: true },
       {
         labelKey: 'certificates',

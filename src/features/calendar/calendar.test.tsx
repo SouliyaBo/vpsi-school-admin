@@ -123,20 +123,53 @@ describe('the school calendar', () => {
     expect(within(exams.closest('li')!).getByText('No classes')).toBeInTheDocument();
   });
 
-  it('opens the event that covers a day when that day is clicked', async () => {
+  it('shows what a day is before offering to change it', async () => {
     const user = userEvent.setup();
     renderWithProviders(<CalendarPage />);
 
-    // The exam period is eight days long; clicking any of them has to reach the
-    // one event rather than start a second one on top of it.
+    // A click is a look, not an edit: the day in words, then the event on it.
     await user.click(await screen.findByLabelText(/^2026-12-08/));
 
+    const drawer = await screen.findByRole('dialog');
+    expect(drawer).toHaveTextContent('Tuesday 8 December 2026');
+    // Once for the day, once for the event that made it so.
+    expect(within(drawer).getAllByText('No classes')).toHaveLength(2);
+    expect(within(drawer).getByText('ສອບເສັງກາງພາກ (ພາຍໃນ)')).toBeInTheDocument();
+    expect(drawer).toHaveTextContent('08/12/2026 – 15/12/2026');
+    expect(within(drawer).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+  });
+
+  it('opens the covering event for editing from the day', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CalendarPage />);
+
+    await user.click(await screen.findByLabelText(/^2026-12-08/));
+    const drawer = await screen.findByRole('dialog');
+    await user.click(within(drawer).getByRole('button', { name: 'Edit' }));
+
+    // The exam period is eight days long; editing from any of them has to reach
+    // the one event — the whole period, not the single day that was clicked.
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('Edit event');
-    // The whole period, not the single day that was clicked.
     expect(within(dialog).getByLabelText(/Title \(Lao\)/)).toHaveValue('ສອບເສັງກາງພາກ (ພາຍໃນ)');
     expect(within(dialog).getByLabelText(/Start date/i)).toHaveValue('2026-12-08');
     expect(within(dialog).getByLabelText(/End date/i)).toHaveValue('2026-12-15');
+  });
+
+  it('starts a one-day event on an empty day from the day', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CalendarPage />);
+
+    await user.click(await screen.findByLabelText(/^2026-10-06$/));
+    const drawer = await screen.findByRole('dialog');
+    expect(drawer).toHaveTextContent('Teaching day');
+    expect(drawer).toHaveTextContent('Nothing is filed on this day.');
+    await user.click(within(drawer).getByRole('button', { name: 'Add an event on this day' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('Add event');
+    expect(within(dialog).getByLabelText(/Start date/i)).toHaveValue('2026-10-06');
+    expect(within(dialog).getByLabelText(/End date/i)).toHaveValue('2026-10-06');
   });
 
   it('fills the effect in from the type, so it is one choice and not two', async () => {

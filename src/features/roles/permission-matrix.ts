@@ -99,6 +99,7 @@ export const RESOURCE_GROUPS: ResourceGroup[] = [
       'term-results',
       'lesson-plans',
       'teaching-observations',
+      'exam-papers',
       'exams',
       'certificates',
       'reports',

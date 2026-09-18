@@ -527,7 +527,10 @@ describe('monthly marks — the class summary for a month', () => {
    * built is to intercept both: the object URL for the bytes and the click for
    * the name it would have been filed under.
    */
-  async function exportWorkbook(): Promise<{ blob: Blob; bytes: Uint8Array; filenames: string[] }> {
+  async function exportWorkbook(
+    button: RegExp = /export excel/i,
+    beforeDownload?: () => Promise<void>,
+  ): Promise<{ blob: Blob; bytes: Uint8Array; filenames: string[] }> {
     const created = vi.fn((_blob: Blob) => 'blob:sheet');
     vi.stubGlobal('URL', { ...URL, createObjectURL: created, revokeObjectURL: vi.fn() });
     const filenames: string[] = [];
@@ -539,7 +542,8 @@ describe('monthly marks — the class summary for a month', () => {
 
     renderWithProviders(<ClassMonthSheet />);
     await chooseClass();
-    await userEvent.click(await screen.findByRole('button', { name: /export excel/i }));
+    await userEvent.click(await screen.findByRole('button', { name: button }));
+    await beforeDownload?.();
     await waitFor(() => expect(created).toHaveBeenCalled());
 
     const [blob] = created.mock.calls[0];
@@ -815,6 +819,254 @@ describe('monthly marks — the class summary for a month', () => {
       style: 'dotted',
     });
   });
+
+  /**
+   * ໃບລາຍງານຜູ້ປົກຄອງ — the office's letter home, one file per child.
+   *
+   * Checked against the school's own Excel form: the title, the name line, the
+   * subjects standing on end, ກວດກາ above ລວມ with a letter under each, the
+   * month's figures merged down the right, a ruled row for the teacher's
+   * remark and the A–F scale as a note. Every figure and letter on it is the
+   * API's, so what the test guards is that each lands in the right cell — and
+   * that nobody else's marks are in the file, since it is sent to one family.
+   */
+  it("writes one student's letter home, and only theirs", async () => {
+    const student = (overrides: Record<string, unknown>) => ({
+      studentNickname: null,
+      isEnrolled: true,
+      // ກວດກາ out of 6 for five subjects; the last three not yet marked.
+      testScores: [2.3, 2.8, 2.32, 2.8, 2.8, null, null, null],
+      scores: [6.3, 6.8, 6.32, 6.8, 4.8, null, null, null],
+      subjectGrades: ['C', 'C', 'C', 'C', 'D', null, null, null],
+      total: 31.02,
+      average: 3.88,
+      isComplete: false,
+      subjectsRecorded: 5,
+      grade: null,
+      classification: null,
+      rank: 1,
+      isPassing: false,
+      ...overrides,
+    });
+    stubMonth([
+      student({
+        studentId: 'stu-1',
+        studentCode: '625',
+        studentNameLo: 'ຈຸທາມາດ ສີທາປັນຍາ',
+        rollNumber: 1,
+      }),
+      // A child who has left is on the summary, but gets no letter.
+      student({
+        studentId: 'stu-2',
+        studentCode: '626',
+        studentNameLo: 'ອອກແລ້ວ',
+        rollNumber: 2,
+        isEnrolled: false,
+      }),
+      student({
+        studentId: 'stu-3',
+        studentCode: '627',
+        studentNameLo: 'ສີວິໄຊ ພົມມະຈັນ',
+        rollNumber: 3,
+        testScores: [5, 5, 5, 5, 5, 5, 5, 5],
+        scores: [9, 8.5, 9, 8.5, 9, 8.5, 9, 8.5],
+        subjectGrades: ['A', 'A', 'A', 'A', 'A', 'A', 'A', 'A'],
+        total: 70,
+        average: 8.75,
+        isComplete: true,
+        subjectsRecorded: 8,
+        grade: 'A',
+        classification: 'strong',
+        isPassing: true,
+      }),
+    ]);
+
+    // The click opens the remark form first — the one thing on the letter the
+    // system does not hold — and the file is built when it is confirmed.
+    const { bytes, filenames } = await exportWorkbook(/parent report — ຈຸທາມາດ/i, async () => {
+      const form = await screen.findByRole('dialog');
+      await userEvent.type(
+        within(form).getByLabelText(new RegExp(M4_SUBJECTS[0].nameLo)),
+        'ອ່ານໄດ້ດີຂຶ້ນ',
+      );
+      await userEvent.type(
+        within(form).getByLabelText(/overall remark/i),
+        'ຕັ້ງໃຈຮຽນດີ ຄວນທົບທວນເຄມີເພີ່ມ',
+      );
+      await userEvent.click(within(form).getByRole('button', { name: /download report/i }));
+    });
+    expect(filenames).toEqual(['Parent report September (09)／ມ.4／ກ／ຈຸທາມາດ ສີທາປັນຍາ.xlsx']);
+    // A child who has left the class has no letter to send.
+    expect(screen.getByRole('button', { name: /parent report — ອອກແລ້ວ/i })).toBeDisabled();
+
+    const { default: ExcelJS } = await import('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(bytes.buffer as ArrayBuffer);
+    const worksheet = workbook.worksheets[0];
+
+    // The head: the title across the page, then the name line.
+    expect(worksheet.getCell('A1').value).toBe(
+      `Monthly results — September (09), school year ${activeYear.code}`,
+    );
+    expect(worksheet.getCell('A1').font).toMatchObject({ name: 'Phetsarath OT', bold: true });
+    expect(worksheet.getCell('A2').value).toBe('Student: ຈຸທາມາດ ສີທາປັນຍາ');
+    expect(worksheet.getCell('J2').value).toBe('Class: ມ.4/ກ   No. 1');
+
+    // Eight subjects standing on end, then the four standing columns.
+    expect(worksheet.getCell('B3').value).toBe(M4_SUBJECTS[0].nameLo);
+    expect(worksheet.getCell('B3').alignment?.textRotation).toBe(90);
+    expect(worksheet.getCell('I3').value).toBe(M4_SUBJECTS[7].nameLo);
+    expect(worksheet.getCell('J3').value).toBe('Total');
+    expect(worksheet.getCell('K3').value).toBe('Subjects');
+    expect(worksheet.getCell('L3').value).toBe('Average');
+    expect(worksheet.getCell('M3').value).toBe('Overall grade');
+
+    // ກວດກາ above ລວມ, the letter under each, and an unmarked subject left blank.
+    expect(worksheet.getCell('A4').value).toBe('Test mark (out of 6)');
+    expect(worksheet.getCell('B4').value).toBe(2.3);
+    expect(worksheet.getCell('B4').font).toMatchObject({ name: 'Times New Roman' });
+    expect(worksheet.getCell('A5').value).toBe('Month total (out of 10)');
+    expect(worksheet.getCell('B5').value).toBe(6.3);
+    expect(worksheet.getCell('A6').value).toBe('Grade per subject');
+    expect(worksheet.getCell('B6').value).toBe('C');
+    expect(worksheet.getCell('F6').value).toBe('D');
+    expect(worksheet.getCell('G4').value).toBeNull();
+    expect(worksheet.getCell('G6').value).toBe('');
+    // A ລວມ under the pass line prints red, and so does its letter.
+    expect(worksheet.getCell('F5').font).toMatchObject({ color: { argb: 'FF9C0006' } });
+    expect(worksheet.getCell('F6').font).toMatchObject({ color: { argb: 'FF9C0006' } });
+
+    // The month's figures, merged down the three rows: ລວມ, then how far short
+    // of a full month the child is instead of a count, ສະເລ່ຍ, and no letter yet.
+    expect(worksheet.getCell('J4').value).toBe(31.02);
+    expect(worksheet.getCell('J4').isMerged).toBe(true);
+    expect(worksheet.getCell('K4').value).toBe('5/8 marked');
+    expect(worksheet.getCell('L4').value).toBe(3.88);
+    expect(worksheet.getCell('M4').value).toBe('');
+
+    // The remark row, tall and ruled: what was typed sits under its subject,
+    // the month's remark in the wide cell on the right, the rest left blank.
+    expect(worksheet.getCell('A7').value).toBe("Homeroom teacher's remarks per subject");
+    expect(worksheet.getRow(7).height).toBeGreaterThanOrEqual(90);
+    expect(worksheet.getCell('B7').value).toBe('ອ່ານໄດ້ດີຂຶ້ນ');
+    expect(worksheet.getCell('B7').font).toMatchObject({ name: 'Phetsarath OT' });
+    expect(worksheet.getCell('C7').value).toBeNull();
+    expect(worksheet.getCell('C7').border?.bottom).toMatchObject({ style: 'thin' });
+    expect(worksheet.getCell('J7').value).toBe('ຕັ້ງໃຈຮຽນດີ ຄວນທົບທວນເຄມີເພີ່ມ');
+    expect(worksheet.getCell('J7').isMerged).toBe(true);
+    expect(worksheet.getCell('A9').value).toBe('Note:');
+    expect(worksheet.getCell('A10').value).toBe('A = 8.5 - 10');
+    expect(worksheet.getCell('A15').value).toBe('F = 0 - 3.4');
+
+    // Nothing to sign: the letter is sent, not handed over.
+    const words = JSON.stringify(worksheet.getSheetValues());
+    expect(words).not.toContain('Parent / guardian');
+    expect(words).not.toContain('Homeroom teacher"');
+
+    // Nobody else's month is in the file: one letter, one page, no break.
+    const titles = (worksheet.getRows(1, worksheet.rowCount) ?? []).filter(
+      (row) => row.getCell(1).value === worksheet.getCell('A1').value,
+    );
+    expect(titles).toHaveLength(1);
+    expect(words).not.toContain('ສີວິໄຊ');
+    const { default: JSZip } = await import('jszip');
+    const archive = await JSZip.loadAsync(bytes);
+    const sheetXml = await archive.file('xl/worksheets/sheet1.xml')?.async('string');
+    expect(sheetXml).not.toContain('<brk ');
+  });
+
+  /**
+   * The whole class at month's end: a chosen set of letters, zipped one file
+   * each — never one workbook, since each goes to a different family. The zip
+   * has to hold exactly the students ticked, named as the row button would
+   * name them, with the remark typed against a name inside that name's file.
+   */
+  it('zips a chosen set of letters, one file each, with their remarks', async () => {
+    const student = (overrides: Record<string, unknown>) => ({
+      studentNickname: null,
+      isEnrolled: true,
+      testScores: [5, 5, 5, 5, 5, 5, 5, 5],
+      scores: [9, 8.5, 9, 8.5, 9, 8.5, 9, 8.5],
+      subjectGrades: ['A', 'A', 'A', 'A', 'A', 'A', 'A', 'A'],
+      total: 70,
+      average: 8.75,
+      isComplete: true,
+      subjectsRecorded: 8,
+      grade: 'A',
+      classification: 'strong',
+      rank: 1,
+      isPassing: true,
+      ...overrides,
+    });
+    stubMonth([
+      student({
+        studentId: 'stu-1',
+        studentCode: '625',
+        studentNameLo: 'ຈຸທາມາດ ສີທາປັນຍາ',
+        rollNumber: 1,
+      }),
+      student({
+        studentId: 'stu-2',
+        studentCode: '626',
+        studentNameLo: 'ສີວິໄຊ ພົມມະຈັນ',
+        rollNumber: 2,
+      }),
+      student({
+        studentId: 'stu-3',
+        studentCode: '627',
+        studentNameLo: 'ເກວະລິນ ອຸ່ນມີໄຊ',
+        rollNumber: 3,
+      }),
+      // Off the roll: not offered at all.
+      student({
+        studentId: 'stu-4',
+        studentCode: '628',
+        studentNameLo: 'ອອກແລ້ວ',
+        rollNumber: 4,
+        isEnrolled: false,
+      }),
+    ]);
+
+    const { blob, bytes, filenames } = await exportWorkbook(
+      /parent reports \(several\)/i,
+      async () => {
+        const form = await screen.findByRole('dialog');
+        // Everyone who can have a letter starts ticked; the leaver is not listed.
+        expect(within(form).queryByText('ອອກແລ້ວ')).not.toBeInTheDocument();
+        expect(within(form).getByText('3/3 chosen')).toBeInTheDocument();
+        // Untick one, write against another, and download the rest.
+        await userEvent.click(within(form).getByRole('checkbox', { name: /ສີວິໄຊ ພົມມະຈັນ/ }));
+        expect(within(form).getByText('2/3 chosen')).toBeInTheDocument();
+        await userEvent.click(within(form).getByRole('button', { name: /remarks — ເກວະລິນ/i }));
+        await userEvent.type(within(form).getByLabelText(/overall remark/i), 'ດີຫຼາຍ');
+        await userEvent.click(within(form).getByRole('button', { name: /download 2 reports/i }));
+      },
+    );
+
+    expect(filenames).toEqual(['Parent report September (09)／ມ.4／ກ.zip']);
+    expect(blob.type).toBe('application/zip');
+
+    const { default: JSZip } = await import('jszip');
+    const archive = await JSZip.loadAsync(bytes);
+    expect(Object.keys(archive.files).sort()).toEqual(
+      [
+        'Parent report September (09)／ມ.4／ກ／ຈຸທາມາດ ສີທາປັນຍາ.xlsx',
+        'Parent report September (09)／ມ.4／ກ／ເກວະລິນ ອຸ່ນມີໄຊ.xlsx',
+      ].sort(),
+    );
+
+    const { default: ExcelJS } = await import('exceljs');
+    const letter = new ExcelJS.Workbook();
+    await letter.xlsx.load(
+      (await archive
+        .file('Parent report September (09)／ມ.4／ກ／ເກວະລິນ ອຸ່ນມີໄຊ.xlsx')
+        ?.async('arraybuffer')) as ArrayBuffer,
+    );
+    const worksheet = letter.worksheets[0];
+    expect(worksheet.getCell('A2').value).toBe('Student: ເກວະລິນ ອຸ່ນມີໄຊ');
+    expect(worksheet.getCell('J7').value).toBe('ດີຫຼາຍ');
+    expect(JSON.stringify(worksheet.getSheetValues())).not.toContain('ຈຸທາມາດ');
+  });
 });
 
 /**
@@ -832,6 +1084,8 @@ const M1_SUBJECTS = ['ພາສາລາວ', 'ຄະນິດສາດ', 'ທ�
 const studentMonth = (month: number, overrides: Record<string, unknown> = {}) => ({
   month,
   scores: [7.9, 8, 7, 8],
+  testScores: [4.9, 5, 4, 5],
+  subjectGrades: ['B', 'B', 'B', 'B'],
   total: 30.9,
   average: 7.73,
   isComplete: true,
@@ -852,6 +1106,7 @@ const studentSubjectRow = (index: number, overrides: Record<string, unknown> = {
   bonus: null,
   // (8.22 + 7.5) ÷ 2 — the term sheet's own arithmetic, not this side's.
   semesterMark: 7.86,
+  semesterGrade: 'B',
   isPassing: true,
   ...overrides,
 });
@@ -859,8 +1114,35 @@ const studentSubjectRow = (index: number, overrides: Record<string, unknown> = {
 describe("monthly marks — one student's card", () => {
   afterEach(() => vi.restoreAllMocks());
 
+  /** ຄະແນນກົດລະບຽບ for the year — the ledger the block borrows two figures from. */
+  const ledger = {
+    studentId: 'stu-1',
+    schoolYearId: activeYear.id,
+    baseScore: 100,
+    deducted: 5,
+    remaining: 95,
+    grade: 'excellent',
+    level: 'none',
+    notify: [],
+    entries: [],
+  };
+
+  /** The roll for the window on screen: 17 present and 1 late of 20 days, 1 ຄອບ, 1 ບໍ່ຄອບ. */
+  const roll = {
+    studentId: 'stu-1',
+    present: 17,
+    late: 1,
+    absent: 1,
+    excused: 1,
+    sick: 0,
+    totalRecorded: 20,
+    attendanceRate: 95,
+  };
+
   function stubStudent(overrides: Record<string, unknown> = {}): void {
     stubReads({
+      [`/conduct-deductions/student/stu-1/school-year/${activeYear.id}`]: ledger,
+      [`/attendances/summary/student/stu-1/semester/${semester.id}`]: roll,
       '/monthly-marks/student': {
         classroom,
         semester,
@@ -870,36 +1152,107 @@ describe("monthly marks — one student's card", () => {
         subjects: M1_SUBJECTS,
         monthly: [studentMonth(9), studentMonth(10), studentMonth(11)],
         subjectRows: M1_SUBJECTS.map((_, index) => studentSubjectRow(index)),
-        summary: { subjects: 4, monthsRecorded: 3, termAverage: 7.86, termComplete: true },
+        summary: {
+          subjects: 4,
+          monthsRecorded: 3,
+          termTotal: 31.44,
+          termSubjectsRecorded: 4,
+          termAverage: 7.86,
+          termComplete: true,
+          termGrade: 'B',
+        },
         ...overrides,
       },
     });
   }
 
-  it('columns the term by month, and foots each one with ສະເລ່ຍ, ເກຣດ and ລຳດັບ', async () => {
+  /**
+   * The block is the parent report's: it opens on the latest month with marks,
+   * heads itself the way the letter does, and stands the month's figures down
+   * the right — the same four the workbook merges beside the mark rows.
+   */
+  it('opens on the latest marked month, laid out as the letter home', async () => {
+    stubStudent({
+      monthly: [
+        studentMonth(9),
+        studentMonth(10),
+        studentMonth(11, {
+          scores: [null, null, null, null],
+          testScores: [null, null, null, null],
+          subjectGrades: [null, null, null, null],
+          total: null,
+          average: null,
+          isComplete: false,
+          subjectsRecorded: 0,
+          grade: null,
+          rank: null,
+          rankedStudents: 0,
+          isPassing: null,
+        }),
+      ],
+    });
+    renderWithProviders(<StudentMonthlyMarks studentId="stu-1" studentName="ສີວິໄຊ" />);
+
+    // ພະຈິກ has nothing yet, so ຕຸລາ is the month a parent is asking about.
+    expect(
+      await screen.findByRole('heading', { name: /October \(10\), school year 2025-2026/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('ສີວິໄຊ')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'October' })).toHaveAttribute('data-state', 'active');
+
+    // Subjects across, not down.
+    for (const name of ['ພາສາລາວ', 'ຄະນິດສາດ', 'ທຳມະຊາດ', 'ສັງຄົມ']) {
+      expect(screen.getByRole('columnheader', { name })).toBeInTheDocument();
+    }
+    const test = screen.getByRole('row', { name: /Test mark/ });
+    expect(within(test).getByText('4.90')).toBeInTheDocument();
+    const total = screen.getByRole('row', { name: /Month total/ });
+    expect(within(total).getByText('7.90')).toBeInTheDocument();
+    // ລວມ · ຈຳນວນວິຊາ · ສະເລ່ຍ · ເກຣດ stand beside the first row. No ລຳດັບ:
+    // the office asked for it to go (16 Sep 2026) — it is not read out here.
+    expect(within(test).getByText('30.90')).toBeInTheDocument();
+    expect(within(test).getByText('4')).toBeInTheDocument();
+    expect(within(test).getByText('7.73')).toBeInTheDocument();
+    expect(screen.queryByText('3/42')).not.toBeInTheDocument();
+    // ຄະແນນກົດລະບຽບ beside them, as the class export prints it — the year's
+    // figures, headed as one group over ຖືກຕັດ / ຍັງເຫຼືອ.
+    expect(screen.getByRole('columnheader', { name: 'Conduct points' })).toBeInTheDocument();
+    expect(within(test).getByText('5')).toBeInTheDocument();
+    expect(within(test).getByText('95')).toBeInTheDocument();
+    // ວັນມາຮຽນ for the month on screen: late counts as in the room, ຄອບ folds
+    // in sick days, ບໍ່ຄອບ stands alone.
+    expect(screen.getByRole('columnheader', { name: 'Attendance' })).toBeInTheDocument();
+    expect(within(test).getByText('18/20')).toBeInTheDocument();
+    const [, month] = vi.mocked(apiClient.get).mock.calls.find(
+      ([url]) => url === `/attendances/summary/student/stu-1/semester/${semester.id}`,
+    ) as [string, { params: { month: string } }];
+    expect(month.params).toEqual({ month: '10' });
+  });
+
+  it('turns the same block to the whole term when asked', async () => {
     stubStudent();
     renderWithProviders(<StudentMonthlyMarks studentId="stu-1" />);
+    const user = userEvent.setup();
 
-    // The months the term collects, not the calendar's twelve.
-    for (const month of [/September/i, /October/i, /November/i]) {
-      expect(await screen.findByRole('columnheader', { name: month })).toBeInTheDocument();
-    }
+    await user.click(await screen.findByRole('tab', { name: 'Whole term' }));
 
-    const row = (await screen.findByText('ຄະນິດສາດ')).closest('tr') as HTMLElement;
-    expect(within(row).getAllByText('7.90').length).toBeGreaterThan(0);
-    // The term columns come along, so the card ends where the term sheet does.
-    expect(within(row).getByText('8.22')).toBeInTheDocument();
-    expect(within(row).getByText('7.86')).toBeInTheDocument();
-
-    // ລຳດັບ carries what it is out of: third of forty-two is not third of three.
-    const rank = (await screen.findByText('Rank')).closest('tr') as HTMLElement;
-    expect(within(rank).getAllByText('3/42')).toHaveLength(3);
+    expect(
+      screen.getByRole('heading', { name: /Semester 1 results, school year 2025-2026/ }),
+    ).toBeInTheDocument();
+    const september = screen.getByRole('row', { name: /September/ });
+    expect(within(september).getAllByText('7.90')).toHaveLength(4);
+    const threeMonth = screen.getByRole('row', { name: /3-month average/ });
+    expect(within(threeMonth).getAllByText('8.22')).toHaveLength(4);
+    const term = screen.getByRole('row', { name: /^Term mark/ });
+    expect(within(term).getAllByText('7.86')).toHaveLength(4);
+    // The term's own standing figures.
+    expect(within(september).getByText('31.44')).toBeInTheDocument();
   });
 
   /**
    * A month short of a subject reads low for a reason that is not the student's
-   * marks, so the card says which month and withholds the letter — the same rule
-   * the class summary applies, and the one a parent most needs stated.
+   * marks, so the card says so and withholds the letter — the same rule the
+   * class summary applies, and the one a parent most needs stated.
    */
   it('names the unfinished month rather than banding it', async () => {
     stubStudent({
@@ -908,6 +1261,8 @@ describe("monthly marks — one student's card", () => {
         studentMonth(10),
         studentMonth(11, {
           scores: [7.9, 8, null, null],
+          testScores: [4.9, 5, null, null],
+          subjectGrades: ['B', 'B', null, null],
           total: 15.9,
           average: 3.98,
           isComplete: false,
@@ -921,13 +1276,14 @@ describe("monthly marks — one student's card", () => {
     });
     renderWithProviders(<StudentMonthlyMarks studentId="stu-1" />);
 
+    // The latest month with anything in it is the unfinished one.
     expect(
       await screen.findByText(/November is still short of the 4 subjects/),
     ).toBeInTheDocument();
-    const grades = (await screen.findByText('Grade')).closest('tr') as HTMLElement;
-    // Two months banded, the third left blank.
-    expect(within(grades).getAllByText('B')).toHaveLength(2);
-    expect(within(grades).getAllByText('—')).toHaveLength(1);
+    const test = screen.getByRole('row', { name: /Test mark/ });
+    expect(within(test).getByText('2/4 marked')).toBeInTheDocument();
+    // ເກຣດ withheld: the standing cell is a dash, not an F for 3.98.
+    expect(within(test).queryByText('F')).not.toBeInTheDocument();
   });
 
   it('says so rather than erroring when the register has not placed the student', async () => {
@@ -935,5 +1291,43 @@ describe("monthly marks — one student's card", () => {
     renderWithProviders(<StudentMonthlyMarks studentId="stu-1" />);
 
     expect(await screen.findByText(/has not been placed in a class/i)).toBeInTheDocument();
+  });
+
+  /**
+   * A phone does not get the letter's table — eight subjects across only fit
+   * by scrolling, and a figure scrolled away from its heading is unreadable.
+   * It gets the month's figures first and one line a subject, the mark and its
+   * letter on the right; the same numbers, once each.
+   */
+  it('lists the subjects one to a line on a phone, with the month figures above', async () => {
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      (query: string) =>
+        ({
+          matches: query.includes('max-width'),
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        }) as unknown as MediaQueryList,
+    );
+    stubStudent();
+    renderWithProviders(<StudentMonthlyMarks studentId="stu-1" />);
+
+    expect(await screen.findByRole('list')).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    const items = screen.getAllByRole('listitem');
+    expect(items).toHaveLength(4);
+    const maths = items.find((item) => within(item).queryByText('ຄະນິດສາດ')) as HTMLElement;
+    expect(within(maths).getByText('8.00')).toBeInTheDocument();
+    expect(within(maths).getByText('B')).toBeInTheDocument();
+    // ກວດກາ sits under the subject, out of its own maximum.
+    expect(within(maths).getByText('5.00')).toBeInTheDocument();
+    expect(within(maths).getByText('/6')).toBeInTheDocument();
+    // The month's own figures — ສະເລ່ຍ, ລວມ — read once, above the list.
+    expect(screen.getByText('7.73')).toBeInTheDocument();
+    expect(screen.getByText('30.90')).toBeInTheDocument();
+    expect(screen.getByText('95/100')).toBeInTheDocument();
+    expect(screen.getByText('18/20')).toBeInTheDocument();
   });
 });

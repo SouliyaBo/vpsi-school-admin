@@ -45,7 +45,7 @@ export function DetailDrawer({
           {description && <SheetDescription>{description}</SheetDescription>}
         </SheetHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-6 scrollbar-thin">
+        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-6">
           {error ? (
             <ErrorState error={error} onRetry={onRetry} compact />
           ) : isLoading ? (
@@ -77,9 +77,17 @@ export function DetailRow({
   className?: string;
 }) {
   return (
-    <div className={cn('grid grid-cols-3 gap-3 py-1.5 text-sm', className)}>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="col-span-2 font-medium">{children ?? '—'}</dd>
+    // Label beside value at every width — stacking them on a phone doubled the
+    // height of every row, and a page of forty rows became a long scroll. The
+    // label column is fixed narrow there so the value keeps most of the line.
+    <div
+      className={cn(
+        'grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 py-1.5 text-sm sm:grid-cols-3',
+        className,
+      )}
+    >
+      <dt className="break-words text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words font-medium sm:col-span-2">{children ?? '—'}</dd>
     </div>
   );
 }
@@ -95,7 +103,9 @@ export function DetailSection({
 }) {
   return (
     <section className={cn('space-y-1', className)}>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h3>
       <dl className="divide-y divide-border">{children}</dl>
     </section>
   );

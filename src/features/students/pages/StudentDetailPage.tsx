@@ -4,6 +4,8 @@ import {
   BarChart3,
   CalendarRange,
   CheckSquare,
+  ClipboardList,
+  FileSignature,
   FileText,
   Pencil,
   School,
@@ -16,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useStudentAttendanceSummary } from '@/features/attendances/api';
 import { StudyCertificateDialog } from '@/features/certificates/components/StudyCertificateDialog';
+import { StudySuspensionDialog } from '@/features/certificates/components/StudySuspensionDialog';
 import { StudentMonthlyMarks } from '@/features/monthly-marks/components/StudentMonthlyMarks';
 import { StudentVaccinations } from '@/features/vaccinations/components/StudentVaccinations';
 import { useCan } from '@/features/auth/hooks';
@@ -28,6 +31,7 @@ import {
 } from '@/features/enrollments/components/EnrollmentMoveDialog';
 import { ALLOWED_TRANSITIONS, useEnrollmentHistory } from '@/features/enrollments/api';
 import { useActiveSemester } from '@/features/semesters/api';
+import { useMediaQuery } from '@/hooks/use-media-query';
 import { locationPath, useLocationIndex } from '@/features/locations/lib/location-index';
 import {
   calculateAge,
@@ -54,7 +58,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { DetailRow, DetailSection } from '@/components/common/DetailDrawer';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -66,12 +77,16 @@ import { StatusBadge } from '@/components/common/StatusBadge';
 import { toTenPoint } from '@/features/term-results/api';
 import { GuardianLinksDialog } from '../components/GuardianLinksDialog';
 import { StudentFormDialog } from '../components/StudentFormDialog';
-import {
-  students,
-  useStudentSiblings,
-  useStudentTermResult,
-  useUploadStudentPhoto,
-} from '../api';
+import { students, useStudentSiblings, useStudentTermResult, useUploadStudentPhoto } from '../api';
+
+/**
+ * The tab strip's two shapes: a 4-wide grid of icon-over-label tiles on a
+ * phone, so all seven are on screen; the ordinary one-line strip from `sm` up.
+ */
+const tabListClass =
+  'grid h-auto w-full grid-cols-4 gap-1 sm:inline-flex sm:h-9 sm:w-auto sm:grid-cols-none';
+const tabClass =
+  'h-full flex-col gap-1 whitespace-normal px-1 py-2 text-xs leading-tight sm:h-auto sm:flex-row sm:gap-1.5 sm:whitespace-nowrap sm:px-3 sm:py-1 sm:text-sm';
 
 export function StudentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -88,6 +103,7 @@ export function StudentDetailPage() {
    */
   const [tab, setTab] = useState('overview');
   const [certificateOpen, setCertificateOpen] = useState(false);
+  const [suspensionOpen, setSuspensionOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [guardiansOpen, setGuardiansOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -116,6 +132,7 @@ export function StudentDetailPage() {
   const semesterId = activeSemester.data?.id;
   const termResult = useStudentTermResult(id, semesterId);
   const attendance = useStudentAttendanceSummary(id, semesterId);
+  const phone = useMediaQuery('(max-width: 639px)');
 
   if (detail.isLoading) {
     return (
@@ -153,10 +170,16 @@ export function StudentDetailPage() {
         actions={
           <>
             {can('certificates', 'create') && (
-              <Button variant="outline" onClick={() => setCertificateOpen(true)}>
-                <FileText />
-                {t('certificate.studyVerification')}
-              </Button>
+              <>
+                <Button variant="outline" onClick={() => setCertificateOpen(true)}>
+                  <FileText />
+                  {t('certificate.studyVerification')}
+                </Button>
+                <Button variant="outline" onClick={() => setSuspensionOpen(true)}>
+                  <FileSignature />
+                  {t('certificate.studySuspension')}
+                </Button>
+              </>
             )}
             {!currentPlacement && !history.isLoading && can('enrollments', 'create') && (
               <Button onClick={() => setEnrollOpen(true)}>
@@ -212,9 +235,7 @@ export function StudentDetailPage() {
                     ` · ${t('enrollment.rollNumber')} ${currentPlacement.rollNumber}`}
                 </Badge>
               ) : (
-                !history.isLoading && (
-                  <Badge variant="warning">{t('enrollment.noClassroom')}</Badge>
-                )
+                !history.isLoading && <Badge variant="warning">{t('enrollment.noClassroom')}</Badge>
               )}
               <Badge variant="outline">{t(`gender.${student.gender}`)}</Badge>
               {calculateAge(student.dateOfBirth) !== null && (
@@ -233,10 +254,14 @@ export function StudentDetailPage() {
             )}
           </div>
 
+          {/* The drop zone repeats the avatar beside it and, on a phone, took
+              more of the screen than the student's own details — there it is a
+              single ປ່ຽນຮູບ button instead. */}
           {can('students', 'update') && (
             <FileUpload
-              className="w-full sm:w-72"
-              label={t('person.photo')}
+              className={phone ? 'w-full' : 'w-72'}
+              compact={phone}
+              label={phone ? t('person.changePhoto') : t('person.photo')}
               currentUrl={student.photoUrl}
               onUpload={(file, onProgress) => uploadPhoto.mutateAsync({ file, onProgress })}
               onUploaded={() => void detail.refetch()}
@@ -246,39 +271,49 @@ export function StudentDetailPage() {
       </Card>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="overview">{t('common.details')}</TabsTrigger>
-          <TabsTrigger value="guardians">
-            <Users />
-            {t('student.guardians')}
-          </TabsTrigger>
-          {canReadEnrollments && (
-            <TabsTrigger value="enrollment">
-              <School />
-              {t('enrollment.history')}
+        {/* Seven tabs are wider than a phone. A strip that scrolled sideways hid
+            the last four, and nothing told a parent they were there — so on a
+            phone the tabs wrap into a grid, icon over label, every one in view
+            at once. From `sm` up it is the usual one-line strip, scrolling on
+            a tablet where it still does not quite fit. */}
+        <div className="scrollbar-thin sm:overflow-x-auto">
+          <TabsList className={tabListClass}>
+            <TabsTrigger value="overview" className={tabClass}>
+              <ClipboardList />
+              {t('common.details')}
             </TabsTrigger>
-          )}
-          <TabsTrigger value="academic">
-            <BarChart3 />
-            {t('student.academicSummary')}
-          </TabsTrigger>
-          {canReadScores && (
-            <TabsTrigger value="monthlyMarks">
-              <CalendarRange />
-              {t('monthlyMark.studentTab')}
+            <TabsTrigger value="guardians" className={tabClass}>
+              <Users />
+              {t('student.guardians')}
             </TabsTrigger>
-          )}
-          <TabsTrigger value="attendance">
-            <CheckSquare />
-            {t('student.attendanceSummary')}
-          </TabsTrigger>
-          {canReadVaccinations && (
-            <TabsTrigger value="vaccination">
-              <Syringe />
-              {t('vaccination.tab')}
+            {canReadEnrollments && (
+              <TabsTrigger value="enrollment" className={tabClass}>
+                <School />
+                {t('enrollment.history')}
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="academic" className={tabClass}>
+              <BarChart3 />
+              {t('student.academicSummary')}
             </TabsTrigger>
-          )}
-        </TabsList>
+            {canReadScores && (
+              <TabsTrigger value="monthlyMarks" className={tabClass}>
+                <CalendarRange />
+                {t('monthlyMark.studentTab')}
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="attendance" className={tabClass}>
+              <CheckSquare />
+              {t('student.attendanceSummary')}
+            </TabsTrigger>
+            {canReadVaccinations && (
+              <TabsTrigger value="vaccination" className={tabClass}>
+                <Syringe />
+                {t('vaccination.tab')}
+              </TabsTrigger>
+            )}
+          </TabsList>
+        </div>
 
         <TabsContent value="overview">
           <Card>
@@ -286,7 +321,9 @@ export function StudentDetailPage() {
               <DetailSection title={t('person.basicInfo')}>
                 <DetailRow label={t('student.studentCode')}>{student.studentCode}</DetailRow>
                 <DetailRow label={t('person.title')}>{student.title ?? '—'}</DetailRow>
-                <DetailRow label={t('person.fullName')}>{fullName(student, i18n.language)}</DetailRow>
+                <DetailRow label={t('person.fullName')}>
+                  {fullName(student, i18n.language)}
+                </DetailRow>
                 <DetailRow label={t('person.nickname')}>
                   {nickname(student, i18n.language) ?? '—'}
                 </DetailRow>
@@ -301,7 +338,9 @@ export function StudentDetailPage() {
                         .join(', ')
                     : t('studentOrganization.none')}
                 </DetailRow>
-                <DetailRow label={t('person.dateOfBirth')}>{formatDate(student.dateOfBirth)}</DetailRow>
+                <DetailRow label={t('person.dateOfBirth')}>
+                  {formatDate(student.dateOfBirth)}
+                </DetailRow>
                 <DetailRow label={t('student.placeOfBirth')}>
                   {[birthPlace, student.birthAddressDetail].filter(Boolean).join(' — ') || '—'}
                 </DetailRow>
@@ -321,13 +360,19 @@ export function StudentDetailPage() {
                   <DetailRow label={t('person.village')}>
                     {village ? localizedName(village, i18n.language) : '—'}
                   </DetailRow>
-                  <DetailRow label={t('person.addressDetail')}>{student.addressDetail ?? '—'}</DetailRow>
+                  <DetailRow label={t('person.addressDetail')}>
+                    {student.addressDetail ?? '—'}
+                  </DetailRow>
                 </DetailSection>
 
                 <DetailSection title={t('student.notes')}>
                   <DetailRow label={t('student.notes')}>{student.notes ?? '—'}</DetailRow>
-                  <DetailRow label={t('common.createdAt')}>{formatDate(student.createdAt)}</DetailRow>
-                  <DetailRow label={t('common.updatedAt')}>{formatDate(student.updatedAt)}</DetailRow>
+                  <DetailRow label={t('common.createdAt')}>
+                    {formatDate(student.createdAt)}
+                  </DetailRow>
+                  <DetailRow label={t('common.updatedAt')}>
+                    {formatDate(student.updatedAt)}
+                  </DetailRow>
                 </DetailSection>
               </div>
             </CardContent>
@@ -377,7 +422,9 @@ export function StudentDetailPage() {
                         <TableCell>{t(`relationship.${link.relationship}`)}</TableCell>
                         <TableCell>{link.phone}</TableCell>
                         <TableCell>
-                          {link.isPrimary && <Badge variant="success">{t('student.isPrimary')}</Badge>}
+                          {link.isPrimary && (
+                            <Badge variant="success">{t('student.isPrimary')}</Badge>
+                          )}
                           {link.isEmergencyContact && (
                             <Badge variant="info" className="ms-1">
                               {t('student.isEmergencyContact')}
@@ -492,10 +539,7 @@ export function StudentDetailPage() {
                         <TableCell>{formatDate(enrollment.enrolledAt)}</TableCell>
                         <TableCell>
                           <div className="space-y-0.5">
-                            <StatusBadge
-                              status={enrollment.status}
-                              namespace="enrollmentStatus"
-                            />
+                            <StatusBadge status={enrollment.status} namespace="enrollmentStatus" />
                             {enrollment.statusReason && (
                               <p className="text-xs text-muted-foreground">
                                 {enrollment.statusReason}
@@ -548,7 +592,7 @@ export function StudentDetailPage() {
                 <EmptyState icon={BarChart3} title={t('common.noData')} />
               ) : (
                 <div className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <StatTile label="GPA" value={termResult.data.gpa?.toFixed(2) ?? '—'} />
                     {/* The API stores marks as percentages so a class can be
                         ranked; this school marks out of 10, and a card that says
@@ -611,7 +655,11 @@ export function StudentDetailPage() {
                 {/* Held back until the tab is open: the read costs the whole
                     class's marks, because ລຳດັບ cannot be worked out from one
                     student's row alone. */}
-                <StudentMonthlyMarks studentId={id} enabled={tab === 'monthlyMarks'} />
+                <StudentMonthlyMarks
+                  studentId={id}
+                  studentName={fullName(student, i18n.language)}
+                  enabled={tab === 'monthlyMarks'}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -630,10 +678,14 @@ export function StudentDetailPage() {
               ) : !attendance.data ? (
                 <EmptyState icon={CheckSquare} title={t('common.noData')} />
               ) : (
-                <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                   <StatTile
                     label={t('dashboard.presentRate')}
-                    value={percentage(attendance.data.present, attendance.data.totalRecorded || 1, 0)}
+                    value={percentage(
+                      attendance.data.present,
+                      attendance.data.totalRecorded || 1,
+                      0,
+                    )}
                     tone="success"
                   />
                   <StatTile label={t('attendanceStatus.present')} value={attendance.data.present} />
@@ -671,6 +723,11 @@ export function StudentDetailPage() {
       <StudyCertificateDialog
         student={certificateOpen ? student : null}
         onClose={() => setCertificateOpen(false)}
+      />
+
+      <StudySuspensionDialog
+        student={suspensionOpen ? student : null}
+        onClose={() => setSuspensionOpen(false)}
       />
 
       <EnrollDialog

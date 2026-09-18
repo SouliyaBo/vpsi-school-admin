@@ -156,6 +156,10 @@ export interface MonthlyBandCuts {
 export interface ClassMonthRow extends StudentIdentity {
   /** One mark per subject, in the order the columns are listed. */
   scores: (number | null)[];
+  /** ກວດກາ alone, out of 6, per subject — the parent report's own line. */
+  testScores: (number | null)[];
+  /** The letter for each subject's ລວມ, banded by the API like the average's. */
+  subjectGrades: (Grade | null)[];
   /** ລວມ — the marks as written, before they are divided. */
   total: number | null;
   /** ສະເລ່ຍ — ລວມ over the subjects the grade sits, not over the ones marked. */
@@ -204,6 +208,10 @@ export interface StudentMonthSummary {
   month: number;
   /** One mark per subject, in the order the columns are listed. */
   scores: (number | null)[];
+  /** ກວດກາ alone, out of 6, per subject — the parent report's own line. Absent from an older API. */
+  testScores?: (number | null)[];
+  /** The letter for each subject's ລວມ, banded by the API like the average's. Absent from an older API. */
+  subjectGrades?: (Grade | null)[];
   /** ລວມ — the marks as written, before they are divided. */
   total: number | null;
   /** ສະເລ່ຍ — ລວມ over the subjects the grade sits, not over the ones marked. */
@@ -229,6 +237,8 @@ export interface StudentSubjectRow {
   examScore: number | null;
   bonus: number | null;
   semesterMark: number | null;
+  /** The letter for ພາກຮຽນ, banded as a month's ລວມ is. Absent from an older API. */
+  semesterGrade?: Grade | null;
   isPassing: boolean | null;
 }
 
@@ -250,9 +260,15 @@ export interface StudentMonthlySheet {
   summary: {
     subjects: number;
     monthsRecorded: number;
+    /** ລວມ of the term marks as written. Absent from an older API. */
+    termTotal?: number | null;
+    /** How many subjects have a ພາກຮຽນ figure — what ຈຳນວນວິຊາ says. */
+    termSubjectsRecorded?: number;
     /** ສະເລ່ຍ across the term marks. */
     termAverage: number | null;
     termComplete: boolean;
+    /** ເກຣດ for the term, `null` until every subject has its ພາກຮຽນ. Absent from an older API. */
+    termGrade?: Grade | null;
     /** False for a student who has left the room the marks were earned in. */
     onRoster?: boolean;
   };

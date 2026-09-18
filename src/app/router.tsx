@@ -104,6 +104,14 @@ const TeachingObservationsPage = lazyPage(
   () => import('@/features/teaching-observations/pages/TeachingObservationsPage'),
   'TeachingObservationsPage',
 );
+const ExamPapersPage = lazyPage(
+  () => import('@/features/exam-papers/pages/ExamPapersPage'),
+  'ExamPapersPage',
+);
+const ExamPaperDetailPage = lazyPage(
+  () => import('@/features/exam-papers/pages/ExamPaperDetailPage'),
+  'ExamPaperDetailPage',
+);
 const TeachingAssignmentsPage = lazyPage(
   () => import('@/features/teaching-assignments/pages/TeachingAssignmentsPage'),
   'TeachingAssignmentsPage',
@@ -197,6 +205,8 @@ export const router = createBrowserRouter([
             path: 'teaching-assignments',
             element: guarded(<TeachingAssignmentsPage />, 'teaching-assignments'),
           },
+          { path: 'exam-papers', element: guarded(<ExamPapersPage />, 'exam-papers') },
+          { path: 'exam-papers/:id', element: guarded(<ExamPaperDetailPage />, 'exam-papers') },
 
           { path: 'vaccinations', element: guarded(<VaccinationsPage />, 'vaccinations') },
 

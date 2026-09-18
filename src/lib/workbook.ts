@@ -67,16 +67,19 @@ export const HEADER_FILL = {
  * worse outcome than one exporting without its crest.
  *
  * @param height How tall to draw it, in points — give it the heading rows.
+ * @param topRow The 1-based row the crest hangs from — the head of the sheet
+ *   unless the sheet is several letters on one worksheet, each with its own.
  */
 export async function addCrest(
   workbook: Workbook,
   worksheet: Worksheet,
   height: number,
+  topRow = 1,
 ): Promise<void> {
   try {
     const { SCHOOL_LOGO_PNG_BASE64, SCHOOL_LOGO_SIZE } = await import('./school-logo');
     worksheet.addImage(workbook.addImage({ base64: SCHOOL_LOGO_PNG_BASE64, extension: 'png' }), {
-      tl: { col: 0.15, row: 0.1 },
+      tl: { col: 0.15, row: topRow - 1 + 0.1 },
       ext: { width: (height * SCHOOL_LOGO_SIZE.width) / SCHOOL_LOGO_SIZE.height, height },
     });
   } catch {

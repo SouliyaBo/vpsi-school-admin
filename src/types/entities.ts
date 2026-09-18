@@ -10,6 +10,7 @@ import type {
   HousingType,
   LessonPlanStatus,
   TeachingObservationStatus,
+  ExamOptionLabelStyle,
   LocationType,
   MaritalStatus,
   ConsentStatus,
@@ -620,6 +621,79 @@ export interface TeachingObservation extends BaseDocument {
   status: TeachingObservationStatus;
   submittedAt?: string | null;
   acknowledgedAt?: string | null;
+}
+
+// ── Exam papers (ບົດສອບປາລະໄນ) ──────────────────────────────────────────────
+
+/** A picture from the teacher's file; `url` is minted on the detail read only. */
+export interface ExamImage {
+  key: string;
+  mimeType: string;
+  widthPt: number;
+  heightPt: number;
+  /** Points its bottom sits below the text baseline (an equation is lowered). */
+  descentPt?: number;
+  url?: string | null;
+}
+
+export interface ExamOption {
+  text: string;
+  images: ExamImage[];
+}
+
+export interface ExamQuestion {
+  /** Stable across edits and sets; the printed number is a position. */
+  key: string;
+  /** ພາກ — the part heading the question sits under. */
+  section?: string | null;
+  text: string;
+  images: ExamImage[];
+  options: ExamOption[];
+  correctIndex?: number | null;
+  /** Options stay in this order in every set (ຖືກທຸກຂໍ້ …). */
+  lockOptions: boolean;
+}
+
+/** One set: `questionOrder[printed] = original`, `optionOrders[printed][letter] = original option`. */
+export interface ExamVariant {
+  label: string;
+  questionOrder: number[];
+  optionOrders: number[][];
+}
+
+export type ExamParseWarningCode =
+  'noAnswer' | 'fewOptions' | 'optionSequence' | 'unsupportedImage' | 'noQuestions' | 'mathInvalid';
+
+export interface ExamParseWarning {
+  code: ExamParseWarningCode;
+  /** 1-based ordinal in the file, when about one question. */
+  question: number | null;
+  detail?: string | null;
+}
+
+/** The list row — the questions and sets are left out of the list read. */
+export interface ExamPaperSummary extends BaseDocument {
+  title: string;
+  createdById: Ref<User>;
+  subjectId?: Ref<Subject> | null;
+  classroomId?: Ref<Classroom> | null;
+  semesterId?: Ref<Semester> | null;
+  source?: { key: string; filename: string; sizeBytes: number } | null;
+  preamble: string;
+  questionCount: number;
+  optionLabelStyle: ExamOptionLabelStyle;
+  variantCount: number;
+  shuffleOptions: boolean;
+  seed?: number | null;
+  generatedAt?: string | null;
+  /** What the paper is out of; every question is worth the same share. */
+  totalPoints?: number | null;
+}
+
+export interface ExamPaper extends ExamPaperSummary {
+  questions: ExamQuestion[];
+  warnings: ExamParseWarning[];
+  variants: ExamVariant[];
 }
 
 // ── Accounts ────────────────────────────────────────────────────────────────

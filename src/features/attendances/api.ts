@@ -124,8 +124,11 @@ export const attendancesApi = {
 
   record: (body: RecordAttendanceInput) => post<{ recorded: number }>('/attendances', body),
 
-  studentSummary: (studentId: string, semesterId: string) =>
-    get<AttendanceSummary>(`/attendances/summary/student/${studentId}/semester/${semesterId}`),
+  /** `month` narrows to one calendar month of the term, as the class summary's does. */
+  studentSummary: (studentId: string, semesterId: string, month?: number) =>
+    get<AttendanceSummary>(`/attendances/summary/student/${studentId}/semester/${semesterId}`, {
+      params: cleanParams({ month }),
+    }),
 
   studentSubjectSummary: (studentId: string, semesterId: string) =>
     get<AttendanceSubjectSummary[]>(
@@ -171,10 +174,11 @@ export function useDailySheet(classroomId: string | undefined, date: string | un
 export function useStudentAttendanceSummary(
   studentId: string | undefined,
   semesterId: string | undefined,
+  month?: number,
 ) {
   return useQuery({
-    queryKey: ['attendances', 'summary', 'student', studentId, semesterId],
-    queryFn: () => attendancesApi.studentSummary(studentId!, semesterId!),
+    queryKey: ['attendances', 'summary', 'student', studentId, semesterId, month ?? null],
+    queryFn: () => attendancesApi.studentSummary(studentId!, semesterId!, month),
     enabled: Boolean(studentId && semesterId),
     retry: false,
   });

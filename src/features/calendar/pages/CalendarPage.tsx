@@ -31,6 +31,7 @@ import {
 import { FormDialog } from '@/components/common/FormDialog';
 import { PageHeader } from '@/components/common/PageHeader';
 import { calendarEvents, useSchoolDays, type CalendarEventInput } from '../api';
+import { DayDrawer } from '../components/DayDrawer';
 import { MonthGrid } from '../components/MonthGrid';
 import { DAY_EFFECT_TONE, eventStyle, LEGEND_TYPES } from '../legend';
 
@@ -49,6 +50,10 @@ import { DAY_EFFECT_TONE, eventStyle, LEGEND_TYPES } from '../legend';
  * checking the screen against the printed sheet, twelve months at a glance in the
  * paper's own colours. The month is for editing — the one where an event's title
  * fits inside the day.
+ *
+ * A click on a day opens the day, not a form: what it is to the school and what
+ * is filed on it, with the edit and add buttons behind that. Looking is what the
+ * office does most here, and it should not put a Save button in front of them.
  */
 
 const schema = z
@@ -101,6 +106,9 @@ export function CalendarPage() {
   const can = useCan();
   const dialogs = useCrudDialogs<CalendarEvent>();
   const [view, setView] = useState<'year' | 'month'>('year');
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  /** The day a blank form was opened from, so its range starts filled in. */
+  const [presetDate, setPresetDate] = useState<string | null>(null);
   const [cursor, setCursor] = useState(() => {
     const now = new Date();
     return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -136,6 +144,10 @@ export function CalendarPage() {
     sortOrder: 'asc',
   });
 
+  // A stable fallback: `?? new Map()` is a new object each render, which would
+  // make the summary below recount on every one of them.
+  const dayMap = days.data ?? EMPTY_DAYS;
+
   const create = calendarEvents.useCreate();
   const update = calendarEvents.useUpdate();
   const remove = calendarEvents.useDelete();
@@ -166,22 +178,43 @@ export function CalendarPage() {
             endDate: toDateInput(dialogs.record.endDate),
             isHalfDay: dialogs.record.isHalfDay ?? false,
           }
-        : EMPTY,
+        : presetDate
+          ? { ...EMPTY, startDate: presetDate, endDate: presetDate }
+          : EMPTY,
     );
-  }, [dialogs.formOpen, dialogs.record, form]);
+  }, [dialogs.formOpen, dialogs.record, presetDate, form]);
 
-  /** A click on a day: edit what is on it, or start a one-day event on it. */
-  const openDay = (date: string) => {
-    const existing = list.data?.data.find(
-      (event) => event.startDate.slice(0, 10) <= date && event.endDate.slice(0, 10) >= date,
-    );
-    if (existing) {
-      dialogs.openEdit(existing);
-      return;
+  /**
+   * The full records of the events on the selected day, most restrictive first.
+   *
+   * The classified day carries only a summary of each event; the description and
+   * the record the edit form needs are on the list, so the two are joined by id.
+   * A day the API did not classify falls back to a range match on the list.
+   */
+  const selectedEvents = useMemo(() => {
+    if (!selectedDate) return [];
+    const records = list.data?.data ?? [];
+    const day = dayMap.get(selectedDate);
+    if (day) {
+      return day.events.map(
+        (summary) => records.find((event) => event.id === summary.id) ?? (summary as CalendarEvent),
+      );
     }
-    if (!can('calendar', 'create')) return;
+    return records.filter(
+      (event) => event.startDate.slice(0, 10) <= selectedDate && event.endDate.slice(0, 10) >= selectedDate,
+    );
+  }, [selectedDate, list.data, dayMap]);
+
+  /** "Add on this day": the form, pre-filled with a one-day range. */
+  const createOnDay = (date: string) => {
+    setSelectedDate(null);
+    setPresetDate(date);
     dialogs.openCreate();
-    form.reset({ ...EMPTY, startDate: date, endDate: date });
+  };
+
+  const editFromDay = (event: CalendarEvent) => {
+    setSelectedDate(null);
+    dialogs.openEdit(event);
   };
 
   const submit = form.handleSubmit((values) => {
@@ -204,9 +237,6 @@ export function CalendarPage() {
   }, [range]);
 
   const today = key(new Date());
-  // A stable fallback: `?? new Map()` is a new object each render, which would
-  // make the summary below recount on every one of them.
-  const dayMap = days.data ?? EMPTY_DAYS;
 
   const counts = useMemo(() => {
     let teaching = 0;
@@ -239,7 +269,12 @@ export function CalendarPage() {
         description={t('calendar.pageDescription')}
         actions={
           can('calendar', 'create') && (
-            <Button onClick={() => dialogs.openCreate()}>
+            <Button
+              onClick={() => {
+                setPresetDate(null);
+                dialogs.openCreate();
+              }}
+            >
               <Plus className="size-4" />
               {t('calendar.addEvent')}
             </Button>
@@ -312,12 +347,19 @@ export function CalendarPage() {
                   days={dayMap}
                   compact
                   today={today}
-                  onSelect={openDay}
+                  selected={selectedDate}
+                  onSelect={setSelectedDate}
                 />
               ))}
             </div>
           ) : (
-            <MonthGrid month={cursor} days={dayMap} today={today} onSelect={openDay} />
+            <MonthGrid
+              month={cursor}
+              days={dayMap}
+              today={today}
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+            />
           )}
         </CardContent>
       </Card>
@@ -369,6 +411,19 @@ export function CalendarPage() {
           )}
         </CardContent>
       </Card>
+
+      <DayDrawer
+        date={selectedDate}
+        onClose={() => setSelectedDate(null)}
+        day={selectedDate ? dayMap.get(selectedDate) : undefined}
+        events={selectedEvents}
+        canCreate={can('calendar', 'create')}
+        canUpdate={can('calendar', 'update')}
+        canDelete={can('calendar', 'delete')}
+        onCreate={createOnDay}
+        onEdit={editFromDay}
+        onDelete={dialogs.askDelete}
+      />
 
       <FormDialog
         open={dialogs.formOpen}
@@ -431,7 +486,14 @@ export function CalendarPage() {
         isPending={remove.isPending}
         onConfirm={() =>
           dialogs.deleteTarget &&
-          remove.mutate(dialogs.deleteTarget.id, { onSuccess: () => dialogs.cancelDelete() })
+          remove.mutate(dialogs.deleteTarget.id, {
+            onSuccess: () => {
+              dialogs.cancelDelete();
+              // Deleting the only event on the open day leaves the drawer with
+              // nothing to show; the grid is the better place to land.
+              if (selectedEvents.length <= 1) setSelectedDate(null);
+            },
+          })
         }
       />
     </div>

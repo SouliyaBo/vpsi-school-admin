@@ -1,4 +1,4 @@
-import { File as FileIcon, Upload, X } from 'lucide-react';
+import { File as FileIcon, ImagePlus, Upload, X } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatBytes } from '@/lib/utils';
@@ -17,6 +17,13 @@ interface FileUploadProps {
   disabled?: boolean;
   className?: string;
   onUploaded?: () => void;
+  /**
+   * One row instead of the drop zone: a button that opens the picker, then the
+   * chosen file's name with ອັບໂຫຼດ / ລຶບ beside it. For a phone, where there is
+   * nothing to drag from and the zone only repeats a picture already on the
+   * page; the caller decides, since it knows what else is on the page.
+   */
+  compact?: boolean;
 }
 
 const DEFAULT_MAX = 5 * 1024 * 1024;
@@ -38,6 +45,7 @@ export function FileUpload({
   disabled = false,
   className,
   onUploaded,
+  compact = false,
 }: FileUploadProps) {
   const { t } = useTranslation();
   const inputId = useId();
@@ -107,6 +115,64 @@ export function FileUpload({
   const shownImage = previewUrl ?? currentUrl;
   const isUploading = progress !== null;
 
+  const input = (
+    <input
+      ref={inputRef}
+      id={inputId}
+      type="file"
+      accept={accept}
+      className="sr-only"
+      disabled={disabled}
+      onChange={(event) => select(event.target.files?.[0])}
+    />
+  );
+
+  if (compact) {
+    return (
+      <div className={cn('space-y-1.5', className)}>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* The button is the label, so a tap on it opens the picker. */}
+          <Button type="button" variant="outline" size="sm" disabled={disabled} asChild>
+            <label htmlFor={inputId} className="cursor-pointer">
+              {isImage ? <ImagePlus /> : <FileIcon />}
+              {label ?? t('file.choose')}
+            </label>
+          </Button>
+          {input}
+
+          {file && !isUploading && (
+            <>
+              <span className="min-w-0 truncate text-xs text-muted-foreground">
+                {file.name} · {formatBytes(file.size)}
+              </span>
+              <Button type="button" size="sm" onClick={submit}>
+                <Upload />
+                {t('common.upload')}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={reset}
+                aria-label={t('common.remove')}
+              >
+                <X />
+              </Button>
+            </>
+          )}
+
+          {isUploading && (
+            <div className="flex min-w-40 flex-1 items-center gap-2">
+              <Progress value={progress} className="flex-1" />
+              <span className="text-xs tabular-nums text-muted-foreground">{progress}%</span>
+            </div>
+          )}
+        </div>
+        {localError && <p className="text-xs font-medium text-danger">{localError}</p>}
+      </div>
+    );
+  }
+
   return (
     <div className={cn('space-y-2', className)}>
       {label && <p className="text-sm font-medium">{label}</p>}
@@ -148,18 +214,12 @@ export function FileUpload({
           className="cursor-pointer text-center text-sm text-muted-foreground hover:text-foreground"
         >
           {t('file.dropHint')}
-          <span className="mt-0.5 block text-xs">{t('file.maxSize', { size: formatBytes(maxSizeBytes) })}</span>
+          <span className="mt-0.5 block text-xs">
+            {t('file.maxSize', { size: formatBytes(maxSizeBytes) })}
+          </span>
         </label>
 
-        <input
-          ref={inputRef}
-          id={inputId}
-          type="file"
-          accept={accept}
-          className="sr-only"
-          disabled={disabled}
-          onChange={(event) => select(event.target.files?.[0])}
-        />
+        {input}
 
         {file && !isUploading && (
           <div className="flex items-center gap-2">

@@ -37,6 +37,11 @@ import {
   classMonthFileName,
   type StudentRegisterExtras,
 } from '../lib/class-month-workbook';
+import {
+  ParentReportBatchButton,
+  ParentReportRowButton,
+  useRemarkStore,
+} from './ParentReportButtons';
 import { Mark } from './SemesterSheet';
 import { SheetPickers, type SheetTargetState } from './SheetPickers';
 
@@ -70,6 +75,8 @@ export function ClassMonthSheet() {
     month,
   });
   const data = sheet.data;
+  const { remarks, setRemark } = useRemarkStore(data);
+  const schoolYear = activeYear.data?.code ?? localizedName(activeYear.data, i18n.language);
 
   // A term that does not collect the current month — the school breaks for exams
   // in ທັນວາ and ມັງກອນ — lands on its last month rather than on an empty table.
@@ -116,10 +123,14 @@ export function ClassMonthSheet() {
               <div className="ms-auto flex items-end gap-2">
                 <ExportButton
                   sheet={data}
-                  schoolYear={
-                    activeYear.data?.code ?? localizedName(activeYear.data, i18n.language)
-                  }
+                  schoolYear={schoolYear}
                   schoolYearId={activeYear.data?.id}
+                />
+                <ParentReportBatchButton
+                  sheet={data}
+                  schoolYear={schoolYear}
+                  remarks={remarks}
+                  setRemark={setRemark}
                 />
                 <Button
                   variant="outline"
@@ -171,6 +182,9 @@ export function ClassMonthSheet() {
                       <TableHead className="w-20 text-center">{t('monthlyMark.average')}</TableHead>
                       <TableHead className="w-16 text-center">{t('monthlyMark.grade')}</TableHead>
                       <TableHead className="w-16 text-center">{t('monthlyMark.outcome')}</TableHead>
+                      <TableHead className="w-12 print:hidden">
+                        <span className="sr-only">{t('monthlyMark.parentReport')}</span>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -217,6 +231,15 @@ export function ClassMonthSheet() {
                         </TableCell>
                         <TableCell className="text-center">
                           <Outcome row={row} subjects={data.subjects.length} />
+                        </TableCell>
+                        <TableCell className="print:hidden">
+                          <ParentReportRowButton
+                            sheet={data}
+                            row={row}
+                            schoolYear={schoolYear}
+                            remarks={remarks}
+                            setRemark={setRemark}
+                          />
                         </TableCell>
                       </TableRow>
                     ))}

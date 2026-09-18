@@ -105,7 +105,10 @@ export function StudyCertificateDialog({ student, onClose }: Props) {
         // The number is spent and unrepeatable, and the office writes it into
         // its own book — so it is said out loud rather than left in a filename.
         if (certificateNumber) {
-          notify.success(t('certificate.issued'), `${t('certificate.number')} ${certificateNumber}`);
+          notify.success(
+            t('certificate.issued'),
+            `${t('certificate.number')} ${certificateNumber}`,
+          );
         }
         onClose();
       },

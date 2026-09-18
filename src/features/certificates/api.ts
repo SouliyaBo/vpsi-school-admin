@@ -87,6 +87,74 @@ export function useIssueStudyCertificate() {
   });
 }
 
+// ── ບົດບັນທຶກ ຂໍໂຈະການຮຽນ ────────────────────────────────────────────────────
+
+/** The editable body of a suspension memo. */
+export interface StudySuspensionFields {
+  guardianNameLo?: string;
+  guardianPhone?: string;
+  villageLo?: string;
+  districtLo?: string;
+  provinceLo?: string;
+  classLabelLo?: string;
+  schoolYearCode?: string;
+  /** `YYYY-MM-DD`; blank means "from the issue date". */
+  suspendedFrom?: string;
+}
+
+export type StudySuspensionField = keyof StudySuspensionFields;
+
+export interface StudySuspensionPrefill extends StudySuspensionFields {
+  studentId: string;
+  studentCode: string;
+  titleLo: string;
+  fullNameLo: string;
+  missing: StudySuspensionField[];
+}
+
+export interface StudySuspensionInput extends StudySuspensionFields {
+  studentId: string;
+  issuedDate?: string;
+  /** Printed as given; empty leaves ruled lines to fill by hand. */
+  reasonLo?: string;
+  /** One per line; empty leaves ruled lines. */
+  documentsLo?: string[];
+}
+
+export function useStudySuspensionPrefill(studentId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['certificates', 'study-suspension', 'prefill', studentId],
+    queryFn: () =>
+      get<StudySuspensionPrefill>(`/certificates/study-suspension/prefill/${studentId}`),
+    enabled: Boolean(studentId) && enabled,
+    staleTime: 0,
+  });
+}
+
+export function usePreviewStudySuspension() {
+  return useMutation({
+    mutationFn: (input: StudySuspensionInput) =>
+      post<Blob>('/certificates/study-suspension/preview', input, { responseType: 'blob' }),
+    onSuccess: (blob) => saveBlob(blob, 'study-suspension-draft.pdf'),
+  });
+}
+
+/** Same shape as `useIssueStudyCertificate` — the number rides on a header. */
+export function useIssueStudySuspension() {
+  return useMutation({
+    mutationFn: async (input: StudySuspensionInput) => {
+      const response = await apiClient.post<Blob>('/certificates/study-suspension', input, {
+        responseType: 'blob',
+      });
+      const header = response.headers['x-certificate-number'];
+      const certificateNumber = typeof header === 'string' ? decodeURIComponent(header) : null;
+      return { blob: response.data, certificateNumber };
+    },
+    onSuccess: ({ blob, certificateNumber }) =>
+      saveBlob(blob, `${(certificateNumber ?? 'memo').replace(/[^\p{L}\p{N}]+/gu, '-')}.pdf`),
+  });
+}
+
 /** Re-downloads an already-issued certificate. */
 export function useDownloadCertificate() {
   return useMutation({
