@@ -1825,6 +1825,7 @@ export const en: typeof lo = {
     dateOfBirth: 'Date of birth',
     age: 'Age',
     ageYears: '{{age}} years',
+    ageUnder: 'Under {{age}}',
     nationalId: 'National ID',
     phone: 'Phone',
     email: 'Email',

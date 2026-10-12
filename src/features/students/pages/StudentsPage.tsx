@@ -47,6 +47,10 @@ const UNASSIGNED_ENGLISH_CLASS = '__unassigned__';
 /** The ages offered in the filter — ມ.1 to the oldest ມ.7 student, with room to spare. */
 const AGE_OPTIONS = Array.from({ length: 10 }, (_, index) => 11 + index);
 
+/** The "younger than" choice at the top of the age filter, below the youngest age offered. */
+const YOUNGEST_AGE = AGE_OPTIONS[0];
+const UNDER_YOUNGEST_AGE = '__under__';
+
 export function StudentsPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -61,6 +65,7 @@ export function StudentsPage() {
       'status',
       'gender',
       'age',
+      'ageUnder',
       'gradeLevelId',
       'classroomId',
       'villageId',
@@ -101,9 +106,11 @@ export function StudentsPage() {
       : undefined;
 
   /** The age the list is narrowed to, for the exported file's subtitle. */
-  const ageLabel = table.filters.age
-    ? `${t('person.age')} ${t('person.ageYears', { age: table.filters.age })}`
-    : undefined;
+  const ageLabel = table.filters.ageUnder
+    ? `${t('person.age')} ${t('person.ageUnder', { age: table.filters.ageUnder })}`
+    : table.filters.age
+      ? `${t('person.age')} ${t('person.ageYears', { age: table.filters.age })}`
+      : undefined;
 
   const columns = useMemo<ColumnDef<Student, unknown>[]>(
     () => [
@@ -369,15 +376,29 @@ export function StudentsPage() {
               options={GENDERS.map((gender) => ({ value: gender, label: t(`gender.${gender}`) }))}
               placeholder={t('person.gender')}
             />
-            {/* From 11: the school's youngest intake is ມ.1, so nothing below
-                it is ever a real answer. */}
+            {/* Two filter keys behind one control, like the English room: an
+                exact age sets `age`, "under 11" sets `ageUnder`. One patch, so
+                neither is left over from the other. */}
             <FilterSelect
-              value={table.filters.age}
-              onChange={(value) => table.setFilter('age', value)}
-              options={AGE_OPTIONS.map((age) => ({
-                value: String(age),
-                label: t('person.ageYears', { age }),
-              }))}
+              value={table.filters.ageUnder ? UNDER_YOUNGEST_AGE : table.filters.age}
+              onChange={(value) =>
+                table.patch({
+                  filters: {
+                    age: value === UNDER_YOUNGEST_AGE ? '' : (value ?? ''),
+                    ageUnder: value === UNDER_YOUNGEST_AGE ? String(YOUNGEST_AGE) : '',
+                  },
+                })
+              }
+              options={[
+                {
+                  value: UNDER_YOUNGEST_AGE,
+                  label: t('person.ageUnder', { age: YOUNGEST_AGE }),
+                },
+                ...AGE_OPTIONS.map((age) => ({
+                  value: String(age),
+                  label: t('person.ageYears', { age }),
+                })),
+              ]}
               placeholder={t('person.age')}
             />
             <FilterSelect

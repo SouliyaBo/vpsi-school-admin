@@ -1785,6 +1785,7 @@ export const lo = {
     dateOfBirth: 'ວັນເດືອນປີເກີດ',
     age: 'ອາຍຸ',
     ageYears: '{{age}} ປີ',
+    ageUnder: 'ຕ່ຳກວ່າ {{age}} ປີ',
     nationalId: 'ເລກບັດປະຈຳຕົວ',
     phone: 'ເບີໂທ',
     email: 'ອີເມວ',

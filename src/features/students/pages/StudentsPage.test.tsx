@@ -485,6 +485,21 @@ describe('StudentsPage — the status filter', () => {
 
     await waitFor(() => expect(lastListParams()).toMatchObject({ age: '11' }));
   });
+
+  it('offers "under 11", which replaces an exact age rather than adding to it', async () => {
+    renderWithProviders(<StudentsPage />);
+    await screen.findByText('ສົມຈິດ ວົງສາ');
+
+    await userEvent.click(statusFilter('Age: All'));
+    await userEvent.click(await screen.findByRole('option', { name: '12 years' }));
+    await waitFor(() => expect(lastListParams()).toMatchObject({ age: '12' }));
+
+    await userEvent.click(statusFilter('12 years'));
+    await userEvent.click(await screen.findByRole('option', { name: 'Under 11' }));
+
+    await waitFor(() => expect(lastListParams()).toMatchObject({ ageUnder: '11' }));
+    expect(lastListParams()).not.toHaveProperty('age');
+  });
 });
 
 describe('StudentsPage — editing', () => {
