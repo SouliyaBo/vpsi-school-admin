@@ -106,6 +106,7 @@ export const RESOURCE_GROUPS: ResourceGroup[] = [
       'certificates',
       'reports',
       'vaccinations',
+      'library',
     ],
   },
   {

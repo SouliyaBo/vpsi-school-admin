@@ -378,6 +378,7 @@ export const PERMISSION_RESOURCES = [
   'audit-logs',
   'settings',
   'vaccinations',
+  'library',
 ] as const;
 export type PermissionResource = (typeof PERMISSION_RESOURCES)[number];
 

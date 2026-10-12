@@ -25,6 +25,7 @@ import {
   ShieldCheck,
   Shuffle,
   Syringe,
+  Library,
   Telescope,
   UserCheck,
   UserCog,
@@ -164,6 +165,7 @@ export const NAV_GROUPS: NavGroup[] = [
         comingSoon: true,
       },
       { labelKey: 'vaccinations', to: '/vaccinations', icon: Syringe, resource: 'vaccinations' },
+      { labelKey: 'library', to: '/library', icon: Library, resource: 'library' },
     ],
   },
   {
