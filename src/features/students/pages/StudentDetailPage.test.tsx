@@ -25,10 +25,25 @@ vi.mock('react-router-dom', async (importOriginal) => {
 });
 
 const student = {
-  id: '507f1f77bcf86cd799439011', studentCode: 'S-0001', firstNameLo: 'ສົມຈິດ', lastNameLo: 'ວົງສາ',
-  gender: 'male', dateOfBirth: '2010-05-02T00:00:00.000Z', status: 'active',
+  id: '507f1f77bcf86cd799439011',
+  studentCode: 'S-0001',
+  firstNameLo: 'ສົມຈິດ',
+  lastNameLo: 'ວົງສາ',
+  gender: 'male',
+  dateOfBirth: '2010-05-02T00:00:00.000Z',
+  status: 'active',
   villageId: { id: 'v1', nameLo: 'ບ້ານດົງ' },
-  guardians: [{ guardianId: 'g1', fullNameLo: 'ບຸນມີ', phone: '2055512345', relationship: 'father', isPrimary: true, isEmergencyContact: true, canViewRecords: true }],
+  guardians: [
+    {
+      guardianId: 'g1',
+      fullNameLo: 'ບຸນມີ',
+      phone: '2055512345',
+      relationship: 'father',
+      isPrimary: true,
+      isEmergencyContact: true,
+      canViewRecords: true,
+    },
+  ],
 };
 
 /** The student's current placement, as `/enrollments/student/:id` returns it. */
@@ -47,20 +62,39 @@ const enrollment = {
 
 /** A brother in another class, linked through the same father. */
 const sibling = {
-  id: '507f1f77bcf86cd799439021', studentCode: 'S-0002', firstNameLo: 'ສົມສັກ', lastNameLo: 'ວົງສາ',
-  nickname: 'ໂຕ້', gender: 'male', dateOfBirth: '2008-01-09T00:00:00.000Z', status: 'active',
+  id: '507f1f77bcf86cd799439021',
+  studentCode: 'S-0002',
+  firstNameLo: 'ສົມສັກ',
+  lastNameLo: 'ວົງສາ',
+  nickname: 'ໂຕ້',
+  gender: 'male',
+  dateOfBirth: '2008-01-09T00:00:00.000Z',
+  status: 'active',
   guardians: [],
   currentEnrollment: { classroomName: 'B', gradeLevelCode: 'm6' },
   sharedGuardians: [{ guardianId: 'g1', fullNameLo: 'ບຸນມີ', relationship: 'father' }],
 };
 
-const activeYear = { id: '507f1f77bcf86cd799439001', code: '2025-2026', nameLo: '2025-2026', isActive: true };
+const activeYear = {
+  id: '507f1f77bcf86cd799439001',
+  code: '2025-2026',
+  nameLo: '2025-2026',
+  isActive: true,
+};
 
 /**
  * The room the student is in, and the one the transfer test moves them to.
  * Real ObjectId-shaped ids: the picker validates the format before submitting.
  */
-const roomA = { id: '507f1f77bcf86cd799439041', name: 'A', capacity: 45, currentCount: 40, gradeLevelId: { id: 'g1', code: 'm1' }, schoolYearId: activeYear.id, isActive: true };
+const roomA = {
+  id: '507f1f77bcf86cd799439041',
+  name: 'A',
+  capacity: 45,
+  currentCount: 40,
+  gradeLevelId: { id: 'g1', code: 'm1' },
+  schoolYearId: activeYear.id,
+  isActive: true,
+};
 const roomB = { ...roomA, id: '507f1f77bcf86cd799439042', name: 'B', currentCount: 12 };
 
 /** Swapped per test: the placement tests want a placed student, the rest do not. */
@@ -120,7 +154,9 @@ it('lists siblings under the guardians tab, with the link that makes them siblin
  */
 it('transfers a placed student to another class from their own page', async () => {
   enrollments = [enrollment];
-  const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue({ ...enrollment, status: 'transferred' });
+  const patch = vi
+    .spyOn(apiClient, 'patch')
+    .mockResolvedValue({ ...enrollment, status: 'transferred' });
 
   renderWithProviders(<StudentDetailPage />);
   await screen.findAllByText('S-0001');

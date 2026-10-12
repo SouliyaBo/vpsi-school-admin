@@ -64,6 +64,27 @@ export type UpdateObservationInput = Partial<
   >
 >;
 
+/**
+ * The head of a sheet, as far as it decides which run of visits it belongs to.
+ *
+ * No classroom: the count is per observer, teacher and subject, so the room the
+ * lesson happens in does not change the answer.
+ *
+ * A type rather than an interface so it satisfies `cleanParams`, which asks for
+ * an index signature an interface does not have.
+ */
+export type NextVisitParams = {
+  teacherId: string;
+  observerId?: string;
+  subjectId: string;
+  semesterId?: string;
+};
+
+export interface NextVisitNumber {
+  visitNumber: number;
+  semesterId: string;
+}
+
 export interface ObservationListParams extends ListParams {
   teacherId?: string;
   observerId?: string;
@@ -114,6 +135,9 @@ export const observationsApi = {
   summary: (params: { semesterId?: string; subjectGroupId?: string } = {}) =>
     get<ObservationSummary>(`${PATH}/summary`, { params: cleanParams(params) }),
 
+  nextVisit: (params: NextVisitParams) =>
+    get<NextVisitNumber>(`${PATH}/next-visit`, { params: cleanParams(params) }),
+
   submit: (id: string) => post<TeachingObservation>(`${PATH}/${id}/submit`),
 
   acknowledge: (id: string) => post<TeachingObservation>(`${PATH}/${id}/acknowledge`),
@@ -163,6 +187,29 @@ export function useObservationSummary(params: { semesterId?: string; subjectGrou
     queryKey: [KEY, 'summary', params],
     queryFn: () => observationsApi.summary(params),
     placeholderData: (previous) => previous,
+    retry: false,
+  });
+}
+
+/**
+ * ປະເມີນຄັ້ງທີ the form should offer, once the head of the sheet names a lesson.
+ *
+ * The API derives the number anyway when the field is left blank; this is so the
+ * observer can see it while they fill the form in. The field stays typeable for
+ * the case the paper sheet already carries a number, and a blind field is how
+ * two observers ended up both typing 1 and one of them being refused.
+ *
+ * `enabled` on the three ids because the question is meaningless until the
+ * lesson is named, and `retry: false` because a 404 here is the ordinary
+ * between-terms state rather than a transient failure.
+ */
+export function useNextVisitNumber(params: Partial<NextVisitParams>) {
+  const ready = Boolean(params.teacherId && params.observerId && params.subjectId);
+
+  return useQuery({
+    queryKey: [KEY, 'next-visit', params],
+    queryFn: () => observationsApi.nextVisit(params as NextVisitParams),
+    enabled: ready,
     retry: false,
   });
 }

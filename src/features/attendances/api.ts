@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post } from '@/lib/api-client';
 import type { ListParams } from '@/lib/crud';
 import { cleanParams } from '@/lib/utils';
-import type { PaginatedResponse } from '@/types/common';
+import { MAX_PAGE_SIZE, type PaginatedResponse } from '@/types/common';
 import type { Attendance, Subject, Teacher } from '@/types/entities';
 import type { AttendanceStatus } from '@/types/enums';
 
@@ -24,6 +24,8 @@ export interface AttendanceListParams extends ListParams {
   teacherId?: string;
   teachingAssignmentId?: string;
   status?: AttendanceStatus;
+  /** Everything but `present` — the rows behind a summary's counts. `status` wins over it. */
+  notPresent?: boolean;
   /** Inclusive `yyyy-MM-dd` bounds. */
   from?: string;
   to?: string;
@@ -53,6 +55,11 @@ export interface DailySheetLesson {
   room: string | null;
   subject: Subject | null;
   teacher: Teacher | null;
+  /**
+   * ຄູສອນແທນ — who is answerable for this lesson today, when it is not the teacher
+   * beside it. `null` on an ordinary lesson.
+   */
+  substituteTeacher: { teacherId: string; teacherCode: string | null; teacherName: string } | null;
   entries: DailySheetEntry[];
 }
 
@@ -88,17 +95,72 @@ export interface RecordAttendanceInput {
   entries: AttendanceEntryInput[];
 }
 
-/** `GET /attendances/summary/...` — counts per status over one semester. */
+/**
+ * What narrows a summary below the whole term.
+ *
+ * `month` is the mark sheet's window; `from`/`to` (inclusive `yyyy-MM-dd`) are
+ * for a stretch that is not a calendar month, and `subjectId` for one subject's
+ * lessons. The API intersects whatever is given.
+ */
+export interface AttendanceSummaryScope {
+  month?: number;
+  from?: string;
+  to?: string;
+  subjectId?: string;
+}
+
+/**
+ * `GET /attendances/summary/...` — counts per status over one semester, and
+ * ວັນຂາດ as the office reads them.
+ *
+ * The raw counts are what the roll says; the `absent*` figures are the school's
+ * rule applied to them, on the API so every sheet prints the same numbers:
+ * excused and sick are one column, and every `latesPerAbsence` late arrivals
+ * are a day absent without a reason.
+ */
 export interface AttendanceSummary {
   studentId: string;
   present: number;
+  /** Marked absent outright. */
   absent: number;
+  /** Every late arrival, before any became an absence. */
   late: number;
   excused: number;
   sick: number;
   totalRecorded: number;
-  /** Present + late + excused + sick, over total recorded. */
+  /** Absences made of late arrivals: one per `latesPerAbsence`. */
+  lateAsAbsent: number;
+  /** Lates left over once those absences are taken out — what still reads as late. */
+  lateRemainder: number;
+  /** ຂາດບໍ່ມີເຫດຜົນ: `absent` + `lateAsAbsent`. */
+  absentUnexcused: number;
+  /** ຂາດມີເຫດຜົນ: `excused` + `sick`. */
+  absentExcused: number;
+  /** Both kinds together. */
+  absentTotal: number;
+  /** The rule the figures were counted under. */
+  latesPerAbsence: number;
+  /** Present + late + excused + sick, less the lates that became absences, over total recorded. */
   attendanceRate: number;
+}
+
+/**
+ * `GET /attendances/summary/semester/:id/absences` — one student over the
+ * office's threshold, named, with the room they were most recently marked in.
+ */
+export interface AttendanceAbsenceRow extends AttendanceSummary {
+  studentCode: string | null;
+  studentNameLo: string | null;
+  studentNickname: string | null;
+  classroomId: string | null;
+  classroomName: string | null;
+  gradeLevelCode: string | null;
+}
+
+/** The threshold, the window, and optionally one room. */
+export interface SemesterAbsencesParams extends AttendanceSummaryScope {
+  minAbsentDays: number;
+  classroomId?: string;
 }
 
 /**
@@ -136,16 +198,31 @@ export const attendancesApi = {
     ),
 
   /**
-   * `month` narrows the counts to one calendar month of the term, which is what
-   * the monthly mark sheet's ວັນຂາດ column is counted over. Students with
-   * nothing recorded are not listed, so a caller holding the roll reads a
-   * missing student as a clean one.
+   * A bare month narrows the counts to one calendar month of the term, which is
+   * what the monthly mark sheet's ວັນຂາດ column is counted over; a scope can
+   * also bound the dates or pick one subject. Students with nothing recorded are
+   * not listed, so a caller holding the roll reads a missing student as a clean
+   * one.
    */
-  classroomSummary: (classroomId: string, semesterId: string, month?: number) =>
+  classroomSummary: (
+    classroomId: string,
+    semesterId: string,
+    scope: number | AttendanceSummaryScope = {},
+  ) =>
     get<AttendanceSummary[]>(
       `/attendances/summary/classroom/${classroomId}/semester/${semesterId}`,
-      { params: cleanParams({ month }) },
+      { params: cleanParams(typeof scope === 'number' ? { month: scope } : { ...scope }) },
     ),
+
+  /**
+   * Who has reached `minAbsentDays` of ວັນຂາດ, across every room of the term
+   * unless `classroomId` narrows it. Worst first. The office's own lines are
+   * 15 and 30 days.
+   */
+  semesterAbsences: (semesterId: string, params: SemesterAbsencesParams) =>
+    get<AttendanceAbsenceRow[]>(`/attendances/summary/semester/${semesterId}/absences`, {
+      params: cleanParams({ ...params }),
+    }),
 };
 
 export function useAttendances(params: AttendanceListParams) {
@@ -153,6 +230,38 @@ export function useAttendances(params: AttendanceListParams) {
     queryKey: ['attendances', 'list', params],
     queryFn: () => attendancesApi.list(params),
     placeholderData: (previous) => previous,
+  });
+}
+
+/**
+ * The lessons behind one student's summary row — every record that is not a
+ * plain `present`, newest first, with subject and teacher joined by the API.
+ *
+ * One page of the largest size the API allows: a student who is not present a
+ * hundred times in one term is a different conversation, and the row says how
+ * many more there are. Fetched only once the row is opened, so a class of forty
+ * does not fire forty requests on load.
+ */
+export function useStudentAbsences(
+  studentId: string | undefined,
+  semesterId: string | undefined,
+  classroomId: string | undefined,
+  /** The same window and subject the summary row was counted over. */
+  scope: Pick<AttendanceSummaryScope, 'from' | 'to' | 'subjectId'>,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['attendances', 'absences', studentId, semesterId, classroomId, scope],
+    queryFn: () =>
+      attendancesApi.list({
+        studentId,
+        semesterId,
+        classroomId,
+        ...scope,
+        notPresent: true,
+        limit: MAX_PAGE_SIZE,
+      }),
+    enabled: enabled && Boolean(studentId && semesterId),
   });
 }
 
@@ -199,11 +308,25 @@ export function useStudentSubjectAttendanceSummary(
 export function useClassroomAttendanceSummary(
   classroomId: string | undefined,
   semesterId: string | undefined,
+  scope: AttendanceSummaryScope = {},
 ) {
   return useQuery({
-    queryKey: ['attendances', 'summary', 'classroom', classroomId, semesterId],
-    queryFn: () => attendancesApi.classroomSummary(classroomId!, semesterId!),
+    queryKey: ['attendances', 'summary', 'classroom', classroomId, semesterId, scope],
+    queryFn: () => attendancesApi.classroomSummary(classroomId!, semesterId!, scope),
     enabled: Boolean(classroomId && semesterId),
+    retry: false,
+  });
+}
+
+export function useSemesterAbsences(
+  semesterId: string | undefined,
+  params: SemesterAbsencesParams,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['attendances', 'summary', 'semester-absences', semesterId, params],
+    queryFn: () => attendancesApi.semesterAbsences(semesterId!, params),
+    enabled: enabled && Boolean(semesterId),
     retry: false,
   });
 }

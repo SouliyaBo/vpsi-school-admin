@@ -7,6 +7,7 @@ import {
   MapPin,
   Save,
   User,
+  UserCheck,
   Users,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -49,6 +50,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { EntitySelect } from '@/components/common/EntitySelect';
 import { ErrorState } from '@/components/common/ErrorState';
 import type { SelectOption } from '@/components/common/fields';
+import { ClaimCoverPanel } from '@/features/lesson-substitutions/components/ClaimCoverPanel';
 import {
   useDailySheet,
   useRecordAttendance,
@@ -313,6 +315,15 @@ export function RollCallSheet() {
   }));
 
   const canRecord = can('attendances', 'create');
+  /**
+   * Whether cover is a thing this account can even be told about.
+   *
+   * A registrar reads the roll and holds no grant on cover, and asking the server
+   * about every lesson they click through would be a 403 apiece. The panel itself
+   * stays silent for anyone who already holds the lesson, which is almost everyone
+   * who opens this screen.
+   */
+  const seesCover = can('lesson-substitutions', 'read');
 
   return (
     <div className="space-y-3">
@@ -379,6 +390,18 @@ export function RollCallSheet() {
           ) : (
             <div className="space-y-3">
               {lesson && <LessonHeader lesson={lesson} />}
+
+              {/* The way through the refusal, offered at the point the screen
+                  would otherwise just fail the save: a teacher standing in for an
+                  absent colleague claims the lesson and carries on. Renders
+                  nothing when the lesson is already theirs. */}
+              {canRecord && (
+                <ClaimCoverPanel
+                  teachingAssignmentId={teachingAssignmentId}
+                  date={date}
+                  enabled={seesCover}
+                />
+              )}
 
               <div className="scrollbar-thin overflow-x-auto">
                 <Table>
@@ -506,6 +529,15 @@ function LessonHeader({ lesson }: { lesson: DailySheetLesson }) {
         <User className="size-3.5 shrink-0" />
         {lesson.teacher ? fullName(lesson.teacher, i18n.language) : '—'}
       </span>
+      {/* Who actually took it, when that is not the name above. On screen and on
+          the printed sheet, because a register signed off by somebody who was not
+          in the building is the first thing the office asks about. */}
+      {lesson.substituteTeacher && (
+        <Badge variant="secondary" className="gap-1.5">
+          <UserCheck className="size-3.5 shrink-0" />
+          {t('cover.substituteTeacher')}: {lesson.substituteTeacher.teacherName}
+        </Badge>
+      )}
       {lesson.room && (
         <span className="flex items-center gap-1.5 text-muted-foreground">
           <MapPin className="size-3.5 shrink-0" />

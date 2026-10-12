@@ -25,6 +25,7 @@ import { DetailRow, DetailSection } from '@/components/common/DetailDrawer';
 import { FieldSection, SelectField, TextField } from '@/components/common/fields';
 import { FileUpload } from '@/components/common/FileUpload';
 import { PageHeader } from '@/components/common/PageHeader';
+import { TelegramCard } from '@/features/telegram/components/TelegramCard';
 
 const schema = z.object({
   email: optionalEmail(),
@@ -158,6 +159,10 @@ export function ProfilePage() {
         </Card>
 
         <div className="space-y-4">
+          {/* Above the password card: linking is the one thing on this page a
+              teacher is likely to have come here to do. */}
+          <TelegramCard />
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">{t('auth.changePassword')}</CardTitle>

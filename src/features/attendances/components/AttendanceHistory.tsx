@@ -124,9 +124,19 @@ export function AttendanceHistory() {
           const teacherName = teacher ? fullName(teacher, i18n.language) : '—';
           const filedByOther = recordedBy && recordedBy.personId !== refId(row.original.teacherId);
 
+          const substitute = refObject<Teacher>(row.original.substituteTeacherId);
+
           return (
             <div className="leading-tight">
               <p>{teacherName}</p>
+              {/* Ahead of "filed by", because it answers a different question: not
+                  who typed it, but who taught it. This is what the log is opened
+                  for when a row looks odd. */}
+              {substitute && (
+                <p className="text-xs text-muted-foreground">
+                  {t('cover.substituteTeacher')}: {fullName(substitute, i18n.language)}
+                </p>
+              )}
               {filedByOther && (
                 <p className="text-xs text-muted-foreground">
                   {t('attendance.recordedByName', { username: recordedBy.username })}

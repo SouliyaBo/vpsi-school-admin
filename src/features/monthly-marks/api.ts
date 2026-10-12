@@ -28,6 +28,11 @@ export interface StrandCell {
   cells: MonthCells;
   /** ລວມ, out of 10. */
   total: number | null;
+  /**
+   * ເຫດຜົນ — what the teacher wrote beside the marks, and what the letter home
+   * prints under the subject. Absent from an older API.
+   */
+  remark?: string | null;
   isLocked: boolean;
 }
 
@@ -78,6 +83,14 @@ export interface MonthGrid {
   months: number[];
   month: number;
   columnMax: Record<MarkColumn, number>;
+  /**
+   * The columns this subject is actually marked on.
+   *
+   * ພູມສາດ, ສຶກສາພົນລະເມືອງ and ປະຫວັດສາດ keep no ປື້ມ at ມ.1–ມ.3, ມ.5 and ມ.6,
+   * so the form drops the cell rather than offering one the save refuses. Absent
+   * from an older API, which marks every subject on all four.
+   */
+  columns?: MarkColumn[];
   canEdit: boolean;
   rows: MonthGridRow[];
 }
@@ -158,6 +171,12 @@ export interface ClassMonthRow extends StudentIdentity {
   scores: (number | null)[];
   /** ກວດກາ alone, out of 6, per subject — the parent report's own line. */
   testScores: (number | null)[];
+  /**
+   * ເຫດຜົນ per subject, as the teacher wrote it on the entry form — what the
+   * letter home prints under each subject. Absent from an older API, which kept
+   * no remark at all and left the office to type one at every export.
+   */
+  remarks?: (string | null)[];
   /** The letter for each subject's ລວມ, banded by the API like the average's. */
   subjectGrades: (Grade | null)[];
   /** ລວມ — the marks as written, before they are divided. */
@@ -290,7 +309,7 @@ export interface SheetTarget extends Record<string, unknown> {
 export interface SaveMonthGridInput extends SheetTarget {
   month: number;
   strand?: string;
-  entries: ({ studentId: string } & Partial<MonthCells>)[];
+  entries: ({ studentId: string; remark?: string | null } & Partial<MonthCells>)[];
   overrideReason?: string;
 }
 
@@ -432,4 +451,32 @@ export function localTotal(cells: MonthCells): number | null {
   const written = MARK_COLUMNS.filter((column) => cells[column] !== null);
   if (written.length === 0) return null;
   return Math.round(written.reduce((sum, column) => sum + (cells[column] ?? 0), 0) * 100) / 100;
+}
+
+/**
+ * ລວມ as the sheet is read out — a whole mark, not the arithmetic one.
+ *
+ * The office writes a month's total as a whole number: 5.5 goes up to 6, 5.4
+ * down to 5. This rounds on the way to the screen only. `localTotal` and every
+ * figure the API derives from it — ສະເລ່ຍ, 3 ເດືອນ, ພາກຮຽນ, ໝົດປີ — keep their
+ * decimals, because rounding on the way *in* is what once cost a student the
+ * pass mark; the note at the top of the API's `monthly-grading.ts` has the case.
+ */
+export function displayTotal(total: number | null): number | null {
+  return total === null ? null : Math.round(total);
+}
+
+/**
+ * ລວມ across a month's subjects, as the sheet adds it up.
+ *
+ * The subject columns print as whole marks, so this adds the whole marks rather
+ * than rounding their exact sum: a row printing 10 + 9 + 9 + 9 has to come to
+ * 37, not the 36.00 its decimals made. ສະເລ່ຍ stays the API's, worked out from
+ * the exact figures — which is why it is not always this divided by the number
+ * of subjects, and why ເກຣດ, ລຳດັບ and ຜ່ານ/ຕົກ do not move.
+ */
+export function displaySubjectTotal(scores: (number | null)[]): number | null {
+  const written = scores.filter((score): score is number => score !== null);
+  if (written.length === 0) return null;
+  return written.reduce((sum, score) => sum + Math.round(score), 0);
 }

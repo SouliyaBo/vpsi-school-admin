@@ -110,6 +110,7 @@ function stubReads(overrides: Record<string, unknown> = {}): void {
     if (url in overrides) return overrides[url] as never;
     if (url === '/school-years/active') return activeYear as never;
     if (url === '/semesters/active') return semester as never;
+    if (url === `/semesters/${semester.id}`) return semester as never;
     if (url === '/semesters') return paginated([semester]) as never;
     if (url === '/classrooms') return paginated([classroom]) as never;
     if (url === `/classrooms/${classroom.id}`) return classroom as never;
@@ -567,22 +568,40 @@ describe('roll call — nicknames', () => {
   });
 });
 
+/** A summary row as the API shapes it, with ວັນຂາດ read under the three-lates rule. */
+function summaryRow(
+  counts: { present: number; absent: number; late: number; excused: number; sick: number },
+  overrides: Record<string, unknown> = {},
+) {
+  const lateAsAbsent = Math.floor(counts.late / 3);
+  const absentUnexcused = counts.absent + lateAsAbsent;
+  const absentExcused = counts.excused + counts.sick;
+  const totalRecorded = counts.present + counts.absent + counts.late + counts.excused + counts.sick;
+  return {
+    studentId: 'stu-1',
+    ...counts,
+    totalRecorded,
+    lateAsAbsent,
+    lateRemainder: counts.late - lateAsAbsent * 3,
+    absentUnexcused,
+    absentExcused,
+    absentTotal: absentUnexcused + absentExcused,
+    latesPerAbsence: 3,
+    attendanceRate:
+      totalRecorded === 0
+        ? 0
+        : Math.round(((totalRecorded - absentUnexcused) / totalRecorded) * 10000) / 100,
+    ...overrides,
+  };
+}
+
 describe('attendance summary', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('shows a student the aggregation never saw, with zeroes rather than a gap', async () => {
     stubReads({
       [`/attendances/summary/classroom/${classroom.id}/semester/${semester.id}`]: [
-        {
-          studentId: 'stu-1',
-          present: 8,
-          absent: 2,
-          late: 0,
-          excused: 0,
-          sick: 0,
-          totalRecorded: 10,
-          attendanceRate: 80,
-        },
+        summaryRow({ present: 8, absent: 2, late: 0, excused: 0, sick: 0 }),
       ],
       [`/enrollments/classroom/${classroom.id}/roster`]: STUDENTS.map((student) => ({
         id: `e-${student.studentId}`,
@@ -628,6 +647,275 @@ describe('attendance summary', () => {
     expect(await screen.findByText('ສົມຈິດ ວົງສາ')).toBeInTheDocument();
     expect(screen.getByText('ບຸນມີ ສີສຸກ')).toBeInTheDocument();
     expect(screen.queryByText('ນາງ ຄຳ')).not.toBeInTheDocument();
+  });
+
+  /**
+   * ວັນຂາດ are the API's figures, not the raw statuses: three lates are a day
+   * absent without a reason, a sick day is a leave, and the two kinds add up.
+   * The table says where a day made of lates came from, or the office would be
+   * chasing an absence nobody ever marked.
+   */
+  it('reads ວັນຂາດ under the three-lates rule, and says which days are lates', async () => {
+    stubReads({
+      [`/attendances/summary/classroom/${classroom.id}/semester/${semester.id}`]: [
+        // 7 lates: 2 days absent and 1 still late. 1 excused + 1 sick: 2 with reason.
+        summaryRow({ present: 10, absent: 1, late: 7, excused: 1, sick: 1 }),
+      ],
+      [`/enrollments/classroom/${classroom.id}/roster`]: [
+        {
+          id: 'e-stu-1',
+          studentId: 'stu-1',
+          studentCode: 'S-0001',
+          studentNameLo: 'ສົມຈິດ ວົງສາ',
+          rollNumber: 1,
+          status: 'active',
+        },
+      ],
+      '/attendances': paginated([]),
+    });
+
+    renderWithProviders(<ClassroomSummary />);
+    await chooseClassroom();
+
+    const row = (await screen.findByText('ສົມຈິດ ວົງສາ')).closest('tr') as HTMLElement;
+    const cells = within(row).getAllByRole('cell');
+    // No. · student · present · late · no reason · with reason · total · rate · toggle
+    expect(cells[2]).toHaveTextContent('10');
+    expect(cells[3]).toHaveTextContent('7');
+    expect(cells[3]).toHaveTextContent('1 still late');
+    expect(cells[4]).toHaveTextContent('3');
+    expect(cells[4]).toHaveTextContent('2 from lates');
+    expect(cells[5]).toHaveTextContent('2');
+    expect(cells[6]).toHaveTextContent('5');
+    // 20 recorded, 3 days absent without reason: 85%.
+    expect(cells[7]).toHaveTextContent('85.0%');
+
+    // Opened up, the rule is spelled out above the dated lessons, since the
+    // day it made has no date of its own.
+    await userEvent.click(within(row).getByRole('button', { name: /show which lessons/i }));
+    expect(
+      await screen.findByText(/Late 7 times — counted as 2 day\(s\) absent without a reason/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/every 3 lates make one/)).toBeInTheDocument();
+  });
+
+  /**
+   * "Who is at 15 days, and 30" is asked of the whole school, with the room
+   * beside the name — and, once a room is picked, of that room alone.
+   */
+  it('lists the school over a ວັນຂາດ threshold with each student’s room, then narrows to one', async () => {
+    const absencesUrl = `/attendances/summary/semester/${semester.id}/absences`;
+    const summaryUrl = `/attendances/summary/classroom/${classroom.id}/semester/${semester.id}`;
+    stubReads({
+      [absencesUrl]: [
+        {
+          ...summaryRow(
+            { present: 40, absent: 10, late: 6, excused: 5, sick: 0 },
+            { studentId: 'stu-9' },
+          ),
+          studentCode: 'S-0009',
+          studentNameLo: 'ຄຳຫຼ້າ ໄຊຍະວົງ',
+          studentNickname: 'ຫຼ້າ',
+          classroomId: 'room-7',
+          classroomName: 'ມ.7/ຂ',
+          gradeLevelCode: 'm7',
+        },
+        {
+          ...summaryRow({ present: 30, absent: 15, late: 0, excused: 0, sick: 0 }),
+          studentCode: 'S-0001',
+          studentNameLo: 'ສົມຈິດ ວົງສາ',
+          studentNickname: null,
+          classroomId: classroom.id,
+          classroomName: 'A',
+          gradeLevelCode: 'm4',
+        },
+      ],
+      [summaryUrl]: [
+        summaryRow({ present: 30, absent: 15, late: 0, excused: 0, sick: 0 }),
+        summaryRow(
+          { present: 40, absent: 2, late: 0, excused: 0, sick: 0 },
+          { studentId: 'stu-2' },
+        ),
+      ],
+      [`/enrollments/classroom/${classroom.id}/roster`]: STUDENTS.map((student) => ({
+        id: `e-${student.studentId}`,
+        studentId: student.studentId,
+        studentCode: student.studentCode,
+        studentNameLo: student.studentNameLo,
+        rollNumber: student.rollNumber,
+        status: 'active',
+      })),
+    });
+
+    renderWithProviders(<ClassroomSummary />);
+    // No room picked: nothing is asked for until the threshold is.
+    expect(screen.getByText(/pick a classroom for its summary/i)).toBeInTheDocument();
+    expect(lastParams(absencesUrl)).toBeUndefined();
+
+    await userEvent.click(screen.getByRole('combobox', { name: /days absent from/i }));
+    await userEvent.click(screen.getByRole('option', { name: '15 days or more' }));
+
+    // The school-wide list, worst first, each with their room.
+    expect(await screen.findByText('ຄຳຫຼ້າ ໄຊຍະວົງ')).toBeInTheDocument();
+    expect(lastParams(absencesUrl)).toEqual({ minAbsentDays: '15' });
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(within(rows[0]!).getByRole('button', { name: 'ມ.7/ຂ' })).toBeInTheDocument();
+    // 10 absent + 2 from six lates + 5 with reason = 17 days.
+    expect(within(rows[0]!).getAllByRole('cell')[6]).toHaveTextContent('17');
+    expect(within(rows[1]!).getByRole('button', { name: 'A' })).toBeInTheDocument();
+    expect(screen.queryByText(/^No\.$/)).not.toBeInTheDocument();
+
+    // Clicking the room narrows the tab to it: the roster comes back, and the
+    // threshold keeps thinning it to the one student over the line.
+    await userEvent.click(within(rows[1]!).getByRole('button', { name: 'A' }));
+    expect(await screen.findByRole('columnheader', { name: 'No.' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('ສົມຈິດ ວົງສາ')).toBeInTheDocument());
+    expect(screen.queryByText('ນາງ ຄຳ')).not.toBeInTheDocument();
+    expect(screen.queryByText('ຄຳຫຼ້າ ໄຊຍະວົງ')).not.toBeInTheDocument();
+
+    // Back to everyone in the room.
+    await userEvent.click(screen.getByRole('combobox', { name: /days absent from/i }));
+    await userEvent.click(screen.getByRole('option', { name: 'Everyone' }));
+    expect(await screen.findByText('ນາງ ຄຳ')).toBeInTheDocument();
+  });
+
+  /**
+   * The counts say how often; the office's next question is which subject, which
+   * day, whose lesson. That comes off the log, on demand, one student at a time.
+   */
+  it('opens a row up to the lessons behind its counts — subject, day and teacher', async () => {
+    const summaryUrl = `/attendances/summary/classroom/${classroom.id}/semester/${semester.id}`;
+    stubReads({
+      [summaryUrl]: [
+        summaryRow({ present: 8, absent: 1, late: 1, excused: 0, sick: 0 }),
+        summaryRow(
+          { present: 10, absent: 0, late: 0, excused: 0, sick: 0 },
+          { studentId: 'stu-2' },
+        ),
+      ],
+      [`/enrollments/classroom/${classroom.id}/roster`]: STUDENTS.map((student) => ({
+        id: `e-${student.studentId}`,
+        studentId: student.studentId,
+        studentCode: student.studentCode,
+        studentNameLo: student.studentNameLo,
+        rollNumber: student.rollNumber,
+        status: 'active',
+      })),
+      '/attendances': paginated([
+        {
+          id: 'att-1',
+          studentId: 'stu-1',
+          date: '2025-09-19T00:00:00.000Z',
+          period: 1,
+          subjectId: lesson.subject,
+          teacherId: lesson.teacher,
+          recordedBy: { id: 'u-1', username: 'office', personType: 'staff', personId: 'staff-1' },
+          status: 'absent',
+          reason: 'ບໍ່ມີເຫດຜົນ',
+        },
+        {
+          id: 'att-2',
+          studentId: 'stu-1',
+          date: '2025-09-18T00:00:00.000Z',
+          period: 1,
+          subjectId: lesson.subject,
+          teacherId: lesson.teacher,
+          recordedBy: { id: 'u-2', username: 'somsack', personType: 'teacher', personId: 'tea-1' },
+          status: 'late',
+          minutesLate: 15,
+        },
+      ]),
+    });
+
+    renderWithProviders(<ClassroomSummary />);
+    await chooseClassroom();
+
+    // Nothing is fetched for anyone until a row is opened, and a clean row
+    // has nothing to open.
+    await screen.findByText('90.0%');
+    expect(lastParams('/attendances')).toBeUndefined();
+    expect(
+      within(rowFor('ນາງ ຄຳ')).queryByRole('button', { name: /show which lessons/i }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      within(rowFor('ສົມຈິດ ວົງສາ')).getByRole('button', { name: /show which lessons/i }),
+    );
+
+    expect(await screen.findByText('19/09/2025')).toBeInTheDocument();
+    expect(lastParams('/attendances')).toMatchObject({
+      studentId: 'stu-1',
+      semesterId: semester.id,
+      classroomId: classroom.id,
+      // `cleanParams` writes query values as strings; the API reads `'true'`.
+      notPresent: 'true',
+    });
+    // Subject and teacher for each lesson, and who filed it when that was
+    // someone other than the teacher.
+    expect(screen.getAllByText('Mathematics')).toHaveLength(2);
+    expect(screen.getAllByText('Somsack Phomma').length).toBeGreaterThan(0);
+    expect(screen.getByText('recorded by office')).toBeInTheDocument();
+    expect(screen.getByText('15 min late')).toBeInTheDocument();
+    expect(screen.getByText('ບໍ່ມີເຫດຜົນ')).toBeInTheDocument();
+  });
+
+  /**
+   * The counts can be read over one month, any stretch of dates, or one subject.
+   * Whatever narrows the counts narrows the lessons under a row the same way,
+   * or the two would disagree — and the log has no `month`, so it is handed the
+   * month as its own two bounds.
+   */
+  it('narrows both the counts and the lessons to a month, a date range, and a subject', async () => {
+    const summaryUrl = `/attendances/summary/classroom/${classroom.id}/semester/${semester.id}`;
+    stubReads({
+      [summaryUrl]: [summaryRow({ present: 8, absent: 2, late: 0, excused: 0, sick: 0 })],
+      [`/enrollments/classroom/${classroom.id}/roster`]: STUDENTS.map((student) => ({
+        id: `e-${student.studentId}`,
+        studentId: student.studentId,
+        studentCode: student.studentCode,
+        studentNameLo: student.studentNameLo,
+        rollNumber: student.rollNumber,
+        status: 'active',
+      })),
+      '/subjects': paginated([lesson.subject]),
+    });
+
+    renderWithProviders(<ClassroomSummary />);
+    await chooseClassroom();
+    await screen.findByText('80.0%');
+    // The whole term, until something narrows it.
+    expect(lastParams(summaryUrl)).toEqual({});
+
+    // The term runs September to January, so those are the months on offer.
+    await userEvent.click(screen.getByRole('combobox', { name: /^month$/i }));
+    expect(screen.getByRole('option', { name: 'September 2025' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'January 2026' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /February/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('option', { name: 'October 2025' }));
+    await waitFor(() => expect(lastParams(summaryUrl)).toEqual({ month: '10' }));
+
+    await userEvent.click(
+      within(rowFor('ສົມຈິດ ວົງສາ')).getByRole('button', { name: /show which lessons/i }),
+    );
+    await waitFor(() =>
+      expect(lastParams('/attendances')).toMatchObject({ from: '2025-10-01', to: '2025-10-31' }),
+    );
+
+    // A date range replaces the month rather than intersecting with it.
+    await userEvent.type(screen.getByLabelText(/^from$/i), '2025-09-15');
+    await userEvent.type(screen.getByLabelText(/^to$/i), '2025-09-30');
+    await waitFor(() =>
+      expect(lastParams(summaryUrl)).toEqual({ from: '2025-09-15', to: '2025-09-30' }),
+    );
+    expect(screen.getByRole('combobox', { name: /^month$/i })).toHaveTextContent('Whole term');
+    await waitFor(() =>
+      expect(lastParams('/attendances')).toMatchObject({ from: '2025-09-15', to: '2025-09-30' }),
+    );
+
+    await userEvent.click(screen.getByRole('combobox', { name: /subject/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /Mathematics/ }));
+    await waitFor(() => expect(lastParams(summaryUrl)).toMatchObject({ subjectId: 'sub-1' }));
+    await waitFor(() => expect(lastParams('/attendances')).toMatchObject({ subjectId: 'sub-1' }));
   });
 });
 
@@ -757,5 +1045,106 @@ describe('roll call — who has not marked it', () => {
     renderWithProviders(<AttendancesPage />);
 
     expect(await screen.findByRole('tab', { name: /not marked/i })).toBeInTheDocument();
+  });
+});
+
+/**
+ * ການສອນແທນ — the way through the refusal.
+ *
+ * The teacher standing in for an absent colleague is not the teacher on the
+ * timetable, so the API refuses their roll call. Before this, the only way through
+ * was to telephone the office, and the register was keyed in from a paper note
+ * days later. The sheet now offers the claim at the point it would otherwise
+ * simply fail the save.
+ */
+describe('roll call — covering a colleague’s lesson', () => {
+  const claimable = {
+    canRecord: false,
+    canClaim: true,
+    blockedBy: null,
+    claimableUntil: '2026-08-10T05:00:00.000Z',
+    claimedByTeacherId: null,
+  };
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('offers the claim when the lesson is not the caller’s', async () => {
+    stubReads({ '/lesson-substitutions/claimability': claimable });
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({ id: 'sub-1' });
+
+    renderWithProviders(<RollCallSheet />);
+    await chooseClassroom();
+
+    expect(await screen.findByText(/this lesson is not yours/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /i taught this lesson/i }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post.mock.calls[0]![0]).toBe('/lesson-substitutions');
+    // The lesson and the day are the whole of the claim. Who is claiming is the
+    // session's to say, not the form's — naming a colleague is the office's power.
+    expect(post.mock.calls[0]![1]).toMatchObject({
+      teachingAssignmentId: lesson.teachingAssignmentId,
+      reason: 'Sick leave',
+    });
+    expect(post.mock.calls[0]![1]).not.toHaveProperty('substituteTeacherId');
+  });
+
+  it('says why when the claim window has already shut', async () => {
+    stubReads({
+      '/lesson-substitutions/claimability': {
+        ...claimable,
+        canClaim: false,
+        blockedBy: 'substitution.claimWindowClosed',
+      },
+    });
+
+    renderWithProviders(<RollCallSheet />);
+    await chooseClassroom();
+
+    // The server's own refusal, translated by its key — so the reason on screen is
+    // the reason the API would give rather than a second guess at it.
+    expect(await screen.findByText(/deadline for this lesson’s register has passed/i))
+      .toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /i taught this lesson/i })).not.toBeInTheDocument();
+  });
+
+  it('says nothing at all to the teacher whose lesson it is', async () => {
+    stubReads({
+      '/lesson-substitutions/claimability': { ...claimable, canRecord: true, canClaim: false },
+    });
+
+    renderWithProviders(<RollCallSheet />);
+    await chooseClassroom();
+
+    await screen.findByText('0/3 marked');
+    // Almost every mount of this panel is this case. A teacher marking their own
+    // class must not be shown a feature about somebody else's absence.
+    expect(screen.queryByText(/this lesson is not yours/i)).not.toBeInTheDocument();
+  });
+
+  it('names the stand-in on the sheet once cover is on file', async () => {
+    stubReads({
+      '/attendances/daily-sheet': {
+        ...blankSheet,
+        lessons: [
+          {
+            ...blankSheet.lessons[0],
+            substituteTeacher: {
+              teacherId: 'tea-9',
+              teacherCode: 'T-009',
+              teacherName: 'ຄຳຫລ້າ ວົງສາ',
+            },
+          },
+        ],
+      },
+      '/lesson-substitutions/claimability': { ...claimable, canRecord: true, canClaim: false },
+    });
+
+    renderWithProviders(<RollCallSheet />);
+    await chooseClassroom();
+
+    // A register signed off by somebody who was not in the building is the first
+    // thing the office asks about, so the sheet answers it before they ask.
+    expect(await screen.findByText(/Covered by: ຄຳຫລ້າ ວົງສາ/)).toBeInTheDocument();
   });
 });

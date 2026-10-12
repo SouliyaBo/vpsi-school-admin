@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { createCrudApi, createCrudHooks, useLookupQuery } from '@/lib/crud';
 import { localizedName } from '@/lib/utils';
-import type { Subject } from '@/types/entities';
+import type { MonthlyColumnMax, Subject } from '@/types/entities';
 import type { SelectOption } from '@/components/common/fields';
 
 export interface SubjectInput {
@@ -22,6 +22,11 @@ export interface SubjectInput {
   strands?: string[];
   /** The ສາຍວິຊາ this subject is marked under; `null` detaches it. */
   parentSubjectId?: string | null;
+  /**
+   * ຄະແນນເຕັມ of the monthly sheet's four columns, which must total 10.
+   * `null` puts the subject back on the school's usual 1 / 1 / 2 / 6.
+   */
+  monthlyColumnMax?: MonthlyColumnMax | null;
 }
 
 export const subjectsApi = createCrudApi<Subject, SubjectInput>('/subjects');

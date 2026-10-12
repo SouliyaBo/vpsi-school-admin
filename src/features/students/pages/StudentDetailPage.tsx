@@ -7,6 +7,7 @@ import {
   ClipboardList,
   FileSignature,
   FileText,
+  Languages,
   Pencil,
   School,
   Syringe,
@@ -22,6 +23,7 @@ import { StudySuspensionDialog } from '@/features/certificates/components/StudyS
 import { StudentMonthlyMarks } from '@/features/monthly-marks/components/StudentMonthlyMarks';
 import { StudentVaccinations } from '@/features/vaccinations/components/StudentVaccinations';
 import { useCan } from '@/features/auth/hooks';
+import { EnglishClassDialog } from '@/features/enrollments/components/EnglishClassDialog';
 import { EnrollDialog } from '@/features/enrollments/components/EnrollDialog';
 import {
   EnrollmentMoveDialog,
@@ -46,6 +48,7 @@ import {
 } from '@/lib/utils';
 import type {
   Classroom,
+  Enrollment,
   GradeLevel,
   Location,
   SchoolYear,
@@ -109,6 +112,7 @@ export function StudentDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [move, setMove] = useState<EnrollmentMove | null>(null);
+  const [englishClassTarget, setEnglishClassTarget] = useState<Enrollment | null>(null);
 
   const detail = students.useDetail(id);
   const siblings = useStudentSiblings(id);
@@ -228,12 +232,23 @@ export function StudentDetailPage() {
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={student.status} namespace="studentStatus" />
               {currentPlacement ? (
-                <Badge variant="default">
-                  {refObject<Classroom>(currentPlacement.classroomId)?.name ??
-                    t('enrollment.classroom')}
-                  {currentPlacement.rollNumber != null &&
-                    ` · ${t('enrollment.rollNumber')} ${currentPlacement.rollNumber}`}
-                </Badge>
+                <>
+                  <Badge variant="default">
+                    {refObject<Classroom>(currentPlacement.classroomId)?.name ??
+                      t('enrollment.classroom')}
+                    {currentPlacement.rollNumber != null &&
+                      ` · ${t('enrollment.rollNumber')} ${currentPlacement.rollNumber}`}
+                  </Badge>
+                  {/* Shown next to the homeroom because the two are read
+                      together — "which room, and which English room" — but kept
+                      a separate badge so nobody reads it as a sub-class of the
+                      homeroom. Absent when unset rather than shown empty. */}
+                  {currentPlacement.englishClass && (
+                    <Badge variant="secondary">
+                      {t('enrollment.englishClass')}: {currentPlacement.englishClass}
+                    </Badge>
+                  )}
+                </>
               ) : (
                 !history.isLoading && <Badge variant="warning">{t('enrollment.noClassroom')}</Badge>
               )}
@@ -347,6 +362,14 @@ export function StudentDetailPage() {
                 <DetailRow label={t('student.nationality')}>{student.nationality ?? '—'}</DetailRow>
                 <DetailRow label={t('student.ethnicity')}>{student.ethnicity ?? '—'}</DetailRow>
                 <DetailRow label={t('person.nationalId')}>{student.nationalId ?? '—'}</DetailRow>
+                {/* Read off the active placement, not the student: the room is
+                    re-made every school year. Hidden for a child with no
+                    placement, where the question has no answer yet. */}
+                {currentPlacement && (
+                  <DetailRow label={t('enrollment.englishClass')}>
+                    {currentPlacement.englishClass || '—'}
+                  </DetailRow>
+                )}
               </DetailSection>
 
               <div className="space-y-6">
@@ -514,6 +537,7 @@ export function StudentDetailPage() {
                       <TableHead>{t('semester.schoolYear')}</TableHead>
                       <TableHead>{t('gradeLevel.title')}</TableHead>
                       <TableHead>{t('enrollment.classroom')}</TableHead>
+                      <TableHead>{t('enrollment.englishClass')}</TableHead>
                       <TableHead className="text-end">{t('enrollment.rollNumber')}</TableHead>
                       <TableHead>{t('enrollment.enrolledAt')}</TableHead>
                       <TableHead>{t('person.status')}</TableHead>
@@ -535,6 +559,7 @@ export function StudentDetailPage() {
                         <TableCell className="font-medium">
                           {refObject<Classroom>(enrollment.classroomId)?.name ?? '—'}
                         </TableCell>
+                        <TableCell>{enrollment.englishClass || '—'}</TableCell>
                         <TableCell className="text-end">{enrollment.rollNumber ?? '—'}</TableCell>
                         <TableCell>{formatDate(enrollment.enrolledAt)}</TableCell>
                         <TableCell>
@@ -553,13 +578,21 @@ export function StudentDetailPage() {
                               `transferred` and `promoted` are terminal, a
                               `dropped` child can only come back. */}
                           <RowActions
-                            actions={ALLOWED_TRANSITIONS[enrollment.status].map((status) => ({
-                              label: t(STATUS_LABEL_KEYS[status]),
-                              icon: STATUS_ICONS[status],
-                              destructive: status === 'dropped',
-                              hidden: !can('enrollments', 'update'),
-                              onSelect: () => setMove({ enrollment, status }),
-                            }))}
+                            actions={[
+                              {
+                                label: t('enrollment.englishClassEdit'),
+                                icon: Languages,
+                                hidden: !can('enrollments', 'update'),
+                                onSelect: () => setEnglishClassTarget(enrollment),
+                              },
+                              ...ALLOWED_TRANSITIONS[enrollment.status].map((status) => ({
+                                label: t(STATUS_LABEL_KEYS[status]),
+                                icon: STATUS_ICONS[status],
+                                destructive: status === 'dropped',
+                                hidden: !can('enrollments', 'update'),
+                                onSelect: () => setMove({ enrollment, status }),
+                              })),
+                            ]}
                           />
                         </TableCell>
                       </TableRow>
@@ -690,17 +723,25 @@ export function StudentDetailPage() {
                   />
                   <StatTile label={t('attendanceStatus.present')} value={attendance.data.present} />
                   <StatTile
-                    label={t('attendanceStatus.absent')}
-                    value={attendance.data.absent}
-                    tone="danger"
-                  />
-                  <StatTile
                     label={t('attendanceStatus.late')}
                     value={attendance.data.late}
                     tone="warning"
                   />
-                  <StatTile label={t('attendanceStatus.excused')} value={attendance.data.excused} />
-                  <StatTile label={t('attendanceStatus.sick')} value={attendance.data.sick} />
+                  {/* ວັນຂາດ as the office reads them: three lates are a day
+                      absent without a reason, and a sick day is a leave. */}
+                  <StatTile
+                    label={t('attendance.absentUnexcused')}
+                    value={attendance.data.absentUnexcused}
+                    tone="danger"
+                  />
+                  <StatTile
+                    label={t('attendance.absentExcused')}
+                    value={attendance.data.absentExcused}
+                  />
+                  <StatTile
+                    label={t('attendance.absentTotal')}
+                    value={attendance.data.absentTotal}
+                  />
                 </div>
               )}
             </CardContent>
@@ -718,7 +759,21 @@ export function StudentDetailPage() {
         )}
       </Tabs>
 
-      <StudentFormDialog open={editOpen} onOpenChange={setEditOpen} student={student} />
+      <StudentFormDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        student={student}
+        // `GET /students/:id` does not carry the placement, so the form is given
+        // the active enrollment this page already loaded for the history table.
+        placement={
+          currentPlacement
+            ? {
+                enrollmentId: currentPlacement.id,
+                englishClass: currentPlacement.englishClass ?? null,
+              }
+            : null
+        }
+      />
 
       <StudyCertificateDialog
         student={certificateOpen ? student : null}
@@ -741,6 +796,11 @@ export function StudentDetailPage() {
         move={move}
         onClose={() => setMove(null)}
         fromLabel={move ? refObject<Classroom>(move.enrollment.classroomId)?.name : undefined}
+      />
+
+      <EnglishClassDialog
+        enrollment={englishClassTarget}
+        onClose={() => setEnglishClassTarget(null)}
       />
 
       <GuardianLinksDialog

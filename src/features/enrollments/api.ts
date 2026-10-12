@@ -9,12 +9,26 @@ export interface EnrollmentInput {
   classroomId: string;
   /** Defaults to today on the API. */
   enrolledAt?: string;
+  /** `ຫ້ອງພາກອັງກິດ` — free text, unrelated to `classroomId`. */
+  englishClass?: string;
 }
 
 export interface BulkEnrollItem {
   /** Matched against `students.studentCode` by the API. */
   studentCode: string;
   classroomId: string;
+  englishClass?: string;
+}
+
+/**
+ * The only editable field on a placement.
+ *
+ * Changing classroom is `changeStatus` with `transferred`, which moves both
+ * headcounts; the API rejects a classroom sent here.
+ */
+export interface EnrollmentUpdate {
+  /** Empty string clears it. */
+  englishClass?: string;
 }
 
 export interface BulkEnrollResult {
@@ -32,7 +46,7 @@ export interface ChangeStatusInput {
 }
 
 export const enrollmentsApi = {
-  ...createCrudApi<Enrollment, EnrollmentInput>('/enrollments'),
+  ...createCrudApi<Enrollment, EnrollmentInput, EnrollmentUpdate>('/enrollments'),
 
   /** Active students in one classroom, in roll-number order. Not paginated. */
   roster: (classroomId: string) =>
@@ -40,6 +54,12 @@ export const enrollmentsApi = {
 
   /** Every enrollment a student has ever had, newest first, with refs populated. */
   history: (studentId: string) => get<Enrollment[]>(`/enrollments/student/${studentId}`),
+
+  /** The `ຫ້ອງພາກອັງກິດ` labels in use for a year. Not paginated. */
+  englishClasses: (schoolYearId?: string) =>
+    get<string[]>('/enrollments/english-classes', {
+      params: schoolYearId ? { schoolYearId } : {},
+    }),
 
   /**
    * Up to 500 rows, each in its own transaction — one bad row (full classroom,
@@ -51,7 +71,7 @@ export const enrollmentsApi = {
     patch<Enrollment>(`/enrollments/${id}/status`, body),
 };
 
-export const enrollments = createCrudHooks<Enrollment, EnrollmentInput>(
+export const enrollments = createCrudHooks<Enrollment, EnrollmentInput, EnrollmentUpdate>(
   'enrollments',
   enrollmentsApi,
 );
@@ -100,11 +120,47 @@ export function useChangeEnrollmentStatus() {
   });
 }
 
+/**
+ * Sets `ຫ້ອງພາກອັງກິດ` on an existing placement.
+ *
+ * Invalidates the whole placement group rather than just the enrollment: the
+ * room is projected onto the students list as `currentEnrollment.englishClass`,
+ * so a save that refreshed only the roster would leave that list stale.
+ */
+export function useUpdateEnrollment({ silent = false }: { silent?: boolean } = {}) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: EnrollmentUpdate }) =>
+      enrollmentsApi.update(id, body),
+    // `silent` is for the student form, which saves the record and the room in
+    // one submit: two "Saved" toasts for one click reads as two saves.
+    meta: silent ? undefined : { successMessage: 'toast.updated' },
+    onSuccess: () => invalidatePlacement(queryClient),
+  });
+}
+
 export function useClassRoster(classroomId: string | undefined) {
   return useQuery({
     queryKey: ['enrollments', 'roster', classroomId],
     queryFn: () => enrollmentsApi.roster(classroomId!),
     enabled: Boolean(classroomId),
+  });
+}
+
+/**
+ * The English rooms a filter can offer, as `{ value, label }` for `FilterSelect`.
+ *
+ * The rooms are free text with no register of their own, so the only list of
+ * them is what the office has written on this year's placements — which is why
+ * this is read from the API rather than held as a constant. Cached for the
+ * session: it changes only when somebody assigns a room nobody had used before.
+ */
+export function useEnglishClassOptions(schoolYearId?: string) {
+  return useQuery({
+    queryKey: ['enrollments', 'english-classes', schoolYearId ?? 'active'],
+    queryFn: () => enrollmentsApi.englishClasses(schoolYearId),
+    select: (labels) => labels.map((label) => ({ value: label, label })),
+    staleTime: 5 * 60 * 1000,
   });
 }
 

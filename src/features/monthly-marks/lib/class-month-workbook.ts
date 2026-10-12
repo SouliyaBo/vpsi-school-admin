@@ -8,7 +8,7 @@ import {
   safeFileName,
   THIN_BORDER,
 } from '@/lib/workbook';
-import type { ClassMonthSheet } from '../api';
+import { displaySubjectTotal, displayTotal, type ClassMonthSheet } from '../api';
 
 /**
  * ສະຫຼຸບປະຈຳເດືອນ as the office's own workbook.
@@ -333,8 +333,8 @@ export async function buildClassMonthWorkbook(
       student.studentCode,
       student.studentNameLo,
       student.studentNickname ?? '',
-      ...student.scores,
-      student.total,
+      ...student.scores.map(displayTotal),
+      displaySubjectTotal(student.scores),
       student.average,
       student.grade ?? '',
       classificationOf(student, subjectCount, labels),
@@ -362,12 +362,21 @@ export async function buildClassMonthWorkbook(
       if (!student.isEnrolled) cell.fill = LEFT_FILL;
     }
 
-    // The marks, ລວມ and ສະເລ່ຍ all read out of 10 to two places, as the screen
-    // and the paper both write them.
+    // The subject marks and ລວມ are whole, as the office writes them; ສະເລ່ຍ
+    // keeps its two places, because it is the figure ເກຣດ and ລຳດັບ are decided
+    // on and it is not rounded anywhere.
     for (let column = firstSubject; column <= averageColumn; column += 1) {
       const cell = row.getCell(column);
-      cell.numFmt = '0.00';
-      if (typeof cell.value === 'number' && cell.value < PASSING_MARK) {
+      cell.numFmt = column === averageColumn ? '0.00' : '0';
+      // Shaded on the exact mark, not the printed one: a 4.7 rounds to 5 and is
+      // still a fail, and the sheet has to go on saying so.
+      const exact =
+        column === averageColumn
+          ? student.average
+          : column === totalColumn
+            ? student.total
+            : student.scores[column - firstSubject];
+      if (typeof exact === 'number' && exact < PASSING_MARK) {
         cell.fill = FAIL_FILL;
         cell.font = FAIL_FONT;
       }

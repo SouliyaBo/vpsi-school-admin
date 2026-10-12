@@ -61,9 +61,24 @@ async function fillStudentFields(dialog: HTMLElement) {
   });
 }
 
+/**
+ * The page's reads, when a test only cares about the student list.
+ *
+ * `/enrollments/english-classes` answers with a bare array rather than a page —
+ * it is the distinct room labels the filter offers, not a collection — so a
+ * blanket `paginated()` for every URL would hand the filter an object to map
+ * over.
+ */
+function stubPageReads(rows: unknown[] = [student], englishClasses: string[] = []) {
+  return vi.spyOn(apiClient, 'get').mockImplementation((path: string) => {
+    if (path === '/enrollments/english-classes') return Promise.resolve(englishClasses);
+    return Promise.resolve(paginated(rows));
+  });
+}
+
 describe('StudentsPage — create', () => {
   beforeEach(() => {
-    vi.spyOn(apiClient, 'get').mockResolvedValue(paginated([student]));
+    stubPageReads();
     vi.spyOn(apiClient, 'post').mockResolvedValue(student);
   });
 
@@ -196,18 +211,16 @@ describe('StudentsPage — create', () => {
 
 describe('StudentsPage — list', () => {
   beforeEach(() => {
-    vi.spyOn(apiClient, 'get').mockResolvedValue(
-      paginated([
-        { ...student, nickname: 'ລິຕ້າ', nicknameEn: 'RITA' },
-        // Most records will only ever have the Lao one.
-        {
-          ...student,
-          id: '507f1f77bcf86cd799439013',
-          studentCode: 'S-0002',
-          nickname: 'ເອມີ້',
-        },
-      ]),
-    );
+    stubPageReads([
+      { ...student, nickname: 'ລິຕ້າ', nicknameEn: 'RITA' },
+      // Most records will only ever have the Lao one.
+      {
+        ...student,
+        id: '507f1f77bcf86cd799439013',
+        studentCode: 'S-0002',
+        nickname: 'ເອມີ້',
+      },
+    ]);
   });
 
   afterEach(() => {
@@ -264,12 +277,14 @@ describe('StudentsPage — the roster export', () => {
       schoolYearId: 'sy-1',
       rollNumber: 4,
       enrolledAt: '2026-08-11T00:00:00.000Z',
+      englishClass: 'EP-A',
     },
   };
 
   beforeEach(() => {
     vi.spyOn(apiClient, 'get').mockImplementation((path: string, config?: unknown) => {
       const params = (config as { params?: Record<string, unknown> } | undefined)?.params ?? {};
+      if (path === '/enrollments/english-classes') return Promise.resolve(['EP-A']);
       if (path === '/classrooms') return Promise.resolve(paginated([classroom]));
       if (path === '/teachers') return Promise.resolve(paginated([teacher]));
       if (path === '/school-years/active')
@@ -344,6 +359,7 @@ describe('StudentsPage — the roster export', () => {
       'Student name',
       'Nickname',
       'Classroom',
+      'English class',
       'Homeroom teacher',
     ]);
     expect(worksheet.getRow(6).values).toEqual([
@@ -360,6 +376,9 @@ describe('StudentsPage — the roster export', () => {
       // The grade code is latin in the database and ມ.1 on every sheet the
       // school prints, and the room's own name already carries it.
       'ມ.1/ຂ',
+      // ຫ້ອງພາກອັງກິດ is its own grouping — it prints beside the homeroom
+      // rather than instead of it.
+      'EP-A',
       'ນູລີ ສີສະຫວາດ',
     ]);
     // Both pages are in the file, numbered straight through.
@@ -379,7 +398,7 @@ describe('StudentsPage — the roster export', () => {
  */
 describe('StudentsPage — the status filter', () => {
   beforeEach(() => {
-    vi.spyOn(apiClient, 'get').mockResolvedValue(paginated([student]));
+    stubPageReads();
   });
 
   afterEach(() => {
@@ -456,11 +475,21 @@ describe('StudentsPage — the status filter', () => {
       expect(lastListParams()).toMatchObject({ status: 'graduated', gender: 'female' }),
     );
   });
+  it('filters by age, offering nothing younger than 11', async () => {
+    renderWithProviders(<StudentsPage />);
+    await screen.findByText('ສົມຈິດ ວົງສາ');
+
+    await userEvent.click(statusFilter('Age: All'));
+    expect(screen.queryByRole('option', { name: '10 years' })).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('option', { name: '11 years' }));
+
+    await waitFor(() => expect(lastListParams()).toMatchObject({ age: '11' }));
+  });
 });
 
 describe('StudentsPage — editing', () => {
   beforeEach(() => {
-    vi.spyOn(apiClient, 'get').mockResolvedValue(paginated([student]));
+    stubPageReads();
     vi.spyOn(apiClient, 'patch').mockResolvedValue(student);
   });
 

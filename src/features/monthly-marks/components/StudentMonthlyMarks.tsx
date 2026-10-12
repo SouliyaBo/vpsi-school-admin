@@ -23,6 +23,8 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { ErrorState } from '@/components/common/ErrorState';
 import { classroomHeading } from '@/features/classrooms/api';
 import {
+  displaySubjectTotal,
+  displayTotal,
   useStudentMonths,
   type MonthSubjectHeader,
   type StudentMonthlySheet,
@@ -112,9 +114,10 @@ export function StudentMonthlyMarks({
   );
   const attendance: AttendanceStanding | null = roll.data
     ? {
-        attended: roll.data.present + roll.data.late,
-        excused: roll.data.excused + roll.data.sick,
-        unexcused: roll.data.absent,
+        // Days in the room, less the days that three late arrivals cost.
+        attended: roll.data.totalRecorded - roll.data.absentTotal,
+        excused: roll.data.absentExcused,
+        unexcused: roll.data.absentUnexcused,
         recorded: roll.data.totalRecorded,
       }
     : null;
@@ -243,7 +246,7 @@ function MonthBlock({
         },
         {
           label: t('monthlyMark.parentReportTotalRow'),
-          cells: entry.scores.map((score) => <Figure value={score} failBelowPass />),
+          cells: entry.scores.map((score) => <Figure value={score} whole failBelowPass />),
         },
         {
           label: t('monthlyMark.parentReportSubjectGradeRow'),
@@ -253,7 +256,7 @@ function MonthBlock({
         },
       ]}
       standing={{
-        total: entry.total,
+        total: displaySubjectTotal(entry.scores),
         recorded: entry.subjectsRecorded,
         average: entry.average,
         isComplete: entry.isComplete,
@@ -261,6 +264,7 @@ function MonthBlock({
         conduct,
         attendance,
       }}
+      wholeMarks
       note={
         entry.average !== null && !entry.isComplete
           ? t('monthlyMark.studentIncompleteNote', {
@@ -391,11 +395,11 @@ interface ConductStanding {
 
 /** ວັນມາຮຽນ over the window on screen, from the roll. */
 interface AttendanceStanding {
-  /** Present and late — a late child was in the room. */
+  /** Present and late, less the days the lates cost — see `AttendanceSummary`. */
   attended: number;
   /** ຄອບ — excused and sick, as the export folds them. */
   excused: number;
-  /** ບໍ່ຄອບ. */
+  /** ບໍ່ຄອບ, with one day for every three lates. */
   unexcused: number;
   recorded: number;
 }
@@ -433,6 +437,13 @@ interface BlockProps {
   rows: BlockRow[];
   standing: Standing;
   note: string | null;
+  /**
+   * Whether the headline marks are a month's ລວມ, which the office writes whole.
+   *
+   * The term view hands the same block its ພາກຮຽນ figures, and those keep their
+   * two places — the rounding is the monthly sheet's rule, not the block's.
+   */
+  wholeMarks?: boolean;
 }
 
 /**
@@ -533,7 +544,16 @@ function BlockNotes({ note, conduct }: { note: string | null; conduct: ConductSt
  * line a subject with the headline mark and its letter on the right and the
  * figures behind it small underneath.
  */
-function PhoneBlock({ title, data, studentName, headline, items, standing, note }: BlockProps) {
+function PhoneBlock({
+  title,
+  data,
+  studentName,
+  headline,
+  items,
+  standing,
+  note,
+  wholeMarks = false,
+}: BlockProps) {
   const { t } = useTranslation();
   const failing = standing.average !== null && standing.average < PASSING_MARK;
   const subjects = data.subjects.length;
@@ -562,7 +582,11 @@ function PhoneBlock({ title, data, studentName, headline, items, standing, note 
           <div className="flex gap-1.5">
             <dt className="text-muted-foreground">{t('monthlyMark.parentReportTotal')}</dt>
             <dd className="font-medium tabular-nums">
-              {standing.total === null ? '—' : standing.total.toFixed(2)}
+              {standing.total === null
+                ? '—'
+                : wholeMarks
+                  ? standing.total
+                  : standing.total.toFixed(2)}
             </dd>
           </div>
           <div className="flex gap-1.5">
@@ -653,7 +677,11 @@ function PhoneBlock({ title, data, studentName, headline, items, standing, note 
                   <span
                     className={cn('text-xl font-semibold tabular-nums', fails && 'text-danger')}
                   >
-                    {item.mark === null ? '—' : item.mark.toFixed(2)}
+                    {item.mark === null
+                      ? '—'
+                      : wholeMarks
+                        ? displayTotal(item.mark)
+                        : item.mark.toFixed(2)}
                   </span>
                   <span
                     className={cn(
@@ -680,7 +708,15 @@ function PhoneBlock({ title, data, studentName, headline, items, standing, note 
  * mark rows, and the standing figures on the right. The ໝາຍເຫດ scale sits
  * under it as it does on paper.
  */
-function ReportBlock({ title, data, studentName, rows, standing, note }: BlockProps) {
+function ReportBlock({
+  title,
+  data,
+  studentName,
+  rows,
+  standing,
+  note,
+  wholeMarks = false,
+}: BlockProps) {
   const { t } = useTranslation();
   const subjects = data.subjects;
   const failing = standing.average !== null && standing.average < PASSING_MARK;
@@ -799,7 +835,7 @@ function ReportBlock({ title, data, studentName, rows, standing, note }: BlockPr
                 {rowIndex === 0 && (
                   <>
                     <td rowSpan={rows.length} className={standingCell}>
-                      <Figure value={standing.total} />
+                      <Figure value={standing.total} whole={wholeMarks} />
                     </td>
                     <td rowSpan={rows.length} className={cn(standingCell, 'font-normal')}>
                       {standing.average === null
@@ -881,13 +917,20 @@ function ReportBlock({ title, data, studentName, rows, standing, note }: BlockPr
   );
 }
 
-/** A figure to two places, or a dash; red under the pass line when asked. */
+/**
+ * A figure to two places, or a dash; red under the pass line when asked.
+ *
+ * `whole` is for the marks the office writes whole — a month's ລວມ and the row
+ * of them. The red still follows the exact figure, so a 4.7 prints as a red 5.
+ */
 function Figure({
   value,
   failBelowPass = false,
+  whole = false,
 }: {
   value: number | null;
   failBelowPass?: boolean;
+  whole?: boolean;
 }) {
   if (value === null) return <span className="text-muted-foreground">—</span>;
   return (
@@ -897,7 +940,7 @@ function Figure({
         failBelowPass && value < PASSING_MARK && 'font-medium text-danger',
       )}
     >
-      {value.toFixed(2)}
+      {whole ? displayTotal(value) : value.toFixed(2)}
     </span>
   );
 }

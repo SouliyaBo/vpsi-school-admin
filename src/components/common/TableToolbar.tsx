@@ -96,7 +96,11 @@ export function FilterSelect({
 
   return (
     <Select value={value ?? ALL} onValueChange={(next) => onChange(next === ALL ? allValue : next)}>
-      <SelectTrigger className={cn('w-auto min-w-36 gap-1.5', className)}>
+      {/* Labelled explicitly: with a value set the trigger renders the chosen
+          item's text, which is a room name or a status — on its own it never
+          says which filter it belongs to, to a screen reader or to anyone
+          reading the control out of context. */}
+      <SelectTrigger aria-label={placeholder} className={cn('w-auto min-w-36 gap-1.5', className)}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>

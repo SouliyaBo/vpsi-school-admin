@@ -8,7 +8,8 @@ import {
   safeFileName,
   THIN_BORDER,
 } from '@/lib/workbook';
-import type { ClassMonthSheet } from '../api';
+import { displaySubjectTotal, displayTotal, type ClassMonthSheet } from '../api';
+import type { StudentRegisterExtras } from './class-month-workbook';
 
 /**
  * ໃບລາຍງານຜູ້ປົກຄອງ — the month's marks as the letter that goes home.
@@ -16,8 +17,9 @@ import type { ClassMonthSheet } from '../api';
  * The school sends one sheet per child at the end of each month, and keeps
  * it in Excel: a titled block with the subjects across, ກວດກາ on its own line
  * above ລວມ, a letter under each subject, the month's ລວມ / ຈຳນວນວິຊາ / ສະເລ່ຍ /
- * ເກຣດ down the right, the homeroom teacher's remark under each subject, and
- * the A–F scale as a note underneath. Built one student to a file, because the
+ * ເກຣດ down the right, the homeroom teacher's remark under each subject, the
+ * year's ຄະແນນຄຸນສົມບັດ and the month's ວັນຂາດ under that, and the A–F scale
+ * as a note underneath. Built one student to a file, because the
  * office sends each one to its own parent — a class in one workbook would put
  * every child's marks in front of every other child's family. The block is
  * still written in a loop so the class-in-one-file form can come back if the
@@ -33,6 +35,13 @@ import type { ClassMonthSheet } from '../api';
 const PASSING_MARK = 5;
 
 const FAIL_FONT = numberFont({ color: { argb: 'FF9C0006' }, bold: true });
+
+/** Excel's "Bad" fill, as the class summary paints a balance that has been drawn on. */
+const FAIL_FILL = {
+  type: 'pattern' as const,
+  pattern: 'solid' as const,
+  fgColor: { argb: 'FFFFC7CE' },
+};
 
 /**
  * Everything on the page that is a word rather than a figure — passed in
@@ -67,6 +76,19 @@ export interface ParentReportLabels {
   /** What ຈຳນວນວິຊາ says while the month is short of a subject. */
   incompleteRow: (recorded: number, total: number) => string;
 
+  // The block under the remarks — the class summary's two borrowed columns.
+  /** ຄຸນສົມບັດ ແລະ ການມາຮຽນ — the row label the block hangs from. */
+  registerCorner: string;
+  /** ຄະແນນຄຸນສົມບັດ, over ຖືກຕັດ / ຍັງເຫຼືອ. */
+  conductPoints: string;
+  deducted: string;
+  remaining: string;
+  /** ວັນຂາດ, over ຄອບ / ບໍ່ຄອບ / ລວມ. */
+  absences: string;
+  excused: string;
+  unexcused: string;
+  absencesTotal: string;
+
   /** ໝາຍເຫດ, and the scale it introduces — one line per letter. */
   note: string;
   gradeScaleLines: string[];
@@ -76,11 +98,12 @@ export interface ParentReportLabels {
 /**
  * ຄຳເຫັນຂອງຄູປະຈຳຫ້ອງ — what the teacher writes under the marks.
  *
- * Typed at the moment of export rather than read from anywhere: the school
- * keeps no register of these, they are written fresh each month for each
- * child, and the file is the only place they go. `bySubject` is aligned with
- * the sheet's subjects, an empty string where there is nothing to say;
- * `overall` goes in the wider cell under the month's figures.
+ * `bySubject` is aligned with the sheet's subjects, an empty string where there
+ * is nothing to say. It is filled in by the caller from ເຫດຜົນ the subject
+ * teacher entered beside the marks, which the office may then reword for this
+ * letter; `overall` is the homeroom teacher's remark on the month as a whole,
+ * typed at the moment of export because no screen collects one, and it goes in
+ * the wider cell under the month's figures.
  */
 export interface ParentReportRemarks {
   bySubject: string[];
@@ -92,6 +115,12 @@ export interface ParentReportOptions {
   studentId?: string;
   /** The teacher's remarks, by student id. */
   remarks?: Map<string, ParentReportRemarks>;
+  /**
+   * ຄະແນນຄຸນສົມບັດ and ວັນຂາດ by student id, as the class summary is given them.
+   * A student with no entry gets the block with its cells empty — the same
+   * reading the summary gives a row the registers do not answer for.
+   */
+  registers?: Map<string, StudentRegisterExtras>;
 }
 
 /**
@@ -105,7 +134,7 @@ export interface ParentReportOptions {
 export async function buildParentReportWorkbook(
   sheet: ClassMonthSheet,
   labels: ParentReportLabels,
-  { studentId, remarks }: ParentReportOptions = {},
+  { studentId, remarks, registers }: ParentReportOptions = {},
 ): Promise<Blob> {
   const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
@@ -194,7 +223,8 @@ export async function buildParentReportWorkbook(
 
     // ── The three mark rows, then the remark ─────────────────────────────
     const testRow = worksheet.addRow([labels.testRow, ...student.testScores]);
-    const totalRow = worksheet.addRow([labels.totalRow, ...student.scores]);
+    // ລວມ is written whole, as the office writes a month's total.
+    const totalRow = worksheet.addRow([labels.totalRow, ...student.scores.map(displayTotal)]);
     const gradeRow = worksheet.addRow([
       labels.subjectGradeRow,
       ...student.subjectGrades.map((grade) => grade ?? ''),
@@ -215,7 +245,8 @@ export async function buildParentReportWorkbook(
         cell.font = column === 1 ? laoFont({ bold: true }) : numberFont();
         cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
         if (column >= firstSubject && column < totalColumn) {
-          if (row !== gradeRow) cell.numFmt = '0.00';
+          if (row === testRow) cell.numFmt = '0.00';
+          if (row === totalRow) cell.numFmt = '0';
           // The letter row goes red under a failing ລວມ, so the F reads as one.
           const total = student.scores[column - firstSubject];
           if (typeof total === 'number' && total < PASSING_MARK && row !== testRow) {
@@ -242,7 +273,7 @@ export async function buildParentReportWorkbook(
 
     // ── The four standing figures, each spanning the three mark rows ─────
     const standing: [number, string | number | null][] = [
-      [totalColumn, student.total],
+      [totalColumn, displaySubjectTotal(student.scores)],
       [
         countColumn,
         student.average === null
@@ -259,9 +290,80 @@ export async function buildParentReportWorkbook(
       const cell = testRow.getCell(column);
       cell.value = value;
       cell.font = numberFont({ bold: column !== countColumn });
-      if (typeof value === 'number' && column !== countColumn) cell.numFmt = '0.00';
+      if (typeof value === 'number' && column !== countColumn) {
+        // ລວມ adds the whole marks the row above shows, so it is whole too;
+        // ສະເລ່ຍ is the exact figure ເກຣດ is decided on and keeps its places.
+        cell.numFmt = column === totalColumn ? '0' : '0.00';
+      }
       if (typeof student.average === 'number' && student.average < PASSING_MARK) {
         if (column === averageColumn || column === gradeColumn) cell.font = FAIL_FONT;
+      }
+    }
+
+    // ── ຄະແນນຄຸນສົມບັດ and ວັນຂາດ, as the class summary heads them ──────────
+    //
+    // Ruled on to the bottom of the marks so it reads as the same table. The
+    // five figures share the width after the label column between them, so the
+    // block is as wide as the letter whatever the grade's subject count.
+    const extras = registers?.get(student.studentId);
+    const figures: (number | null)[] = [
+      extras?.deducted ?? null,
+      extras?.remaining ?? null,
+      extras?.excusedAbsences ?? null,
+      extras?.unexcusedAbsences ?? null,
+      extras ? extras.excusedAbsences + extras.unexcusedAbsences : null,
+    ];
+    const spare = lastColumn - 1;
+    const spans = figures.map(
+      (_, at) => Math.floor(spare / figures.length) + (at < spare % figures.length ? 1 : 0),
+    );
+    const starts = spans.map((_, at) => 2 + spans.slice(0, at).reduce((sum, n) => sum + n, 0));
+    const endOf = (at: number) => starts[at] + spans[at] - 1;
+
+    const groupRow = worksheet.addRow([labels.registerCorner]);
+    const subRow = worksheet.addRow([]);
+    const valueRow = worksheet.addRow([]);
+    groupRow.height = 24;
+    subRow.height = 24;
+    valueRow.height = 26;
+    groupRow.getCell(starts[0]).value = labels.conductPoints;
+    groupRow.getCell(starts[2]).value = labels.absences;
+    const subHeadings = [
+      labels.deducted,
+      labels.remaining,
+      labels.excused,
+      labels.unexcused,
+      labels.absencesTotal,
+    ];
+    subHeadings.forEach((text, at) => {
+      subRow.getCell(starts[at]).value = text;
+      valueRow.getCell(starts[at]).value = figures[at];
+    });
+
+    for (const row of [groupRow, subRow, valueRow]) {
+      for (let column = 1; column <= lastColumn; column += 1) {
+        const cell = row.getCell(column);
+        cell.border = THIN_BORDER;
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cell.font = row === valueRow && column > 1 ? numberFont() : laoFont({ bold: true });
+        if (row !== valueRow) cell.fill = HEADER_FILL;
+      }
+    }
+    worksheet.mergeCells(groupRow.number, 1, valueRow.number, 1);
+    worksheet.mergeCells(groupRow.number, starts[0], groupRow.number, endOf(1));
+    worksheet.mergeCells(groupRow.number, starts[2], groupRow.number, endOf(4));
+    figures.forEach((_, at) => {
+      if (spans[at] > 1) {
+        worksheet.mergeCells(subRow.number, starts[at], subRow.number, endOf(at));
+        worksheet.mergeCells(valueRow.number, starts[at], valueRow.number, endOf(at));
+      }
+    });
+    // A balance that has been drawn on reads red, as it does on the summary.
+    if (extras && extras.deducted > 0) {
+      for (const at of [0, 1]) {
+        const cell = valueRow.getCell(starts[at]);
+        cell.fill = FAIL_FILL;
+        cell.font = FAIL_FONT;
       }
     }
 
@@ -329,6 +431,7 @@ export async function buildParentReportArchive(
   studentIds: string[],
   remarks: Map<string, ParentReportRemarks>,
   fileName: (student: ClassMonthSheet['rows'][number]) => string,
+  registers?: Map<string, StudentRegisterExtras>,
 ): Promise<Blob> {
   const { default: JSZip } = await import('jszip');
   const archive = new JSZip();
@@ -339,6 +442,7 @@ export async function buildParentReportArchive(
     const workbook = await buildParentReportWorkbook(sheet, labels, {
       studentId: student.studentId,
       remarks,
+      registers,
     });
     archive.file(fileName(student), workbook);
   }

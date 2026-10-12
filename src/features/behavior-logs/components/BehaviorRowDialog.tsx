@@ -1,6 +1,8 @@
 import { AlertCircle, CalendarOff, Plus, Trash2, UserPlus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useCan } from '@/features/auth/hooks';
+import { ClaimCoverPanel } from '@/features/lesson-substitutions/components/ClaimCoverPanel';
 import { errorMessage } from '@/lib/error-message';
 import { notify } from '@/lib/toast';
 import { fullName, localizedName, toDateInput, withNickname } from '@/lib/utils';
@@ -63,7 +65,11 @@ export function BehaviorRowDialog({
   onSaved,
 }: BehaviorRowDialogProps) {
   const { t, i18n } = useTranslation();
+  const can = useCan();
   const isEdit = Boolean(row);
+
+  // Whether this account can be told about cover at all — see `ClaimCoverPanel`.
+  const seesCover = can('lesson-substitutions', 'read');
 
   const [date, setDate] = useState(defaultDate);
   const [teachingAssignmentId, setTeachingAssignmentId] = useState<string | undefined>();
@@ -246,6 +252,18 @@ export function BehaviorRowDialog({
             <CalendarOff className="size-4 shrink-0" />
             {t('behaviorLog.noLessonsHint')}
           </p>
+        )}
+
+        {/* The same way through the refusal the roll call offers, in the other
+            log: a teacher who stood in for a colleague can write the register for
+            that lesson once they have claimed it. Only on a new row — an existing
+            one was already written by somebody who was allowed to. */}
+        {!isEdit && (
+          <ClaimCoverPanel
+            teachingAssignmentId={teachingAssignmentId}
+            date={date}
+            enabled={seesCover}
+          />
         )}
 
         <div className="space-y-1.5">

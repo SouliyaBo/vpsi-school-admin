@@ -94,11 +94,36 @@ export interface GradeLevel extends BaseDocument {
   isExitLevel: boolean;
 }
 
+/**
+ * One spell of ຄູປະຈຳຫ້ອງ — who held the room, and between which dates.
+ *
+ * `teacherId` is `null` for a spell with nobody in the post, which is recorded
+ * rather than skipped: "the room had no ຄູປະຈຳຫ້ອງ for three weeks" is the answer
+ * that excuses the gap in the Wednesday/Friday review report, and leaving those
+ * days out would make them look like somebody's.
+ */
+export interface HomeroomTerm {
+  teacherId?: Ref<Teacher> | null;
+  from: string;
+  /** `null` while this is the spell in force. */
+  to?: string | null;
+  changedBy?: Ref<User> | null;
+  note?: string | null;
+}
+
 export interface Classroom extends BaseDocument {
   schoolYearId: Ref<SchoolYear>;
   gradeLevelId: Ref<GradeLevel>;
   name: string;
   homeroomTeacherId?: Ref<Teacher>;
+  /**
+   * Every spell of ຄູປະຈຳຫ້ອງ the room has had, oldest first.
+   *
+   * `homeroomTeacherId` is the current holder; this is how the room got there.
+   * Empty on a room nobody has ever reassigned — the history begins when the
+   * school first recorded a change.
+   */
+  homeroomHistory?: HomeroomTerm[];
   capacity: number;
   /** Maintained by the API as students are enrolled or moved. */
   currentCount: number;
@@ -152,7 +177,30 @@ export interface Subject extends BaseDocument {
    * ຊີວະ inside ວິທະຍາສາດທຳມະຊາດ. Empty for a subject marked as a whole.
    */
   strands?: string[];
+  /**
+   * ຄະແນນເຕັມ of the monthly sheet's four columns, where the school marks this
+   * subject its own way.
+   *
+   * `null` is the ordinary case — ຂື້ນຫ້ອງ 1 · ປື້ມ 1 · ກິດຈະກຳ 2 · ກວດກາ 6.
+   * ສັງຄົມ keeps no ປື້ມ and is marked 1 · 0 · 3 · 6 instead: the ສາຍວິຊາ itself
+   * at ມ.1–ມ.3, and ພູມສາດ / ສຶກສາພົນລະເມືອງ / ປະຫວັດສາດ at ມ.5 and ມ.6. The
+   * four always total 10, and a column at 0 is not marked at all rather than
+   * marked and scored nothing.
+   */
+  monthlyColumnMax?: MonthlyColumnMax | null;
   isActive: boolean;
+}
+
+/** One subject's own maxima on the monthly sheet — see `Subject.monthlyColumnMax`. */
+export interface MonthlyColumnMax {
+  /** ຂື້ນຫ້ອງ. */
+  attendance: number;
+  /** ປື້ມ — 0 where the subject keeps no notebook mark. */
+  notebook: number;
+  /** ກິດຈະກຳ. */
+  activity: number;
+  /** ກວດກາ. */
+  test: number;
 }
 
 // ── People ──────────────────────────────────────────────────────────────────
@@ -266,6 +314,8 @@ export interface StudentPlacement {
   schoolYearId: string;
   rollNumber: number | null;
   enrolledAt: string;
+  /** `ຫ້ອງພາກອັງກິດ`, the English-programme room — not the homeroom. */
+  englishClass: string | null;
 }
 
 /** `ເຍົາວະຊົນ` / `ເຂົ້າຊາວໜຸ່ມ` / `ເຂົ້າແມ່ຍິງ` — the fact and `ວັນເຂົ້າ`. */
@@ -354,6 +404,13 @@ export interface Enrollment extends BaseDocument {
   enrolledAt: string;
   status: EnrollmentStatus;
   rollNumber?: number | null;
+  /**
+   * `ຫ້ອງພາກອັງກິດ` — the English-programme room, a free-text label the office
+   * keeps. The English lessons regroup the year into rooms of their own, so this
+   * has no relation to `classroomId`. Per year, which is why it sits here and
+   * not on the student.
+   */
+  englishClass?: string | null;
   statusChangedAt?: string | null;
   statusReason?: string | null;
   transferredToClassroomId?: Ref<Classroom>;
@@ -381,6 +438,14 @@ export interface Attendance extends BaseDocument {
   subjectId: Ref<Subject>;
   /** The teacher whose lesson it was, per the timetable. */
   teacherId: Ref<Teacher>;
+  /**
+   * ຄູສອນແທນ — the colleague who actually took the lesson, when one did.
+   *
+   * Beside `teacherId` rather than in place of it: the timetabled teacher is what
+   * every per-subject and per-teacher figure is built on, and this is who was in
+   * the room. `null` on the ordinary lesson its own teacher taught.
+   */
+  substituteTeacherId?: Ref<Teacher> | null;
   status: AttendanceStatus;
   /** Only meaningful when `status` is `late`. */
   minutesLate?: number | null;
@@ -416,6 +481,14 @@ export interface BehaviorLog extends BaseDocument {
   subjectId: Ref<Subject>;
   /** The teacher whose lesson it was, per the timetable. */
   teacherId: Ref<Teacher>;
+  /**
+   * ຄູສອນແທນ — the colleague who actually took the lesson, when one did.
+   *
+   * Beside `teacherId` rather than in place of it: the timetabled teacher is what
+   * every per-subject and per-teacher figure is built on, and this is who was in
+   * the room. `null` on the ordinary lesson its own teacher taught.
+   */
+  substituteTeacherId?: Ref<Teacher> | null;
   /** ສະພາບລວມພາຍໃນຫ້ອງ — the class as a whole. */
   classNote?: string | null;
   /** ພຶດຕິກຳ(ລາຍບຸກຄົນ) — what this student did. */
@@ -425,6 +498,40 @@ export interface BehaviorLog extends BaseDocument {
   remark?: string | null;
   /** Whoever filed it, which is not always `teacherId`. */
   recordedBy: Ref<User>;
+}
+
+// ── Lesson substitution (ການມອບໝາຍສອນແທນ) ───────────────────────────────────
+
+/**
+ * One day of one lesson taken by a teacher who is not on the timetable for it.
+ *
+ * What it grants is narrow: that day's roll call and behaviour register, and
+ * nothing about marking — a day's cover is not a term's grades. What it also does
+ * is move the coverage and punctuality reports' expectation onto the stand-in, so
+ * the teacher who was away stops being reported for a register they could not have
+ * written.
+ *
+ * Both teachers are on the record and both are load-bearing: `substituteTeacherId`
+ * is who may write the lesson up, `ownerTeacherId` is a snapshot of who the
+ * timetable gave it to when the claim was made — kept because the office reassigns
+ * lessons mid-term and a claim has to keep saying who was stood in for.
+ */
+export interface LessonSubstitution extends BaseDocument {
+  teachingAssignmentId: Ref<TeachingAssignment>;
+  /** The school day covered, `yyyy-MM-dd` at UTC midnight. */
+  date: string;
+  /** The teacher who took the lesson, and who owes its paperwork. */
+  substituteTeacherId: Ref<Teacher>;
+  /** Who the timetable said owned it when the claim was made. */
+  ownerTeacherId: Ref<Teacher>;
+  classroomId: Ref<Classroom>;
+  subjectId: Ref<Subject>;
+  semesterId: Ref<Semester>;
+  schoolYearId: Ref<SchoolYear>;
+  /** ເຫດຜົນ — free text, as the office writes it on paper. */
+  reason?: string | null;
+  /** Whoever pressed the button; the teacher themselves, or the office. */
+  claimedBy: Ref<User>;
 }
 
 // ── Conduct deductions (ຕັດຄະແນນກົດລະບຽບ) ────────────────────────────────────
@@ -509,13 +616,37 @@ export interface SchedulePeriod {
  * endpoints populate only the two references the other axis does not already
  * fix (a teacher's timetable carries subject and classroom, and vice versa).
  */
+/**
+ * One arrangement of a lesson's weekly periods, and the days it was in force.
+ *
+ * `from` inclusive, `to` exclusive — the spells meet exactly, so a question about
+ * any day lands in one and never between two.
+ */
+export interface ScheduleSpell {
+  schedule: SchedulePeriod[];
+  from: string;
+  /** `null` while this is the arrangement in force. */
+  to?: string | null;
+  changedBy?: Ref<User> | null;
+  note?: string | null;
+}
+
 export interface TeachingAssignment extends BaseDocument {
   teacherId: Ref<Teacher>;
   subjectId: Ref<Subject>;
   classroomId: Ref<Classroom>;
   semesterId: Ref<Semester>;
   schoolYearId: Ref<SchoolYear>;
+  /** The arrangement in force today — what every screen reads. */
   schedule: SchedulePeriod[];
+  /**
+   * Every arrangement this lesson has had, oldest first.
+   *
+   * What stops a timetable revision rewriting the weeks behind it: the reports ask
+   * what the timetable said *on each day*, not what it says now. Empty means the
+   * lesson has never moved.
+   */
+  scheduleHistory?: ScheduleSpell[];
   isActive: boolean;
   notes?: string | null;
 }
@@ -747,6 +878,16 @@ export interface CalendarEvent extends BaseDocument {
   isHalfDay?: boolean;
   location?: string | null;
   schoolYearId?: Ref<SchoolYear>;
+  /**
+   * The classes the day is off for. Both empty — the usual case — means the
+   * whole school.
+   *
+   * A grade level closes every room in it; a classroom closes only itself.
+   * Distinct from the announcement-style `targets`, which is who is *shown* the
+   * event: telling every teacher about a holiday is not closing every class.
+   */
+  appliesToGradeLevelIds?: Ref<GradeLevel>[];
+  appliesToClassroomIds?: Ref<Classroom>[];
 }
 
 /**

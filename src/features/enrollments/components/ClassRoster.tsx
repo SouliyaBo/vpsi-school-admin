@@ -1,4 +1,4 @@
-import { Users } from 'lucide-react';
+import { Languages, Users } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -25,6 +25,7 @@ import { ErrorState } from '@/components/common/ErrorState';
 import { RowActions } from '@/components/common/RowActions';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { ALLOWED_TRANSITIONS, useClassRoster } from '../api';
+import { EnglishClassDialog } from './EnglishClassDialog';
 import {
   EnrollmentMoveDialog,
   STATUS_ICONS,
@@ -45,6 +46,7 @@ export function ClassRoster() {
 
   const [classroomId, setClassroomId] = useState<string | undefined>();
   const [move, setMove] = useState<EnrollmentMove | null>(null);
+  const [englishClassTarget, setEnglishClassTarget] = useState<Enrollment | null>(null);
 
   const roster = useClassRoster(classroomId);
   const classroom = classrooms.useDetail(classroomId);
@@ -104,6 +106,7 @@ export function ClassRoster() {
                   <TableHead className="w-16">{t('enrollment.rollNumber')}</TableHead>
                   <TableHead>{t('student.studentCode')}</TableHead>
                   <TableHead>{t('person.fullName')}</TableHead>
+                  <TableHead>{t('enrollment.englishClass')}</TableHead>
                   <TableHead className="hidden md:table-cell">
                     {t('enrollment.enrolledAt')}
                   </TableHead>
@@ -129,6 +132,9 @@ export function ClassRoster() {
                           enrollment.studentNameLo
                         )}
                       </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {enrollment.englishClass || '—'}
+                      </TableCell>
                       <TableCell className="hidden md:table-cell">
                         {formatDate(enrollment.enrolledAt)}
                       </TableCell>
@@ -137,13 +143,24 @@ export function ClassRoster() {
                       </TableCell>
                       <TableCell className="text-end">
                         <RowActions
-                          actions={ALLOWED_TRANSITIONS[enrollment.status].map((status) => ({
-                            label: t(STATUS_LABEL_KEYS[status]),
-                            icon: STATUS_ICONS[status],
-                            destructive: status === 'dropped',
-                            hidden: !can('enrollments', 'update'),
-                            onSelect: () => openMove(enrollment, status),
-                          }))}
+                          actions={[
+                            // First in the menu: the roster is where a whole
+                            // class gets its English rooms entered, one row after
+                            // another, while a transfer is the exception.
+                            {
+                              label: t('enrollment.englishClassEdit'),
+                              icon: Languages,
+                              hidden: !can('enrollments', 'update'),
+                              onSelect: () => setEnglishClassTarget(enrollment),
+                            },
+                            ...ALLOWED_TRANSITIONS[enrollment.status].map((status) => ({
+                              label: t(STATUS_LABEL_KEYS[status]),
+                              icon: STATUS_ICONS[status],
+                              destructive: status === 'dropped',
+                              hidden: !can('enrollments', 'update'),
+                              onSelect: () => openMove(enrollment, status),
+                            })),
+                          ]}
                         />
                       </TableCell>
                     </TableRow>
@@ -159,6 +176,11 @@ export function ClassRoster() {
         move={move}
         onClose={() => setMove(null)}
         fromLabel={classroom.data ? classroomLabel(classroom.data) : undefined}
+      />
+
+      <EnglishClassDialog
+        enrollment={englishClassTarget}
+        onClose={() => setEnglishClassTarget(null)}
       />
 
       <p className="text-xs text-muted-foreground">{t('enrollment.transferNote')}</p>

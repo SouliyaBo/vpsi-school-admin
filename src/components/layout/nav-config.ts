@@ -26,7 +26,9 @@ import {
   Shuffle,
   Syringe,
   Telescope,
+  UserCheck,
   UserCog,
+  UserRoundCheck,
   Users,
   UsersRound,
   type LucideIcon,
@@ -113,6 +115,18 @@ export const NAV_GROUPS: NavGroup[] = [
         to: '/behavior-logs',
         icon: ClipboardCheck,
         resource: 'behavior-logs',
+      },
+      {
+        labelKey: 'lessonCover',
+        to: '/lesson-cover',
+        icon: UserRoundCheck,
+        resource: 'lesson-substitutions',
+      },
+      {
+        labelKey: 'homeroomReviews',
+        to: '/homeroom-reviews',
+        icon: UserCheck,
+        resource: 'homeroom-reviews',
       },
       {
         labelKey: 'conductDeductions',

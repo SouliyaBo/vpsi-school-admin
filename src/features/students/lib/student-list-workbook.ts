@@ -43,6 +43,8 @@ export interface StudentListRow {
   /** `ມ.1/ຂ`, or blank for a child the office has not placed yet. */
   classroom: string;
   homeroomTeacher: string;
+  /** ຫ້ອງພາກອັງກິດ, blank when the office has not set one. */
+  englishClass: string;
 }
 
 /** Every string the sheet prints, resolved by the caller through `t`. */
@@ -64,6 +66,7 @@ export interface StudentListLabels {
   nicknameEn: string;
   classroom: string;
   homeroomTeacher: string;
+  englishClass: string;
   /** ລວມ {{count}} ຄົນ. */
   total: (count: number) => string;
   printedOn: string;
@@ -93,6 +96,9 @@ const COLUMNS: {
   { key: 'nameEn', label: 'nameEn', width: 26, lao: false },
   { key: 'nicknameEn', label: 'nicknameEn', width: 14, lao: false },
   { key: 'classroom', label: 'classroom', width: 12, lao: true },
+  // Next to the homeroom, because the two are read as a pair. Set in the Latin
+  // face: the office writes these as `EP-A`, not in Lao script.
+  { key: 'englishClass', label: 'englishClass', width: 14, lao: false },
   { key: 'homeroomTeacher', label: 'homeroomTeacher', width: 24, lao: true },
 ];
 

@@ -10,6 +10,7 @@ import { useGradeLevelOptions } from '@/features/grade-levels/api';
 import { useSubjectGroupOptions } from '@/features/subject-groups/api';
 import { useCrudDialogs } from '@/hooks/use-crud-dialogs';
 import { useTableQueryState } from '@/hooks/use-table-query-state';
+import { vmsg } from '@/lib/form-message';
 import { stripEmpty } from '@/lib/payload';
 import { localizedName, refId, refObject } from '@/lib/utils';
 import {
@@ -27,7 +28,13 @@ import { Form } from '@/components/ui/form';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { DataTable, type DataTableColumnMeta } from '@/components/common/DataTable';
 import { EntitySelectField } from '@/components/common/EntitySelect';
-import { FieldSection, NumberField, SelectField, TextField } from '@/components/common/fields';
+import {
+  FieldSection,
+  NumberField,
+  SelectField,
+  SwitchField,
+  TextField,
+} from '@/components/common/fields';
 import { FormDialog } from '@/components/common/FormDialog';
 import { PageHeader } from '@/components/common/PageHeader';
 import { RowActions } from '@/components/common/RowActions';
@@ -53,7 +60,60 @@ const schema = z.object({
   // Comma-separated on the form, a list on the wire: they are columns on the
   // mark sheet, and typing them is faster than managing rows of them.
   strands: optionalText(200),
+  /**
+   * ຄະແນນເຕັມ of the monthly sheet, for a subject the school marks its own way.
+   *
+   * Held on the form as a switch and four numbers rather than as four nullable
+   * fields: a subject either keeps the usual 1 / 1 / 2 / 6 or declares a whole
+   * scheme of its own, and a half-filled override is not a third thing.
+   */
+  customColumnMax: z.boolean(),
+  maxAttendance: optionalNumber({ min: 0, max: 10 }),
+  maxNotebook: optionalNumber({ min: 0, max: 10 }),
+  maxActivity: optionalNumber({ min: 0, max: 10 }),
+  maxTest: optionalNumber({ min: 0, max: 10 }),
+}).superRefine((values, context) => {
+  if (!values.customColumnMax) return;
+
+  const columns: (number | undefined)[] = [
+    values.maxAttendance,
+    values.maxNotebook,
+    values.maxActivity,
+    values.maxTest,
+  ];
+  // The four still have to come to 10: ສະເລ່ຍ, 3 ເດືອນ, ພາກຮຽນ and every band
+  // and letter above them read a month on that scale, so a subject marked out
+  // of 9 would print beside the others as one its whole class had done worse
+  // at. Refused on the form as well as by the API, so the office is told which
+  // number is wrong rather than handed a rejected save.
+  if (columns.some((value) => value === undefined)) {
+    for (const [index, field] of COLUMN_FIELDS.entries()) {
+      if (columns[index] === undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field],
+          message: vmsg('validation.required'),
+        });
+      }
+    }
+    return;
+  }
+
+  const total = columns.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+  if (Math.round(total * 100) / 100 !== MARK_TOTAL) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['maxTest'],
+      message: vmsg('validation.columnMaxTotal', { total: MARK_TOTAL }),
+    });
+  }
 });
+
+/** Every part of the monthly sheet is out of 10 — see the API's `MARK_MAX`. */
+const MARK_TOTAL = 10;
+
+/** The four form fields that make up an override, in the sheet's own order. */
+const COLUMN_FIELDS = ['maxAttendance', 'maxNotebook', 'maxActivity', 'maxTest'] as const;
 
 type FormValues = z.infer<typeof schema>;
 
@@ -70,6 +130,11 @@ const EMPTY: FormValues = {
   sortOrder: 0,
   passingPercentage: undefined,
   strands: '',
+  customColumnMax: false,
+  maxAttendance: 1,
+  maxNotebook: 0,
+  maxActivity: 3,
+  maxTest: 6,
 };
 
 export function SubjectsPage() {
@@ -98,6 +163,7 @@ export function SubjectsPage() {
    * a parent, since the register is one level deep by design.
    */
   const formGradeLevelId = form.watch('gradeLevelId');
+  const customColumnMax = form.watch('customColumnMax');
   const useParentOptions = (search: string) =>
     useSubjectOptions(search, formGradeLevelId || undefined, 'taught');
 
@@ -118,6 +184,13 @@ export function SubjectsPage() {
             sortOrder: dialogs.record.sortOrder ?? 0,
             passingPercentage: dialogs.record.passingPercentage ?? undefined,
             strands: (dialogs.record.strands ?? []).join(', '),
+            customColumnMax: dialogs.record.monthlyColumnMax != null,
+            // The ສັງຄົມ scheme stands in for a subject that has none, since
+            // that is what the switch is almost always turned on to enter.
+            maxAttendance: dialogs.record.monthlyColumnMax?.attendance ?? 1,
+            maxNotebook: dialogs.record.monthlyColumnMax?.notebook ?? 0,
+            maxActivity: dialogs.record.monthlyColumnMax?.activity ?? 3,
+            maxTest: dialogs.record.monthlyColumnMax?.test ?? 6,
           }
         : { ...EMPTY, gradeLevelId: table.filters.gradeLevelId ?? '' },
     );
@@ -227,7 +300,30 @@ export function SubjectsPage() {
     // A subject's code and grade level are fixed at creation — the API's update
     // DTO does not accept them, and it rejects unknown properties rather than
     // ignoring them, so sending the whole form back fails the save outright.
-    const { code: _code, gradeLevelId: _grade, strands: _strands, ...updatable } = values;
+    const {
+      code: _code,
+      gradeLevelId: _grade,
+      strands: _strands,
+      // Form-only: the wire carries one `monthlyColumnMax` object or a null.
+      customColumnMax: _custom,
+      maxAttendance: _attendance,
+      maxNotebook: _notebook,
+      maxActivity: _activity,
+      maxTest: _test,
+      ...updatable
+    } = values;
+
+    // Sent either way, like the department: turning the switch off has to put
+    // the subject back on the school's usual columns rather than leave it on
+    // the scheme it was last saved with.
+    const monthlyColumnMax = values.customColumnMax
+      ? {
+          attendance: values.maxAttendance ?? 0,
+          notebook: values.maxNotebook ?? 0,
+          activity: values.maxActivity ?? 0,
+          test: values.maxTest ?? 0,
+        }
+      : null;
 
     // Sent as a list either way, so clearing the field marks the subject as one
     // rather than leaving yesterday's strands on it.
@@ -249,9 +345,21 @@ export function SubjectsPage() {
             // filed under a ສາຍວິຊາ it is no longer marked with.
             parentSubjectId: values.parentSubjectId ?? null,
             strands,
+            monthlyColumnMax,
           },
         })
-      : create.mutateAsync({ ...stripEmpty(values), strands } as SubjectInput);
+      : create.mutateAsync({
+          ...stripEmpty({
+            ...values,
+            customColumnMax: undefined,
+            maxAttendance: undefined,
+            maxNotebook: undefined,
+            maxActivity: undefined,
+            maxTest: undefined,
+          }),
+          strands,
+          monthlyColumnMax,
+        } as SubjectInput);
     void mutation.then(dialogs.closeForm).catch(() => {});
   }
 
@@ -416,6 +524,55 @@ export function SubjectsPage() {
               description={t('subject.strandsHint')}
               className="sm:col-span-2"
             />
+            {/* ຄະແນນເຕັມ of the monthly sheet. Off, the subject is marked on the
+                school's usual ຂື້ນຫ້ອງ 1 · ປື້ມ 1 · ກິດຈະກຳ 2 · ກວດກາ 6; on, it
+                declares its own — ສັງຄົມ keeps no ປື້ມ and is marked 1 · 0 · 3 · 6,
+                as the ສາຍວິຊາ at ມ.1–ມ.3 and as its three split subjects at ມ.5
+                and ມ.6. */}
+            <SwitchField
+              control={form.control}
+              name="customColumnMax"
+              label={t('subject.columnMax')}
+              description={t('subject.columnMaxHint')}
+              className="sm:col-span-2"
+            />
+            {customColumnMax && (
+              <>
+                <NumberField
+                  control={form.control}
+                  name="maxAttendance"
+                  label={t('monthlyMark.column.attendance')}
+                  min={0}
+                  max={10}
+                  step={0.5}
+                />
+                <NumberField
+                  control={form.control}
+                  name="maxNotebook"
+                  label={t('monthlyMark.column.notebook')}
+                  min={0}
+                  max={10}
+                  step={0.5}
+                />
+                <NumberField
+                  control={form.control}
+                  name="maxActivity"
+                  label={t('monthlyMark.column.activity')}
+                  min={0}
+                  max={10}
+                  step={0.5}
+                />
+                <NumberField
+                  control={form.control}
+                  name="maxTest"
+                  label={t('monthlyMark.column.test')}
+                  description={t('subject.columnMaxTotalHint')}
+                  min={0}
+                  max={10}
+                  step={0.5}
+                />
+              </>
+            )}
           </FieldSection>
         </Form>
       </FormDialog>

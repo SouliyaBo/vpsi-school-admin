@@ -381,11 +381,23 @@ export function CoverageReport({ kind }: { kind: CoverageKind }) {
               </TableHeader>
               <TableBody>
                 {rows.map((row) => (
-                  <TableRow key={row.teachingAssignmentId}>
+                  // A covered lesson yields one row per responsible teacher, so the
+                  // lesson id alone is no longer unique across the table.
+                  <TableRow key={`${row.teachingAssignmentId}|${row.teacherId}`}>
                     <TableCell className="font-medium">{classLabel(row)}</TableCell>
                     <TableCell>
                       {row.teacherName}
                       <p className="text-xs text-muted-foreground">{row.teacherCode ?? '—'}</p>
+                      {/* Said on the row, because "ຄູ ກ has not marked ຄະນິດສາດ ມ.4/ກ"
+                          reads as an error to anyone who knows that is not their
+                          class — the office included. */}
+                      {row.isSubstitute && (
+                        <Badge variant="secondary" className="mt-1">
+                          {row.coveringForTeacherName
+                            ? t('cover.coveringFor', { name: row.coveringForTeacherName })
+                            : t('cover.badge')}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>{subjectLabel(row, i18n.language)}</TableCell>
                     <TableCell className="tabular-nums">

@@ -57,11 +57,14 @@ export function MyWeekReminder() {
 
           <ul className="space-y-0.5 text-sm">
             {missing.slice(0, LISTED).map((row) => (
-              <li key={row.teachingAssignmentId} className="truncate">
+              // One lesson can now produce two rows — the teacher's own days and a
+              // stand-in's — so the lesson id alone is not a unique key.
+              <li key={`${row.teachingAssignmentId}|${row.teacherId}`} className="truncate">
                 <span className="font-medium">{classLabel(row)}</span>
                 <span className="text-muted-foreground">
                   {' · '}
                   {subjectLabel(row, i18n.language)}
+                  {row.isSubstitute && ` · ${t('cover.badge')}`}
                   {' · '}
                   {t('behaviorLog.lessonsTaught', { count: row.lessonsElapsed })}
                 </span>

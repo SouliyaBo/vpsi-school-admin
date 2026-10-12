@@ -26,6 +26,7 @@ import {
   type ParentReportLabels,
   type ParentReportRemarks,
 } from '../lib/parent-report-workbook';
+import { loadRegisters } from '../lib/load-registers';
 
 /**
  * ໃບລາຍງານຜູ້ປົກຄອງ — the month's marks as the letter that goes home.
@@ -37,12 +38,19 @@ import {
  * a button on each row for one child, and a button over the table that zips a
  * chosen set of them, one `.xlsx` each, for a whole class at month's end.
  *
- * The remark is the one thing on the page the system does not hold. Both
- * buttons open a form for it before anything is built — one field per subject
- * and one for the month — and what is typed is kept per student while the
- * sheet is open, so a letter re-downloaded, or downloaded again in the batch,
- * does not start from blank. It is not saved anywhere: the school keeps no
- * register of these beyond the file.
+ * Both buttons open a remark form before anything is built — one field per
+ * subject and one for the month. The per-subject fields open on ເຫດຜົນ as the
+ * subject teacher wrote it when they entered the marks, which is where an
+ * explanation belongs: it is written while the month is still fresh, it is kept
+ * with the marks, and the same month exported twice now says the same thing
+ * both times. Edits made here are the office's own wording for this letter —
+ * kept per student while the sheet is open, so a letter re-downloaded or
+ * downloaded again in the batch does not start over, and not written back to
+ * the register, which is the teacher's.
+ *
+ * ຄຳເຫັນຂອງຄູປະຈຳຫ້ອງ for the month as a whole is still typed here and kept
+ * nowhere else: it is the homeroom teacher's remark on the child's month, and
+ * no screen collects one.
  */
 
 type Row = ClassMonthData['rows'][number];
@@ -70,10 +78,22 @@ export function useRemarkStore(sheet: ClassMonthData | undefined): {
   };
 }
 
-const blankRemark = (sheet: ClassMonthData): ParentReportRemarks => ({
-  bySubject: sheet.subjects.map(() => ''),
+/**
+ * What the remark form opens on for a student nobody has edited here.
+ *
+ * The per-subject fields carry ເຫດຜົນ from the mark sheet, aligned with the
+ * summary's subject columns; the month's own remark starts blank, since nothing
+ * collects one. An API that predates the stored remark answers without them and
+ * the form opens empty, exactly as it used to.
+ */
+const storedRemark = (sheet: ClassMonthData, row: Row): ParentReportRemarks => ({
+  bySubject: sheet.subjects.map((_, index) => row.remarks?.[index] ?? ''),
   overall: '',
 });
+
+/** Whether a remark says anything at all — what the batch list marks a row by. */
+const hasAnything = (remark: ParentReportRemarks): boolean =>
+  Boolean(remark.overall.trim() || remark.bySubject.some((text) => text.trim()));
 
 /** Everything on the letter that is a word, in the language the screen is in. */
 function labelsFor(t: TFunction, sheet: ClassMonthData, schoolYear: string): ParentReportLabels {
@@ -98,6 +118,14 @@ function labelsFor(t: TFunction, sheet: ClassMonthData, schoolYear: string): Par
     average: t('monthlyMark.parentReportAverage'),
     grade: t('monthlyMark.parentReportGrade'),
     incompleteRow: (recorded, total) => t('monthlyMark.ofSubjects', { recorded, total }),
+    registerCorner: t('monthlyMark.parentReportRegisterCorner'),
+    conductPoints: t('monthlyMark.conductPoints'),
+    deducted: t('monthlyMark.deducted'),
+    remaining: t('monthlyMark.remaining'),
+    absences: t('monthlyMark.absences'),
+    excused: t('monthlyMark.excusedAbsence'),
+    unexcused: t('monthlyMark.unexcusedAbsence'),
+    absencesTotal: t('monthlyMark.absencesTotal'),
     note: t('monthlyMark.parentReportNote'),
     gradeScaleLines: t('monthlyMark.parentReportScale').split('\n'),
     printedOn: t('monthlyMark.printedOn', { date: formatDate(new Date()) }),
@@ -198,26 +226,31 @@ export function ParentReportRowButton({
   sheet,
   row,
   schoolYear,
+  schoolYearId,
   remarks,
   setRemark,
 }: {
   sheet: ClassMonthData;
   row: Row;
   schoolYear: string;
+  /** The year ຄະແນນຄຸນສົມບັດ is counted over; without it the conduct cells print empty. */
+  schoolYearId: string | undefined;
   remarks: RemarkStore;
   setRemark: (studentId: string, remark: ParentReportRemarks) => void;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const remark = remarks.get(row.studentId) ?? blankRemark(sheet);
+  const remark = remarks.get(row.studentId) ?? storedRemark(sheet, row);
 
   async function exportReport() {
     setBusy(true);
     try {
+      const registers = await loadRegisters(sheet, schoolYearId);
       const blob = await buildParentReportWorkbook(sheet, labelsFor(t, sheet, schoolYear), {
         studentId: row.studentId,
         remarks: new Map([[row.studentId, trimmed(remark)]]),
+        registers,
       });
       saveBlob(blob, parentReportFileName(sheet, fileHeading(t, sheet), row.studentNameLo));
       setOpen(false);
@@ -283,11 +316,13 @@ export function ParentReportRowButton({
 export function ParentReportBatchButton({
   sheet,
   schoolYear,
+  schoolYearId,
   remarks,
   setRemark,
 }: {
   sheet: ClassMonthData;
   schoolYear: string;
+  schoolYearId: string | undefined;
   remarks: RemarkStore;
   setRemark: (studentId: string, remark: ParentReportRemarks) => void;
 }) {
@@ -319,15 +354,26 @@ export function ParentReportBatchButton({
     setBusy(true);
     try {
       const heading = fileHeading(t, sheet);
+      // Built over the chosen rows rather than over what was typed: a letter for
+      // a child nobody opened the form for still carries the teacher's ເຫດຜົນ,
+      // which is the whole reason the remark is now kept with the marks.
       const withRemarks: RemarkStore = new Map(
-        [...remarks].map(([studentId, remark]) => [studentId, trimmed(remark)]),
+        eligible
+          .filter((row) => chosen.has(row.studentId))
+          .map((row) => [
+            row.studentId,
+            trimmed(remarks.get(row.studentId) ?? storedRemark(sheet, row)),
+          ]),
       );
+      // Read once for the class, not once per letter.
+      const registers = await loadRegisters(sheet, schoolYearId);
       const blob = await buildParentReportArchive(
         sheet,
         labelsFor(t, sheet, schoolYear),
         [...chosen],
         withRemarks,
         (student) => parentReportFileName(sheet, heading, student.studentNameLo),
+        registers,
       );
       saveBlob(blob, parentReportFileName(sheet, heading).replace(/\.xlsx$/, '.zip'));
       setOpen(false);
@@ -373,12 +419,7 @@ export function ParentReportBatchButton({
           <div className="max-h-[55vh] space-y-1 overflow-y-auto">
             {eligible.map((row) => {
               const isOpen = expanded === row.studentId;
-              const hasRemark = (() => {
-                const remark = remarks.get(row.studentId);
-                return Boolean(
-                  remark && (remark.overall.trim() || remark.bySubject.some((text) => text.trim())),
-                );
-              })();
+              const hasRemark = hasAnything(remarks.get(row.studentId) ?? storedRemark(sheet, row));
               return (
                 <Collapsible
                   key={row.studentId}
@@ -422,7 +463,7 @@ export function ParentReportBatchButton({
                     <RemarkFields
                       sheet={sheet}
                       row={row}
-                      value={remarks.get(row.studentId) ?? blankRemark(sheet)}
+                      value={remarks.get(row.studentId) ?? storedRemark(sheet, row)}
                       onChange={(next) => setRemark(row.studentId, next)}
                     />
                   </CollapsibleContent>

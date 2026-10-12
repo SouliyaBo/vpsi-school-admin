@@ -18,6 +18,7 @@ import { ErrorState } from '@/components/common/ErrorState';
 import { StudentName } from '@/components/common/StudentName';
 import { classroomHeading } from '@/features/classrooms/api';
 import {
+  displayTotal,
   useSaveTermMarks,
   useSemesterSheet,
   type SemesterSheet as SemesterSheetData,
@@ -227,12 +228,19 @@ export function SemesterSheet() {
   );
 }
 
-/** A mark out of 10 — dashed while unmarked, red below the pass line. */
-export function Mark({ value }: { value: number | null }) {
+/**
+ * A mark out of 10 — dashed while unmarked, red below the pass line.
+ *
+ * `whole` writes it the way the office writes a month's ລວມ, rounded to a whole
+ * mark. The red stays on the exact figure, so a 4.7 prints as a red 5 rather
+ * than passing itself off as one: the pass line is drawn where the marks
+ * actually fall, not where they round to.
+ */
+export function Mark({ value, whole = false }: { value: number | null; whole?: boolean }) {
   if (value === null) return <span className="text-muted-foreground">—</span>;
   return (
     <span className={cn('tabular-nums', value < PASSING_MARK && 'font-medium text-danger')}>
-      {value.toFixed(2)}
+      {whole ? displayTotal(value) : value.toFixed(2)}
     </span>
   );
 }

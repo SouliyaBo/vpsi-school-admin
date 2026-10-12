@@ -5,10 +5,12 @@ import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { useCan } from '@/features/auth/hooks';
+import { useClassroomOptions } from '@/features/classrooms/api';
+import { useGradeLevelOptions } from '@/features/grade-levels/api';
 import { useActiveSchoolYear } from '@/features/school-years/api';
 import { useCrudDialogs } from '@/hooks/use-crud-dialogs';
 import { stripEmpty } from '@/lib/payload';
-import { cn, formatDate, toDateInput } from '@/lib/utils';
+import { cn, formatDate, refId, toDateInput } from '@/lib/utils';
 import { endAfterStart, endAfterStartIssue, optionalText, requiredDate, requiredText } from '@/lib/zod-helpers';
 import { CALENDAR_EVENT_TYPES, DEFAULT_DAY_EFFECT, SCHOOL_DAY_EFFECTS } from '@/types/enums';
 import type { CalendarEvent, SchoolDay } from '@/types/entities';
@@ -22,6 +24,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { ErrorState } from '@/components/common/ErrorState';
 import {
   CheckboxField,
+  CheckboxGroupField,
   DateField,
   FieldSection,
   SelectField,
@@ -66,6 +69,10 @@ const schema = z
     startDate: requiredDate(),
     endDate: requiredDate(),
     isHalfDay: z.boolean(),
+    // Both empty is the common case and means the whole school — see the
+    // placement section of the form.
+    appliesToGradeLevelIds: z.array(z.string()),
+    appliesToClassroomIds: z.array(z.string()),
   })
   .refine(endAfterStart, endAfterStartIssue);
 
@@ -80,6 +87,8 @@ const EMPTY: FormValues = {
   startDate: '',
   endDate: '',
   isHalfDay: false,
+  appliesToGradeLevelIds: [],
+  appliesToClassroomIds: [],
 };
 
 const EMPTY_DAYS: Map<string, SchoolDay> = new Map();
@@ -115,6 +124,8 @@ export function CalendarPage() {
   });
 
   const activeYear = useActiveSchoolYear();
+  const gradeOptions = useGradeLevelOptions();
+  const classroomOptions = useClassroomOptions();
 
   /**
    * The range the grid asks the API to classify.
@@ -154,6 +165,22 @@ export function CalendarPage() {
 
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: EMPTY });
 
+  /**
+   * What the form's scope adds up to, said in words under the boxes.
+   *
+   * Ticking nothing is the answer for almost every event, and an untouched pair
+   * of empty lists reads as "I have not filled this in" rather than "the whole
+   * school" unless the form says so.
+   */
+  const watchedGrades = form.watch('appliesToGradeLevelIds');
+  const watchedRooms = form.watch('appliesToClassroomIds');
+  const scopeSummary = useMemo(() => {
+    const grades = watchedGrades?.length ?? 0;
+    const rooms = watchedRooms?.length ?? 0;
+    if (grades === 0 && rooms === 0) return t('calendar.appliesToWholeSchool');
+    return t('calendar.appliesToCount', { grades, rooms });
+  }, [watchedGrades, watchedRooms, t]);
+
   // Picking a type moves the effect with it, so the common case is one choice.
   // Only when the type changes, so an office that deliberately set `open` on a
   // holiday does not have it reset under them as they finish the form.
@@ -177,6 +204,12 @@ export function CalendarPage() {
             startDate: toDateInput(dialogs.record.startDate),
             endDate: toDateInput(dialogs.record.endDate),
             isHalfDay: dialogs.record.isHalfDay ?? false,
+            appliesToGradeLevelIds: (dialogs.record.appliesToGradeLevelIds ?? []).map(
+              (ref) => refId(ref) ?? '',
+            ),
+            appliesToClassroomIds: (dialogs.record.appliesToClassroomIds ?? []).map(
+              (ref) => refId(ref) ?? '',
+            ),
           }
         : presetDate
           ? { ...EMPTY, startDate: presetDate, endDate: presetDate }
@@ -190,19 +223,30 @@ export function CalendarPage() {
    * The classified day carries only a summary of each event; the description and
    * the record the edit form needs are on the list, so the two are joined by id.
    * A day the API did not classify falls back to a range match on the list.
+   *
+   * The classification is the *school's*, so an event that closes only ມ.1 is
+   * deliberately not among its events — that is what keeps the grid from
+   * painting the whole school shut. It is still filed on the day, though, and a
+   * day off nobody can see after saving it is a day off that gets entered twice.
+   * So the list's own range match is added on top rather than used only as a
+   * fallback, and those events are marked as the class-scoped ones they are.
    */
   const selectedEvents = useMemo(() => {
     if (!selectedDate) return [];
     const records = list.data?.data ?? [];
-    const day = dayMap.get(selectedDate);
-    if (day) {
-      return day.events.map(
-        (summary) => records.find((event) => event.id === summary.id) ?? (summary as CalendarEvent),
-      );
-    }
-    return records.filter(
-      (event) => event.startDate.slice(0, 10) <= selectedDate && event.endDate.slice(0, 10) >= selectedDate,
+    const covering = records.filter(
+      (event) =>
+        event.startDate.slice(0, 10) <= selectedDate && event.endDate.slice(0, 10) >= selectedDate,
     );
+
+    const day = dayMap.get(selectedDate);
+    if (!day) return covering;
+
+    const schoolWide = day.events.map(
+      (summary) => records.find((event) => event.id === summary.id) ?? (summary as CalendarEvent),
+    );
+    const shown = new Set(schoolWide.map((event) => event.id));
+    return [...schoolWide, ...covering.filter((event) => !shown.has(event.id))];
   }, [selectedDate, list.data, dayMap]);
 
   /** "Add on this day": the form, pre-filled with a one-day range. */
@@ -472,6 +516,31 @@ export function CalendarPage() {
               label={t('common.description')}
               className="sm:col-span-2"
             />
+          </FieldSection>
+
+          {/* ຫຍຸດສະເພາະຊັ້ນ. Left alone the event is school-wide, which is what
+              almost every one of them is — so this section says so in its own
+              hint rather than making the office tick the whole school. */}
+          <FieldSection title={t('calendar.appliesTo')} columns={2}>
+            <CheckboxGroupField
+              control={form.control}
+              name="appliesToGradeLevelIds"
+              label={t('gradeLevel.title')}
+              description={t('calendar.appliesToHint')}
+              options={gradeOptions.data ?? []}
+              emptyLabel={t('common.noData')}
+            />
+            <CheckboxGroupField
+              control={form.control}
+              name="appliesToClassroomIds"
+              label={t('classroom.title')}
+              description={t('calendar.appliesToRoomsHint')}
+              options={classroomOptions.data ?? []}
+              emptyLabel={t('common.noData')}
+            />
+            {scopeSummary && (
+              <p className="text-sm text-muted-foreground sm:col-span-2">{scopeSummary}</p>
+            )}
           </FieldSection>
         </Form>
       </FormDialog>

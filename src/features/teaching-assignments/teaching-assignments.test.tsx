@@ -611,3 +611,87 @@ describe('teaching assignments — teacher timetable', () => {
     expect(await screen.findByText('Swap slot')).toBeInTheDocument();
   });
 });
+
+/**
+ * ປ່ຽນຕາຕະລາງ — moving a lesson without rewriting the weeks behind it.
+ *
+ * The timetable is a fact about each day, not about now. Every report derives
+ * which days a lesson was owed on from its weekday, so a schedule replaced in
+ * place used to change the past too: Mondays a teacher had taught and marked
+ * stopped counting, and Wednesdays they had never taught appeared as gaps right
+ * back to the start of term. The API now dates the change; this is the form
+ * letting the office say when, and never sending a date it did not ask for.
+ */
+describe('teaching assignments — a revised schedule', () => {
+  beforeEach(() => {
+    vi.spyOn(apiClient, 'get').mockImplementation(((path: string) =>
+      Promise.resolve(route(path))) as typeof apiClient.get);
+    vi.spyOn(apiClient, 'patch').mockResolvedValue(assignment);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('sends no date when the office does not give one', async () => {
+    renderWithProviders(<AssignmentList />);
+    await openEditDialog();
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(1));
+    // Omitted, so the API applies the change from today. Sending a date the
+    // office did not choose would be this form deciding which weeks get rewritten.
+    expect(vi.mocked(apiClient.patch).mock.calls[0]![1]).not.toHaveProperty('effectiveFrom');
+  });
+
+  it('sends the day the office chose', async () => {
+    renderWithProviders(<AssignmentList />);
+    const dialog = await openEditDialog();
+
+    const field = within(dialog).getByLabelText(/new schedule applies from/i);
+    await userEvent.type(field, '2026-10-06');
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(apiClient.patch).mock.calls[0]![1]).toMatchObject({
+      effectiveFrom: '2026-10-06',
+    });
+  });
+
+  it('shows the arrangements the lesson has already had', async () => {
+    vi.spyOn(apiClient, 'get').mockImplementation(((path: string) => {
+      if (path === '/teaching-assignments') {
+        return Promise.resolve(
+          paginated([
+            {
+              ...assignment,
+              scheduleHistory: [
+                {
+                  from: '2026-09-01',
+                  to: '2026-10-06',
+                  schedule: [{ dayOfWeek: 1, startTime: '15:10', endTime: '16:00', room: null }],
+                  note: 'ປ່ຽນຕາຕະລາງກາງເທີມ',
+                },
+                {
+                  from: '2026-10-06',
+                  to: null,
+                  schedule: [{ dayOfWeek: 3, startTime: '15:10', endTime: '16:00', room: null }],
+                  note: null,
+                },
+              ],
+            },
+          ]),
+        );
+      }
+      return Promise.resolve(route(path));
+    }) as typeof apiClient.get);
+
+    renderWithProviders(<AssignmentList />);
+    const dialog = await openEditDialog();
+
+    // Without this panel, a report that owes Monday one week and Wednesday the
+    // next reads as contradicting the timetable on screen.
+    expect(within(dialog).getByText(/previous schedules/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/ປ່ຽນຕາຕະລາງກາງເທີມ/)).toBeInTheDocument();
+  });
+});

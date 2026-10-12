@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as apiClient from '@/lib/api-client';
 import { StudentsPage } from '@/features/students/pages/StudentsPage';
 import { paginated, renderWithProviders } from '@/test/utils';
+import { ClassRoster } from './components/ClassRoster';
 import { PlacementQueue } from './components/PlacementQueue';
 
 /**
@@ -45,6 +46,7 @@ const placedStudent = {
     schoolYearId: activeYear.id,
     rollNumber: 7,
     enrolledAt: '2026-05-01T00:00:00.000Z',
+    englishClass: 'EP-A',
   },
 };
 
@@ -79,6 +81,8 @@ function stubReads(students: unknown[]) {
       return paginated(rows) as never;
     }
     if (url === '/classrooms') return paginated([classroom]) as never;
+    // Not paginated — the distinct labels the filter offers.
+    if (url === '/enrollments/english-classes') return ['EP-A', 'EP-B'] as never;
     return paginated([]) as never;
   });
 }
@@ -325,5 +329,226 @@ describe('placement — a homeroom teacher', () => {
 
     expect(await screen.findByRole('button', { name: /m4 A/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /m4 B/ })).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * `ຫ້ອງພາກອັງກິດ` — the English-programme room.
+ *
+ * It is not the homeroom: the English lessons regroup the year into rooms of
+ * their own, so nothing about it can be derived from `classroomId`. It lives on
+ * the placement because the grouping is re-made every school year, which is what
+ * these tests pin — it rides along with the placement request rather than the
+ * student, and editing it PATCHes the enrollment.
+ */
+describe('placement — the English-programme room', () => {
+  const enrollment = {
+    id: '507f1f77bcf86cd799439020',
+    studentId: placedStudent.id,
+    studentCode: 'S-0001',
+    studentNameLo: 'ສົມຈິດ ວົງສາ',
+    classroomId: classroom.id,
+    schoolYearId: activeYear.id,
+    gradeLevelId: 'g1',
+    enrolledAt: '2026-05-01T00:00:00.000Z',
+    status: 'active',
+    rollNumber: 7,
+    englishClass: 'EP-A',
+  };
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('shows it on the students list beside the homeroom, not instead of it', async () => {
+    stubReads([placedStudent]);
+    renderWithProviders(<StudentsPage />);
+
+    expect(await screen.findByText('m4 A')).toBeInTheDocument();
+    expect(screen.getByText(/english class: EP-A/i)).toBeInTheDocument();
+  });
+
+  it('sends it with the placement when the office fills it in at intake', async () => {
+    stubReads([placedStudent, unplacedStudent]);
+    const post = vi.spyOn(apiClient, 'post').mockImplementation(async (url: string) => {
+      if (url === '/students') return unplacedStudent as never;
+      return { id: 'e4' } as never;
+    });
+    renderWithProviders(<StudentsPage />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /add student/i }));
+    const form = await screen.findByRole('dialog');
+
+    await userEvent.type(within(form).getByLabelText(/student code/i), 'S-0006');
+    await userEvent.type(within(form).getAllByLabelText(/first name \(lao\)/i)[0]!, 'ນາງ');
+    await userEvent.type(within(form).getAllByLabelText(/last name \(lao\)/i)[0]!, 'ຄຳ');
+    fireEvent.change(within(form).getByLabelText(/date of birth/i), {
+      target: { value: '2011-03-04' },
+    });
+    await userEvent.click(within(form).getByRole('combobox', { name: /classroom/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /m4 A/ }));
+    await userEvent.type(within(form).getByLabelText(/english class/i), 'EP-B');
+    await userEvent.click(within(form).getByRole('button', { name: /create new/i }));
+    await userEvent.type(within(form).getAllByLabelText(/first name \(lao\)/i)[1]!, 'ບຸນມີ');
+    await userEvent.type(within(form).getAllByLabelText(/last name \(lao\)/i)[1]!, 'ຄຳ');
+    await userEvent.type(within(form).getAllByLabelText(/phone/i).at(-1)!, '2055512345');
+    await userEvent.click(within(form).getByRole('button', { name: /^save$/i }));
+
+    // On the placement, never on the student: the room is per school year.
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/enrollments', {
+        studentId: unplacedStudent.id,
+        classroomId: classroom.id,
+        englishClass: 'EP-B',
+      }),
+    );
+    expect(
+      vi.mocked(post).mock.calls.find(([url]) => url === '/students')?.[1],
+    ).not.toHaveProperty('englishClass');
+  });
+
+  it('filters the students list by room, asking the API rather than the browser', async () => {
+    stubReads([placedStudent]);
+    renderWithProviders(<StudentsPage />);
+    await screen.findByText('m4 A');
+
+    await userEvent.click(screen.getByRole('combobox', { name: /english class/i }));
+    await userEvent.click(await screen.findByRole('option', { name: 'EP-A' }));
+
+    // Server-side: the room lives on the enrollment, so the browser holding the
+    // page it already has could never answer "who is in EP-A across the school".
+    await waitFor(() => {
+      const params = vi
+        .mocked(apiClient.get)
+        .mock.calls.filter(([url]) => url === '/students')
+        .at(-1)?.[1]?.params;
+      expect(params).toMatchObject({ englishClass: 'EP-A' });
+    });
+  });
+
+  it('asks for the students still missing a room without sending a magic label', async () => {
+    stubReads([placedStudent]);
+    renderWithProviders(<StudentsPage />);
+    await screen.findByText('m4 A');
+
+    await userEvent.click(screen.getByRole('combobox', { name: /english class/i }));
+    await userEvent.click(await screen.findByRole('option', { name: /not set/i }));
+
+    await waitFor(() => {
+      const params = vi
+        .mocked(apiClient.get)
+        .mock.calls.filter(([url]) => url === '/students')
+        .at(-1)?.[1]?.params;
+      // Its own flag: a sentinel on `englishClass` could one day be a real room.
+      expect(params).toMatchObject({ englishClassSet: 'false' });
+      expect(params).not.toHaveProperty('englishClass');
+    });
+  });
+
+  it('edits it from the student form, without touching the student record', async () => {
+    stubReads([placedStudent]);
+    const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue({ id: 'e1' });
+
+    renderWithProviders(<StudentsPage />);
+    await screen.findByText('m4 A');
+
+    await userEvent.click(screen.getByRole('button', { name: /actions/i }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /^edit$/i }));
+
+    const form = await screen.findByRole('dialog');
+    const field = within(form).getByLabelText(/english class/i);
+    // Prefilled from the placement the list row already carried.
+    expect(field).toHaveValue('EP-A');
+
+    await userEvent.clear(field);
+    await userEvent.type(field, 'EP-C');
+    await userEvent.click(within(form).getByRole('button', { name: /^save$/i }));
+
+    // Only the enrollment is written: nothing about the student changed, and the
+    // room is not a field on the student document.
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith('/enrollments/e1', { englishClass: 'EP-C' }),
+    );
+    expect(patch.mock.calls.every(([url]) => !url.startsWith('/students/'))).toBe(true);
+  });
+
+  it('leaves the field out of the student form when the child has no placement', async () => {
+    stubReads([unplacedStudent]);
+    renderWithProviders(<StudentsPage />);
+    await screen.findByText(/no class yet/i);
+
+    await userEvent.click(screen.getByRole('button', { name: /actions/i }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /^edit$/i }));
+
+    // There is no enrollment row to write it to, so offering the box would take
+    // an edit the save could not keep.
+    const form = await screen.findByRole('dialog');
+    expect(within(form).queryByLabelText(/english class/i)).not.toBeInTheDocument();
+  });
+
+  it('edits it from the class roster with a PATCH on the placement', async () => {
+    vi.spyOn(apiClient, 'get').mockImplementation(async (url: string) => {
+      if (url === '/school-years/active') return activeYear as never;
+      if (url === '/classrooms') return paginated([classroom]) as never;
+      if (url === `/classrooms/${classroom.id}`) return classroom as never;
+      if (url === `/enrollments/classroom/${classroom.id}/roster`) return [enrollment] as never;
+      return paginated([]) as never;
+    });
+    const patch = vi
+      .spyOn(apiClient, 'patch')
+      .mockResolvedValue({ ...enrollment, englishClass: 'EP-C' });
+
+    renderWithProviders(<ClassRoster />);
+
+    await userEvent.click(await screen.findByRole('combobox', { name: /select a classroom/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /m4 A/ }));
+
+    // The roster carries it, so a teacher reading down the column can check it.
+    expect(await screen.findByText('EP-A')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /actions/i }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /edit english class/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    const field = within(dialog).getByLabelText(/english class/i);
+    await userEvent.clear(field);
+    await userEvent.type(field, 'EP-C');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith(`/enrollments/${enrollment.id}`, {
+        englishClass: 'EP-C',
+      }),
+    );
+  });
+
+  it('clears the room by sending an empty string rather than dropping the field', async () => {
+    vi.spyOn(apiClient, 'get').mockImplementation(async (url: string) => {
+      if (url === '/school-years/active') return activeYear as never;
+      if (url === '/classrooms') return paginated([classroom]) as never;
+      if (url === `/classrooms/${classroom.id}`) return classroom as never;
+      if (url === `/enrollments/classroom/${classroom.id}/roster`) return [enrollment] as never;
+      return paginated([]) as never;
+    });
+    const patch = vi
+      .spyOn(apiClient, 'patch')
+      .mockResolvedValue({ ...enrollment, englishClass: null });
+
+    renderWithProviders(<ClassRoster />);
+
+    await userEvent.click(await screen.findByRole('combobox', { name: /select a classroom/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /m4 A/ }));
+    await screen.findByText('EP-A');
+
+    await userEvent.click(screen.getByRole('button', { name: /actions/i }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /edit english class/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.clear(within(dialog).getByLabelText(/english class/i));
+    await userEvent.click(within(dialog).getByRole('button', { name: /^save$/i }));
+
+    // A stripped payload would send `{}` and leave EP-A in place — taking a
+    // child out of the English programme has to be expressible.
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith(`/enrollments/${enrollment.id}`, { englishClass: '' }),
+    );
   });
 });

@@ -335,6 +335,86 @@ export function SwitchField<T extends FieldValues>({
 }
 
 /** Groups related fields with a heading inside a long form. */
+/**
+ * A list of checkboxes bound to one `string[]` field.
+ *
+ * For the choices a form makes several of at once out of a fixed, knowable list
+ * — which classes a day off applies to. A tag picker would hide the unticked
+ * options behind a search box, and the question being answered here is "which of
+ * these", which is only readable when all of them are on screen.
+ *
+ * Scrolls past `maxVisible` rows rather than growing without limit: a school
+ * with thirty rooms would otherwise push the Save button off the dialog.
+ */
+export function CheckboxGroupField<T extends FieldValues>({
+  control,
+  name,
+  label,
+  description,
+  options,
+  disabled,
+  className,
+  columns = 2,
+  emptyLabel,
+}: Omit<BaseFieldProps<T>, 'placeholder' | 'required'> & {
+  options: { value: string; label: string }[];
+  columns?: 1 | 2 | 3;
+  /** Shown in place of the boxes when there is nothing to choose from. */
+  emptyLabel?: string;
+}) {
+  return (
+    <FormField
+      control={control}
+      name={name}
+      render={({ field }) => {
+        const selected: string[] = Array.isArray(field.value) ? field.value : [];
+        const toggle = (value: string, checked: boolean) =>
+          field.onChange(
+            checked ? [...selected, value] : selected.filter((entry) => entry !== value),
+          );
+
+        return (
+          <FormItem className={className}>
+            <FormLabel>{label}</FormLabel>
+            {description && <FormDescription>{description}</FormDescription>}
+            <FormControl>
+              {options.length === 0 ? (
+                <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                  {emptyLabel ?? ''}
+                </p>
+              ) : (
+                <div
+                  className={cn(
+                    'max-h-44 overflow-y-auto rounded-md border p-2',
+                    columns === 1 && 'grid grid-cols-1 gap-1',
+                    columns === 2 && 'grid grid-cols-2 gap-1',
+                    columns === 3 && 'grid grid-cols-2 gap-1 sm:grid-cols-3',
+                  )}
+                >
+                  {options.map((option) => (
+                    <label
+                      key={option.value}
+                      className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-muted"
+                    >
+                      <Checkbox
+                        checked={selected.includes(option.value)}
+                        onCheckedChange={(checked) => toggle(option.value, checked === true)}
+                        disabled={disabled}
+                      />
+                      <span className="truncate">{option.label}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        );
+      }}
+    />
+  );
+}
+
 export function FieldSection({
   title,
   children,

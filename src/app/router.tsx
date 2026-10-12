@@ -52,6 +52,14 @@ const BehaviorLogsPage = lazyPage(
   () => import('@/features/behavior-logs/pages/BehaviorLogsPage'),
   'BehaviorLogsPage',
 );
+const HomeroomReviewsPage = lazyPage(
+  () => import('@/features/homeroom-reviews/pages/HomeroomReviewsPage'),
+  'HomeroomReviewsPage',
+);
+const LessonCoverPage = lazyPage(
+  () => import('@/features/lesson-substitutions/pages/LessonCoverPage'),
+  'LessonCoverPage',
+);
 const ConductDeductionsPage = lazyPage(
   () => import('@/features/conduct-deductions/pages/ConductDeductionsPage'),
   'ConductDeductionsPage',
@@ -180,6 +188,14 @@ export const router = createBrowserRouter([
           { path: 'enrollments', element: guarded(<EnrollmentsPage />, 'enrollments') },
           { path: 'attendances', element: guarded(<AttendancesPage />, 'attendances') },
           { path: 'behavior-logs', element: guarded(<BehaviorLogsPage />, 'behavior-logs') },
+          {
+            path: 'lesson-cover',
+            element: guarded(<LessonCoverPage />, 'lesson-substitutions'),
+          },
+          {
+            path: 'homeroom-reviews',
+            element: guarded(<HomeroomReviewsPage />, 'homeroom-reviews'),
+          },
           {
             path: 'conduct-deductions',
             element: guarded(<ConductDeductionsPage />, 'conduct-scores'),

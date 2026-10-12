@@ -7,7 +7,13 @@ import type { SchoolDay } from '@/types/entities';
 import { CalendarPage } from './pages/CalendarPage';
 
 // The office fills this in, so the screen is asserted with the permission to.
-vi.mock('@/features/auth/hooks', () => ({ useCan: () => () => true }));
+// `useCurrentUser` and `useSeesEveryStudent` come with the classroom picker the
+// scope section uses, which narrows its list for a homeroom teacher.
+vi.mock('@/features/auth/hooks', () => ({
+  useCan: () => () => true,
+  useCurrentUser: () => ({ username: 'admin', permissions: [] }),
+  useSeesEveryStudent: () => true,
+}));
 
 /**
  * ປະຕິທິນໂຮງຮຽນ.
@@ -50,8 +56,39 @@ const examWeek = {
   endDate: '2026-12-15T00:00:00.000Z',
 };
 
+/**
+ * ມ.1 stood down on a day the rest of the school teaches.
+ *
+ * Deliberately absent from the 5 October entry's `events`: the classification
+ * the grid paints is the *school's*, and a class-only closure is not part of it.
+ * The screen has to find it on the event list instead — which is what the tests
+ * below pin, because an event that vanishes after saving gets entered again the
+ * next day.
+ */
+const gradeClosure = {
+  id: 'evt-m1-off',
+  titleLo: 'ມ.1 ຫຍຸດ',
+  titleEn: 'ມ.1 off',
+  type: 'holiday' as const,
+  dayEffect: 'closed' as const,
+  startDate: '2026-10-05T00:00:00.000Z',
+  endDate: '2026-10-05T00:00:00.000Z',
+  appliesToGradeLevelIds: ['grade-m1'],
+  appliesToClassroomIds: [],
+};
+
 /** Two closures and one ordinary day — enough to tell the three states apart. */
 const SCHOOL_DAYS: SchoolDay[] = [
+  {
+    // Monday 5 October: the API classifies it `teaching` even though ມ.1 is off,
+    // because a class-scoped closure is not the school's day.
+    date: '2026-10-05',
+    state: 'teaching',
+    isTeachingDay: true,
+    isWorkingDay: true,
+    isHalfDay: false,
+    events: [],
+  },
   {
     date: '2026-10-06',
     state: 'teaching',
@@ -82,7 +119,15 @@ function mockApi() {
   vi.spyOn(apiClient, 'get').mockImplementation(async (url: string) => {
     if (url === '/school-years/active') return activeYear as never;
     if (url === '/calendar/school-days') return SCHOOL_DAYS as never;
-    if (url === '/calendar') return paginated([holiday, examWeek]) as never;
+    if (url === '/calendar') return paginated([holiday, examWeek, gradeClosure]) as never;
+    if (url === '/grade-levels') {
+      return paginated([{ id: 'grade-m1', code: 'm1', nameLo: 'ມ.1', level: 1 }]) as never;
+    }
+    if (url === '/classrooms') {
+      return paginated([
+        { id: 'room-m1a', name: 'ກ', gradeLevelId: { id: 'grade-m1', code: 'm1' } },
+      ]) as never;
+    }
     return paginated([]) as never;
   });
 }
@@ -107,7 +152,7 @@ describe('the school calendar', () => {
     renderWithProviders(<CalendarPage />);
 
     // The three numbers every other menu counts against.
-    expect(await screen.findByText('1 teaching days')).toBeInTheDocument();
+    expect(await screen.findByText('2 teaching days')).toBeInTheDocument();
     expect(screen.getByText('1 without classes')).toBeInTheDocument();
     expect(screen.getByText('1 closed')).toBeInTheDocument();
   });
@@ -189,5 +234,79 @@ describe('the school calendar', () => {
         within(dialog).getByRole('combobox', { name: /Effect on the school day/ }),
       ).toHaveTextContent('No classes');
     });
+  });
+});
+
+/**
+ * ຫຍຸດສະເພາະຊັ້ນ — a day off for named classes rather than the school.
+ *
+ * The rule that matters is the one every other report depends on: a class-only
+ * closure leaves the school's own day alone, so the other years keep owing their
+ * registers. What the screen owes on top of that is visibility — the office must
+ * be able to see the day it just entered.
+ */
+describe('a day off for some classes only', () => {
+  it('leaves the school day open, and says so in the day’s own words', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CalendarPage />);
+
+    await user.click(await screen.findByLabelText(/^2026-10-05/));
+    const drawer = await screen.findByRole('dialog');
+
+    // The API classified the day `teaching`, because only ມ.1 is off.
+    expect(drawer).toHaveTextContent('Teaching day');
+  });
+
+  it('still shows the closure on that day, marked as the partial one it is', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CalendarPage />);
+
+    await user.click(await screen.findByLabelText(/^2026-10-05/));
+    const drawer = await screen.findByRole('dialog');
+
+    const row = within(drawer).getByText('ມ.1 ຫຍຸດ').closest('li')!;
+    expect(within(row).getByText('Some classes only')).toBeInTheDocument();
+  });
+
+  it('does not mark a school-wide closure as partial', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CalendarPage />);
+
+    await user.click(await screen.findByLabelText(/^2026-10-07/));
+    const drawer = await screen.findByRole('dialog');
+
+    const row = within(drawer).getByText('ພັກວັນຄູແຫ່ງຊາດ').closest('li')!;
+    expect(within(row).queryByText('Some classes only')).not.toBeInTheDocument();
+  });
+
+  it('sends the chosen classes with the event', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({ id: 'evt-new' });
+    const user = userEvent.setup();
+    renderWithProviders(<CalendarPage />);
+
+    await user.click(await screen.findByRole('button', { name: /add event/i }));
+    const form = await screen.findByRole('dialog');
+
+    await user.type(within(form).getByLabelText(/title \(lao\)/i), 'ມ.1 ຫຍຸດ');
+    await user.type(within(form).getByLabelText(/start date/i), '2026-11-02');
+    await user.type(within(form).getByLabelText(/end date/i), '2026-11-02');
+
+    // Empty means the whole school, and the form says so before anything is ticked.
+    expect(within(form).getByText(/the whole school is off/i)).toBeInTheDocument();
+
+    await user.click(within(form).getByRole('checkbox', { name: /m1 — ມ\.1/ }));
+    expect(within(form).getByText(/everyone else teaches as usual/i)).toBeInTheDocument();
+
+    await user.click(within(form).getByRole('button', { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        '/calendar',
+        expect.objectContaining({
+          appliesToGradeLevelIds: ['grade-m1'],
+          appliesToClassroomIds: [],
+        }),
+      ),
+    );
   });
 });

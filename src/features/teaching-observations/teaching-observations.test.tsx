@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as apiClient from '@/lib/api-client';
@@ -226,6 +226,78 @@ describe('the sheet list', () => {
     await screen.findAllByText('ສົມຈິດ ວົງສາ');
 
     expect(screen.queryByRole('button', { name: /new observation/i })).toBeNull();
+  });
+});
+
+/**
+ * ປະເມີນຄັ້ງທີ is counted per observer, and the form says which number that is.
+ *
+ * The screen's part in the rule: before this, the field was blank and unexplained
+ * and the observer typed the number from their own paper — which collided with a
+ * colleague's sheet about the same lesson and was refused. The number the API
+ * would use is now shown against the field the moment the lesson is named.
+ */
+describe('the visit number the form offers', () => {
+  const TEACHERS = [OBSERVED, OBSERVER];
+  const SUBJECTS = [{ id: 'sub-1', code: 'LAO', nameLo: 'ພາສາລາວ', nameEn: 'Lao' }];
+  const ROOMS = [{ id: 'room-1', name: 'M3 A' }];
+  const SEMESTERS = [{ id: 'sem-1', nameLo: 'ພາກຮຽນ 1', nameEn: 'Semester 1', isActive: true }];
+
+  beforeEach(() => {
+    permits = () => true;
+    vi.spyOn(apiClient, 'get').mockImplementation(async (url: string) => {
+      // Ahead of the `/teaching-observations/` prefix below, which would
+      // otherwise answer this with a sheet.
+      if (url === '/teaching-observations/next-visit') return { visitNumber: 2, semesterId: 'sem-1' } as never;
+      if (url === '/teaching-observations/rubric') return RUBRIC as never;
+      if (url === '/teaching-observations') return paginated([DRAFT]) as never;
+      if (url.startsWith('/teaching-observations/')) return DRAFT as never;
+      if (url === '/teachers') return paginated(TEACHERS) as never;
+      if (url === '/subjects') return paginated(SUBJECTS) as never;
+      if (url === '/classrooms') return paginated(ROOMS) as never;
+      if (url === '/semesters') return paginated(SEMESTERS) as never;
+      return paginated([]) as never;
+    });
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  /** Walks an `EntitySelect` inside the dialog: open it, then take the option. */
+  async function pick(dialog: HTMLElement, field: RegExp, option: RegExp) {
+    await userEvent.click(within(dialog).getByRole('combobox', { name: field }));
+    await userEvent.click(await screen.findByRole('button', { name: option }));
+  }
+
+  it('asks for the signed-in observer’s own next number, and shows it', async () => {
+    const get = vi.mocked(apiClient.get);
+
+    renderWithProviders(<ObservationList />);
+    await screen.findAllByText('ສົມຈິດ ວົງສາ');
+
+    await userEvent.click(screen.getAllByRole('button', { name: /new observation/i })[0]!);
+    const dialog = await screen.findByRole('dialog');
+
+    // The observer is already filled in as the signed-in teacher; the teacher
+    // observed and the subject are what complete the question. The room is
+    // named on the sheet but is not part of the count, so it is not picked here.
+    await pick(dialog, /teacher observed/i, /T-001/);
+    await pick(dialog, /subject taught/i, /LAO/);
+    await pick(dialog, /semester/i, /Semester 1/);
+
+    await waitFor(() =>
+      expect(get).toHaveBeenCalledWith(
+        '/teaching-observations/next-visit',
+        expect.objectContaining({
+          params: {
+            teacherId: 'teacher-observed',
+            observerId: 'teacher-observer',
+            subjectId: 'sub-1',
+            semesterId: 'sem-1',
+          },
+        }),
+      ),
+    );
+
+    expect(await within(dialog).findByText(/this will be visit 2/i)).toBeInTheDocument();
   });
 });
 

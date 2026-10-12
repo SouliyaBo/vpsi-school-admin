@@ -50,6 +50,14 @@ export interface SheetRow {
   period: number;
   subject: Subject | null;
   teacher: Teacher | null;
+  /**
+   * ຄູສອນແທນ — the colleague who took the lesson, when one did.
+   *
+   * On the printed sheet as well as on screen: the office signs these off, and a
+   * row whose teacher was not in the building that day is a question somebody will
+   * ask of the paper rather than of the app.
+   */
+  substituteTeacher: Teacher | null;
   classNote: string | null;
   remark: string | null;
   teachingAssignmentId: string;
@@ -127,6 +135,18 @@ export interface UpdateBehaviorLogInput {
   entries?: BehaviorEntryInput[];
 }
 
+/**
+ * How much of a term a tally covers.
+ *
+ * All optional; nothing set is the whole semester. The same narrowing the
+ * attendance summary offers, so the two screens are read the same way.
+ */
+export interface BehaviorTallyScope {
+  from?: string;
+  to?: string;
+  subjectId?: string;
+}
+
 /** `GET /behavior-logs/tally/...` — per-student counts over one semester. */
 export interface BehaviorTallyRow {
   studentId: string;
@@ -158,8 +178,11 @@ export const behaviorLogsApi = {
 
   remove: (groupId: string) => del<void>(`/behavior-logs/${groupId}`),
 
-  classroomTally: (classroomId: string, semesterId: string) =>
-    get<BehaviorTallyRow[]>(`/behavior-logs/tally/classroom/${classroomId}/semester/${semesterId}`),
+  classroomTally: (classroomId: string, semesterId: string, scope: BehaviorTallyScope = {}) =>
+    get<BehaviorTallyRow[]>(
+      `/behavior-logs/tally/classroom/${classroomId}/semester/${semesterId}`,
+      { params: cleanParams({ ...scope }) },
+    ),
 
   myWeek: (params: Pick<CoverageParams, 'weekOf' | 'semesterId'> = {}) =>
     get<MyLessonCoverage>('/behavior-logs/weekly-coverage/mine', {
@@ -192,12 +215,41 @@ export function useBehaviorEntryContext(classroomId: string | undefined, date: s
 }
 
 /** 404s while nothing has been recorded, which is normal, so it is not retried. */
-export function useBehaviorTally(classroomId: string | undefined, semesterId: string | undefined) {
+export function useBehaviorTally(
+  classroomId: string | undefined,
+  semesterId: string | undefined,
+  scope: BehaviorTallyScope = {},
+) {
   return useQuery({
-    queryKey: ['behavior-logs', 'tally', classroomId, semesterId],
-    queryFn: () => behaviorLogsApi.classroomTally(classroomId!, semesterId!),
+    queryKey: ['behavior-logs', 'tally', classroomId, semesterId, scope],
+    queryFn: () => behaviorLogsApi.classroomTally(classroomId!, semesterId!, scope),
     enabled: Boolean(classroomId && semesterId),
+    // Narrowing the window re-fetches; keeping the rows on screen meanwhile is
+    // what stops the table blinking out under the filter that changed it.
+    placeholderData: (previous) => previous,
     retry: false,
+  });
+}
+
+/**
+ * One student's entries behind their tally row.
+ *
+ * The log list, scoped and paged small: a row is opened to answer "which
+ * lessons, which days, and what was written", and a reader who wants the whole
+ * term has the history tab for it.
+ */
+export function useStudentBehaviorEntries(
+  studentId: string,
+  classroomId: string | undefined,
+  semesterId: string | undefined,
+  scope: BehaviorTallyScope,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['behavior-logs', 'student-entries', studentId, classroomId, semesterId, scope],
+    queryFn: () =>
+      behaviorLogsApi.list({ studentId, classroomId, semesterId, ...scope, limit: 20 }),
+    enabled: enabled && Boolean(studentId && semesterId),
   });
 }
 

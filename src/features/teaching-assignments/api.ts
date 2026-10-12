@@ -32,6 +32,17 @@ export interface TeachingAssignmentInput {
  */
 export interface TeachingAssignmentUpdateInput {
   schedule?: SchedulePeriodInput[];
+  /**
+   * The first day the new `schedule` applies to. Defaults to today on the API.
+   *
+   * The timetable is a fact about each day, not about now: every report derives
+   * which days a lesson was owed on from its weekday, so a schedule replaced in
+   * place used to change the weeks behind it as well. Backdate it to the start of
+   * term to correct an arrangement that was always wrong.
+   */
+  effectiveFrom?: string;
+  /** ເຫດຜົນ — kept with the spell this change closes. */
+  scheduleNote?: string;
   isActive?: boolean;
   notes?: string;
 }

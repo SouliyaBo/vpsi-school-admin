@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { AlertCircle, ArrowRightLeft } from 'lucide-react';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -17,7 +18,9 @@ import {
   requiredText,
 } from '@/lib/zod-helpers';
 import { GENDERS, HOUSING_TYPES, MARITAL_STATUSES, TEACHER_STATUSES } from '@/types/enums';
+import type { TeacherStatus } from '@/types/enums';
 import type { Teacher } from '@/types/entities';
+import { Button } from '@/components/ui/button';
 import { Form } from '@/components/ui/form';
 import { EntitySelectField } from '@/components/common/EntitySelect';
 import {
@@ -33,6 +36,7 @@ import { FormDialog } from '@/components/common/FormDialog';
 import {
   teachers,
   useNextTeacherCode,
+  useTeacherCommitments,
   type TeacherInput,
   type TeacherUpdateInput,
 } from '../api';
@@ -141,9 +145,19 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   /** `null` creates; a record edits. */
   teacher: Teacher | null;
+  /**
+   * Opens the handover dialog for this teacher.
+   *
+   * Offered from here because this is where a departure is recorded, and a status
+   * of `resigned` on its own changes nothing: nothing in the system reads it, so
+   * the timetable and the homeroom stay theirs until somebody moves them. The form
+   * says so at the moment the status is chosen, rather than letting the office
+   * find out from a report weeks later.
+   */
+  onHandOver?: (teacher: Teacher) => void;
 }
 
-export function TeacherFormDialog({ open, onOpenChange, teacher }: Props) {
+export function TeacherFormDialog({ open, onOpenChange, teacher, onHandOver }: Props) {
   const { t } = useTranslation();
   const create = teachers.useCreate();
   const update = teachers.useUpdate();
@@ -152,6 +166,7 @@ export function TeacherFormDialog({ open, onOpenChange, teacher }: Props) {
   const nextCode = useNextTeacherCode(open && !teacher);
 
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: EMPTY });
+  const watchedStatus = form.watch('status');
 
   useEffect(() => {
     if (!open) return;
@@ -403,6 +418,14 @@ export function TeacherFormDialog({ open, onOpenChange, teacher }: Props) {
                 }))}
               />
             )}
+            {teacher && (
+              <StillHoldsWarning
+                teacher={teacher}
+                status={watchedStatus}
+                onHandOver={onHandOver}
+                onClose={() => onOpenChange(false)}
+              />
+            )}
             <CheckboxField
               control={form.control}
               name="isAcademicHead"
@@ -471,5 +494,65 @@ export function TeacherFormDialog({ open, onOpenChange, teacher }: Props) {
         </div>
       </Form>
     </FormDialog>
+  );
+}
+
+/**
+ * "This teacher still holds a timetable and a homeroom."
+ *
+ * Shown the moment a status other than `active` is chosen, because that is the
+ * moment the office believes they have recorded the departure — and the status is
+ * a label: nothing reads it, so the lessons stay on the timetable and the room
+ * keeps their name on the ວັນພຸດ/ວັນສຸກ report until somebody moves them. Left as a
+ * warning rather than a block, because the two halves are usually done on
+ * different days: the status goes in when the teacher leaves, the posts move when
+ * the replacement arrives.
+ */
+function StillHoldsWarning({
+  teacher,
+  status,
+  onHandOver,
+  onClose,
+}: {
+  teacher: Teacher;
+  status: TeacherStatus | undefined;
+  onHandOver?: (teacher: Teacher) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const leaving = status !== undefined && status !== 'active';
+  const commitments = useTeacherCommitments(teacher.id, leaving);
+
+  const held = commitments.data;
+  if (!leaving || !held) return null;
+
+  const lessons = held.assignments.length;
+  const rooms = held.homerooms.length;
+  if (lessons === 0 && rooms === 0) return null;
+
+  return (
+    <div className="space-y-2 rounded-md border border-warning/20 bg-warning-subtle px-3 py-2 sm:col-span-2">
+      <p className="flex items-start gap-2 text-sm text-warning">
+        <AlertCircle className="mt-0.5 size-4 shrink-0" />
+        {t('handover.stillHolds', { lessons, rooms })}
+      </p>
+      {onHandOver && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            // Closes this form first: the handover changes the very fields this one
+            // is holding, so leaving both open would put a stale status on screen
+            // over a record that had moved underneath it.
+            onClose();
+            onHandOver(teacher);
+          }}
+        >
+          <ArrowRightLeft />
+          {t('handover.action')}
+        </Button>
+      )}
+    </div>
   );
 }

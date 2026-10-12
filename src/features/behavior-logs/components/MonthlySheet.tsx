@@ -247,6 +247,7 @@ export function MonthlySheet() {
                         editLabel={t('common.edit')}
                         deleteLabel={t('common.delete')}
                         periodLabel={t('behaviorLog.periodN', { number: row.period })}
+                        coverLabel={t('cover.substituteTeacher')}
                         onEdit={() => openEdit(row)}
                         onDelete={() => setPendingDelete(row)}
                       />
@@ -297,6 +298,8 @@ interface SheetTableRowProps {
   editLabel: string;
   deleteLabel: string;
   periodLabel: string;
+  /** ຄູສອນແທນ — the label, since this row takes its wording as props. */
+  coverLabel: string;
   onEdit: () => void;
   onDelete: () => void;
 }
@@ -317,6 +320,7 @@ function SheetTableRow({
   editLabel,
   deleteLabel,
   periodLabel,
+  coverLabel,
   onEdit,
   onDelete,
 }: SheetTableRowProps) {
@@ -350,6 +354,13 @@ function SheetTableRow({
       </Cell>
       <Cell className="whitespace-nowrap">
         {row.teacher ? fullName(row.teacher, language) : '—'}
+        {/* Under the timetabled name rather than in place of it: the sheet has to
+            say both who the lesson belongs to and who actually took it. */}
+        {row.substituteTeacher && (
+          <p className="text-xs text-muted-foreground">
+            {coverLabel}: {fullName(row.substituteTeacher, language)}
+          </p>
+        )}
       </Cell>
       <Cell>{row.remark || '—'}</Cell>
       <Cell className="print:hidden">

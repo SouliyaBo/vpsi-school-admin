@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -28,6 +29,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { ErrorState } from '@/components/common/ErrorState';
 import { StudentName } from '@/components/common/StudentName';
 import {
+  displayTotal,
   localTotal,
   MARK_COLUMNS,
   useLockMonth,
@@ -54,11 +56,26 @@ const EMPTY: MonthCells = { attendance: null, notebook: null, activity: null, te
  * ລວມ is the one figure computed on this side, because it has to answer under
  * the fingers of whoever is typing. Everything above it — ສະເລ່ຍ, 3 ເດືອນ,
  * ພາກຮຽນ — is the API's, so no two screens can disagree about the term mark.
+ * It is shown as a whole mark, the way the office writes a month's total, but
+ * only here on the screen: the exact figure is what is saved and what every
+ * average above is built from.
  *
  * An unmarked row opens on ຄະແນນເຕັມ rather than on four blanks, because that is
  * what most of a class gets: the teacher then types only where a mark was lost.
  * Those cells are drawn faintly and are still only a draft — nothing reaches the
  * API until ບັນທຶກ — and ລ້າງ puts the sheet back to what is actually saved.
+ *
+ * ເຫດຜົນ sits at the end of each row, saved with the marks and printed under the
+ * subject on ໃບລາຍງານຜູ້ປົກຄອງ. It is where a lost mark gets explained while the
+ * teacher still remembers why: the letter home used to take a remark typed at
+ * the moment of export and kept nowhere, so the same month sent twice could say
+ * two different things and the office held no record of either.
+ *
+ * Which columns are drawn is the API's answer, not the four constants: ສັງຄົມ
+ * keeps no ປື້ມ — the ສາຍວິຊາ itself at ມ.1–ມ.3, and ພູມສາດ / ສຶກສາພົນລະເມືອງ /
+ * ປະຫວັດສາດ at ມ.5 and ມ.6 — and a cell for it would invite a mark the save
+ * refuses and a ຄະແນນເຕັມ prefill of 0 that reads as a notebook the student lost
+ * rather than one nobody keeps.
  */
 export function MonthGridForm() {
   const { t } = useTranslation();
@@ -70,6 +87,7 @@ export function MonthGridForm() {
   const [month, setMonth] = useState(() => new Date().getMonth() + 1);
   const [strand, setStrand] = useState<string | undefined>();
   const [draft, setDraft] = useState<Record<string, MonthCells>>({});
+  const [remarks, setRemarks] = useState<Record<string, string>>({});
   const [outcome, setOutcome] = useState<SaveMarksResult | null>(null);
   const [reopening, setReopening] = useState(false);
 
@@ -100,18 +118,45 @@ export function MonthGridForm() {
     return rows;
   }, [data, activeStrand]);
 
+  /** ເຫດຜົນ as it stands on the server, so only edited ones are ever sent. */
+  const savedRemarks = useMemo(() => {
+    const rows: Record<string, string> = {};
+    for (const row of data?.rows ?? []) {
+      const cell = row.strands.find((entry) => (entry.strand ?? undefined) === activeStrand);
+      rows[row.studentId] = cell?.remark ?? '';
+    }
+    return rows;
+  }, [data, activeStrand]);
+
   const isLocked = (data?.rows ?? []).some((row) =>
     row.strands.some((cell) => (cell.strand ?? undefined) === activeStrand && cell.isLocked),
   );
   const canWrite = Boolean(data?.canEdit) && !isLocked;
 
-  /** ຄະແນນເຕັມ of every column, as the API states them for this subject. */
+  /**
+   * The columns to draw — the subject's own where the API names them, and all
+   * four for an API that predates a subject being able to drop one.
+   */
+  const columns = useMemo<readonly MarkColumn[]>(
+    () => (data?.columns?.length ? data.columns : MARK_COLUMNS),
+    [data],
+  );
+
+  /**
+   * ຄະແນນເຕັມ of every column the subject keeps, as the API states them.
+   *
+   * A column it does not keep stays `null` rather than taking its max of 0: the
+   * prefill must leave it unwritten, since 0 there would be a mark nobody gave.
+   */
   const fullMarks = useMemo<MonthCells>(() => {
     if (!data) return EMPTY;
     return Object.fromEntries(
-      MARK_COLUMNS.map((column) => [column, data.columnMax[column] ?? null]),
+      MARK_COLUMNS.map((column) => [
+        column,
+        columns.includes(column) ? (data.columnMax[column] ?? null) : null,
+      ]),
     ) as MonthCells;
-  }, [data]);
+  }, [data, columns]);
 
   /** Fill the blanks of one row with full marks, leaving written marks alone. */
   const withFullMarks = (cells: MonthCells): MonthCells =>
@@ -132,20 +177,30 @@ export function MonthGridForm() {
     for (const row of data?.rows ?? []) {
       if (!row.isEnrolled) continue;
       const cells = saved[row.studentId] ?? EMPTY;
-      if (MARK_COLUMNS.every((column) => cells[column] === null)) {
+      if (columns.every((column) => cells[column] === null)) {
         rows[row.studentId] = fullMarks;
       }
     }
     return rows;
-  }, [saved, data, canWrite, fullMarks]);
+  }, [saved, data, canWrite, fullMarks, columns]);
 
   useEffect(() => {
     setDraft(opening);
     setOutcome(null);
   }, [opening]);
 
-  const dirty = Object.keys(draft).filter((studentId) =>
-    MARK_COLUMNS.some((column) => draft[studentId]?.[column] !== saved[studentId]?.[column]),
+  useEffect(() => {
+    setRemarks(savedRemarks);
+  }, [savedRemarks]);
+
+  /**
+   * The rows ບັນທຶກ would send — a changed mark or a changed ເຫດຜົນ is equally a
+   * change, so a teacher who only explains a month still has something to save.
+   */
+  const dirty = [...new Set([...Object.keys(draft), ...Object.keys(remarks)])].filter(
+    (studentId) =>
+      MARK_COLUMNS.some((column) => draft[studentId]?.[column] !== saved[studentId]?.[column]) ||
+      (remarks[studentId] ?? '') !== (savedRemarks[studentId] ?? ''),
   );
 
   /** A cell holding a stand-in rather than a mark anyone has given. */
@@ -154,7 +209,7 @@ export function MonthGridForm() {
 
   /** How many rows are sitting on untouched full marks — what ບັນທຶກ would write. */
   const suggestedRows = (data?.rows ?? []).filter(
-    (row) => row.isEnrolled && MARK_COLUMNS.every((column) => isSuggested(row.studentId, column)),
+    (row) => row.isEnrolled && columns.every((column) => isSuggested(row.studentId, column)),
   ).length;
 
   /** ໃສ່ຄະແນນເຕັມ — every blank on the sheet, including half-marked rows. */
@@ -177,7 +232,14 @@ export function MonthGridForm() {
       semesterId: data.semester.id,
       month,
       strand: activeStrand,
-      entries: dirty.map((studentId) => ({ studentId, ...draft[studentId] })),
+      entries: dirty.map((studentId) => ({
+        studentId,
+        // Falls back to what is saved rather than to blanks: a row that reached
+        // this list on its ເຫດຜົນ alone must not arrive with four nulls, which
+        // would clear marks nobody touched.
+        ...(draft[studentId] ?? saved[studentId] ?? EMPTY),
+        remark: remarks[studentId]?.trim() || null,
+      })),
     });
     setOutcome(result);
   }
@@ -234,7 +296,10 @@ export function MonthGridForm() {
                     <Button
                       variant="ghost"
                       disabled={dirty.length === 0}
-                      onClick={() => setDraft(saved)}
+                      onClick={() => {
+                        setDraft(saved);
+                        setRemarks(savedRemarks);
+                      }}
                     >
                       <Eraser />
                       {t('monthlyMark.clearDraft')}
@@ -332,7 +397,7 @@ export function MonthGridForm() {
                   <TableHead className="w-12">{t('monthlyMark.rollNumber')}</TableHead>
                   <TableHead className="w-24">{t('monthlyMark.studentCode')}</TableHead>
                   <TableHead>{t('monthlyMark.studentName')}</TableHead>
-                  {MARK_COLUMNS.map((column) => (
+                  {columns.map((column) => (
                     <TableHead key={column} className="w-20 text-center">
                       {t(`monthlyMark.column.${column}`)}
                       <span className="ms-1 font-normal text-muted-foreground">
@@ -341,12 +406,13 @@ export function MonthGridForm() {
                     </TableHead>
                   ))}
                   <TableHead className="w-20 text-center">{t('monthlyMark.total')}</TableHead>
+                  <TableHead className="min-w-56">{t('monthlyMark.remark')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {(data?.rows ?? []).map((row) => {
                   const cells = draft[row.studentId] ?? EMPTY;
-                  const total = localTotal(cells);
+                  const total = displayTotal(localTotal(cells));
                   return (
                     <TableRow key={row.studentId} className={cn(!row.isEnrolled && 'opacity-60')}>
                       <TableCell className="tabular-nums">{row.rollNumber ?? '—'}</TableCell>
@@ -357,7 +423,7 @@ export function MonthGridForm() {
                           <p className="text-xs text-muted-foreground">{t('monthlyMark.left')}</p>
                         )}
                       </TableCell>
-                      {MARK_COLUMNS.map((column) => (
+                      {columns.map((column) => (
                         <TableCell key={column} className="text-center">
                           <MarkInput
                             value={cells[column]}
@@ -376,6 +442,24 @@ export function MonthGridForm() {
                       ))}
                       <TableCell className="text-center font-medium tabular-nums">
                         {total ?? '—'}
+                      </TableCell>
+                      {/* ເຫດຜົນ — saved with the marks and printed under this
+                          subject on the month's letter to the guardian. */}
+                      <TableCell>
+                        <Input
+                          value={remarks[row.studentId] ?? ''}
+                          maxLength={300}
+                          disabled={!canWrite || !row.isEnrolled}
+                          aria-label={`${row.studentNameLo} · ${t('monthlyMark.remark')}`}
+                          placeholder={t('monthlyMark.remarkPlaceholder')}
+                          className="h-9"
+                          onChange={(event) =>
+                            setRemarks((previous) => ({
+                              ...previous,
+                              [row.studentId]: event.target.value,
+                            }))
+                          }
+                        />
                       </TableCell>
                     </TableRow>
                   );

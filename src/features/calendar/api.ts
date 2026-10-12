@@ -14,6 +14,9 @@ export interface CalendarEventInput {
   endDate: string;
   isHalfDay?: boolean;
   location?: string;
+  /** Empty (both) means school-wide — see `CalendarEvent.appliesToGradeLevelIds`. */
+  appliesToGradeLevelIds?: string[];
+  appliesToClassroomIds?: string[];
 }
 
 export const calendarApi = {
@@ -26,8 +29,10 @@ export const calendarApi = {
    * restrictive, and that rule lives on the API next to the reports that count
    * against it.
    */
-  schoolDays: (from: string, to: string) =>
-    get<SchoolDay[]>('/calendar/school-days', { params: { from, to } }),
+  schoolDays: (from: string, to: string, classroomId?: string) =>
+    get<SchoolDay[]>('/calendar/school-days', {
+      params: { from, to, ...(classroomId ? { classroomId } : {}) },
+    }),
 };
 
 export const calendarEvents = createCrudHooks<CalendarEvent, CalendarEventInput>(
@@ -36,11 +41,13 @@ export const calendarEvents = createCrudHooks<CalendarEvent, CalendarEventInput>
 );
 
 /** The classified days of a range, keyed for the grid to look up by `yyyy-MM-dd`. */
-export function useSchoolDays(from: string, to: string) {
+export function useSchoolDays(from: string, to: string, classroomId?: string) {
   return useQuery({
-    queryKey: ['calendar', 'school-days', from, to],
+    // The classroom is part of the key: one room's year is a different answer
+    // from the school's, and sharing a cache entry would paint one as the other.
+    queryKey: ['calendar', 'school-days', from, to, classroomId ?? 'school'],
     queryFn: async () => {
-      const days = await calendarApi.schoolDays(from, to);
+      const days = await calendarApi.schoolDays(from, to, classroomId);
       return new Map(days.map((day) => [day.date, day]));
     },
     staleTime: 60_000,

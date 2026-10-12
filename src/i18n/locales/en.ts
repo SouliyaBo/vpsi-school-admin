@@ -82,6 +82,8 @@ export const en: typeof lo = {
     scores: 'Scores',
     attendances: 'Attendance',
     behaviorLogs: 'Behaviour register',
+    lessonCover: 'Lesson cover',
+    homeroomReviews: 'Homeroom review',
     conductDeductions: 'Conduct deductions',
     termResults: 'Term results',
     reports: 'Reports',
@@ -250,6 +252,10 @@ export const en: typeof lo = {
     enrollTitle: 'Place {{name}} in a class',
     enrolledAt: 'Enrolled on',
     rollNumber: 'Roll no.',
+    englishClass: 'English class',
+    englishClassHint: 'The room for English lessons — not the homeroom classroom',
+    englishClassEdit: 'Edit English class',
+    englishClassNone: 'Not set',
     roster: 'Class roster',
     rosterHint: 'Pick a classroom to see its students',
     queue: 'Placement queue',
@@ -279,6 +285,106 @@ export const en: typeof lo = {
     askEnrollLater: 'Later',
     noActiveYearHint: 'An active school year is required before students can be placed',
     placementFailed: 'Student saved, but the placement was rejected: {{reason}}',
+  },
+  /**
+   * ການມອບໝາຍສອນແທນ — cover for a colleague's lesson.
+   *
+   * Its own namespace rather than a corner of `attendance`, because the same
+   * strings appear on the behaviour register and on two oversight reports.
+   */
+  /**
+   * ການສົ່ງມອບການສອນ — a departing teacher's posts passed on.
+   *
+   * Its own namespace because the same strings appear on the teachers table, in
+   * the teacher form, and in the dialog itself.
+   */
+  handover: {
+    action: 'Hand over teaching',
+    title: 'Hand over teaching',
+    subtitle: 'Move everything {{name}} is responsible for to another teacher',
+    submit: 'Hand over',
+    toTeacher: 'Teacher taking over',
+    selectTeacher: 'Choose a teacher',
+    toTeacherHint: 'Only teachers still in service can take a timetable on.',
+    lessonsHeld: '{{count}} lesson(s) on the timetable',
+    homeroomsHeld: 'Homeroom',
+    studentsCount: '{{count}} students',
+    headOf: 'Head of',
+    moveAssignments: 'Move all {{count}} lesson(s) to them',
+    moveHomerooms: 'Move all {{count}} homeroom(s) to them',
+    moveSubjectGroups: 'Also make them head of the {{count}} department(s)',
+    moveSubjectGroupsHint:
+      'Off by default — who the next head is, is a decision rather than a consequence.',
+    resign: 'Mark the outgoing teacher as resigned',
+    resignHint: 'Turn this off for a handover that is temporary, such as leave.',
+    note: 'Reason',
+    notePlaceholder: 'e.g. resigned mid-term',
+    noteHint: 'Kept on the room’s homeroom history and in the audit trail.',
+    keepsHistory:
+      'Registers, marks, reviews and lesson plans keep the name of whoever wrote them. Each ' +
+      'lesson is closed and reopened under the new teacher rather than rewritten, so this ' +
+      'term’s coverage and punctuality figures stay with the teacher who taught them.',
+    nothingToMove: 'This teacher holds no lessons or homerooms — there is nothing to hand over.',
+    isAcademicHead:
+      'They are also head of academic affairs. That flag is not moved by a handover — set it on ' +
+      'whoever takes it on.',
+    accountStillActive: 'Their login is still active. Suspend it on the accounts page.',
+    stillHolds:
+      'They still hold {{lessons}} lesson(s) and {{rooms}} homeroom(s). Changing the status ' +
+      'alone changes nothing else: the lessons stay on the timetable and the room keeps their ' +
+      'name on the Wednesday/Friday review report until somebody moves them.',
+    done: 'Handed over — {{assignments}} lesson(s) and {{homerooms}} homeroom(s) moved',
+    history: 'Homeroom teachers over time',
+    historyCurrent: 'Now',
+    historyVacant: 'No homeroom teacher',
+    historyEmpty: 'No change has been recorded for this room yet',
+  },
+  cover: {
+    title: 'Lesson cover',
+    subtitle: 'Who stood in for whom, and on which day',
+    navLabel: 'Lesson cover',
+    notYourLesson: 'This lesson is not yours on the timetable',
+    claimExplainer:
+      'If you taught it, claim it: you can then mark this day’s roll and write its behaviour ' +
+      'register, and the reports will expect the paperwork from you instead of from the ' +
+      'teacher who was away. Marks stay with them.',
+    claim: 'I taught this lesson',
+    claimed: 'Cover claimed — you can record this lesson now',
+    cannotClaim: 'Cover cannot be claimed for this lesson',
+    notifiesOwner: 'The timetabled teacher is told as soon as you claim it.',
+    withdraw: 'Withdraw',
+    withdrawTitle: 'Withdraw this cover?',
+    withdrawBody:
+      'Responsibility for {{subject}} on {{date}} goes back to {{teacher}}, who will be told. ' +
+      'Anything already recorded stays on file.',
+    withdrawn: 'Cover withdrawn',
+    badge: 'Cover',
+    coveringFor: 'Covering for {{name}}',
+    substituteTeacher: 'Covered by',
+    mine: 'Lessons I covered',
+    ofMine: 'My lessons others covered',
+    empty: 'No cover has been claimed',
+    emptyHint: 'A teacher claims cover from the roll-call sheet on the day they stand in.',
+    date: 'Date',
+    lesson: 'Lesson',
+    timetabledTeacher: 'Timetabled teacher',
+    allClasses: 'All classes',
+    fileForTeacher: 'Record cover for this lesson',
+    fileExplainer:
+      'For cover that was arranged by phone, or that nobody claimed before the lesson’s ' +
+      'register fell due. The teacher you name becomes the one the reports expect it from.',
+    file: 'Record cover',
+    filed: 'Cover recorded',
+    selectSubstitute: 'Who taught it?',
+    reasonLabel: 'Reason',
+    reasonPlaceholder: 'Why was the teacher away?',
+    reason: {
+      sickLeave: 'Sick leave',
+      personalLeave: 'Leave of absence',
+      officialDuty: 'Official duty',
+      notArrived: 'Teacher had not arrived',
+      other: 'Other…',
+    },
   },
   attendance: {
     title: 'Attendance',
@@ -326,18 +432,40 @@ export const en: typeof lo = {
     minutesLateValue: '{{count}} min late',
     rate: 'Attendance rate',
     rateNote:
-      'Attendance rate = (present + late + excused + sick) over the total number of records',
+      'Attendance rate = (present + late + with reason) less the days made of lates, over the total number of records. Every {{per}} late arrivals count as 1 day absent without a reason; "with reason" is excused and sick together.',
     notRecorded: 'Nothing recorded yet',
     selectClassroom: 'Select classroom',
     rollCallHint: 'Pick a classroom and a date to start roll call',
     noLessonsToday: 'No lesson on this date',
     noLessonsTodayHint:
       'This class has nothing on the timetable that day. Pick another date, or check the teaching assignments.',
-    summaryHint: 'Pick a classroom and a semester to see the attendance summary',
+    summaryHint:
+      'Pick a classroom for its summary — or a "days absent from" threshold alone to list every student in the school who has reached it',
     emptyRoster: 'This classroom has no students yet',
     emptyHistory: 'No attendance records',
     emptyHistoryHint: 'Try different filters, or use the "Roll call" tab to record attendance',
     emptySummary: 'Nothing recorded for this semester yet',
+    month: 'Month',
+    wholeTerm: 'Whole term',
+    allSubjects: 'All subjects',
+    pickClassFirst: 'Pick a classroom first',
+    absentUnexcused: 'Absent, no reason',
+    absentExcused: 'Absent, with reason',
+    absentTotal: 'Days absent',
+    lateRemainderNote: '{{count}} still late',
+    fromLatesNote: '{{count}} from lates',
+    lateRuleNote:
+      'Late {{late}} times — counted as {{days}} day(s) absent without a reason (every {{per}} lates make one)',
+    absentAtLeast: 'Days absent from',
+    everyone: 'Everyone',
+    absentDaysOption: '{{count}} days or more',
+    nobodyOverLine: 'No student has reached {{count}} days absent',
+    // ── The lessons behind a summary row ────────────────────────────────────
+    showAbsences: 'Show which lessons were missed',
+    hideAbsences: 'Hide the lessons',
+    absencesTitle: 'Lessons not attended',
+    absencesEmpty: 'No lesson was missed',
+    absencesMore: 'Showing the latest {{shown}} of {{total}} — narrow it down in the History tab',
     markAllPresent: 'Mark remaining as present',
     markedOf: '{{marked}}/{{total}} marked',
     saved: '{{count}} attendance records saved',
@@ -385,6 +513,9 @@ export const en: typeof lo = {
     passed: 'Passed',
     failed: 'Failed',
     left: 'No longer in this class',
+    remark: 'Reason',
+    remarkPlaceholder: 'Why the marks came out this way (shown on the report home)',
+    remarkHint: 'Filled in from what the teacher wrote when marking; still editable here',
 
     // ── Actions ────────────────────────────────────────────────────────────
     fillFull: 'Fill full marks',
@@ -488,6 +619,7 @@ export const en: typeof lo = {
     parentReportTotalRow: 'Month total (out of 10)',
     parentReportSubjectGradeRow: 'Grade per subject',
     parentReportRemarkRow: "Homeroom teacher's remarks per subject",
+    parentReportRegisterCorner: 'Conduct and attendance',
     parentReportTotal: 'Total',
     parentReportSubjectCount: 'Subjects',
     parentReportAverage: 'Average',
@@ -610,6 +742,13 @@ export const en: typeof lo = {
     endDateHint: 'Inclusive — a one-day event has the same start and end.',
     halfDay: 'Half day',
     halfDayHint: 'A morning only.',
+    appliesTo: 'Off for these classes only',
+    appliesToHint: 'A grade level closes every classroom in it',
+    appliesToRoomsHint: 'Individual rooms, when it is not a whole year',
+    appliesToWholeSchool: 'Nothing ticked = the whole school is off',
+    appliesToCount:
+      '{{grades}} grade level(s) and {{rooms}} classroom(s) are off — everyone else teaches as usual',
+    appliesToBadge: 'Some classes only',
     moreEvents: '+{{count}} more',
     teachingDays: '{{count}} teaching days',
     noClassDays: '{{count}} without classes',
@@ -691,6 +830,187 @@ export const en: typeof lo = {
     hours: '{{count}} h',
     days: '{{count}} d',
   },
+  telegram: {
+    title: 'Telegram notifications',
+    linked: 'Connected',
+    linkedHint: 'This account receives notifications on Telegram',
+    linkedSince: 'Connected {{when}}',
+    whyLink: 'Connect to get roll-call, behaviour-register and homeroom reminders on your phone',
+    connect: 'Connect Telegram',
+    step1: 'Tap "Open bot" below, or find the bot in Telegram',
+    step2: 'Press Start in Telegram',
+    step3: 'Come back here and press "Check again"',
+    openBot: 'Open bot',
+    orSendCode: 'Or send the bot this message:',
+    codeExpires: 'The code expires {{when}}',
+    checkAgain: 'Check again',
+    sendTest: 'Send a test message',
+    testSent: 'Sent — check Telegram',
+    testFailed: 'Could not send — the bot may be blocked; try connecting again',
+    unlink: 'Disconnect',
+    unlinked: 'Disconnected',
+  },
+  homeroomReview: {
+    title: 'Homeroom review',
+    subtitle:
+      "Check your own class's attendance and behaviour every Wednesday and Friday, then confirm",
+    sheetTab: 'My class',
+    complianceTab: 'School-wide',
+    reportTab: 'Monthly report',
+    report: {
+      title: 'Homeroom report {{room}}, {{month}}',
+      month: 'Month',
+      export: 'Download Word',
+      exported: 'Downloaded',
+      hint: 'The system fills in what it already records — absences, lates, behaviour, conduct deductions, discipline, test marks and guardian contacts. The parts it does not record (overview, extra classes, outside activities, suggestions) are left as blank rows in the Word file for the teacher to complete.',
+      students: '{{count}} students, {{female}} female',
+      absenceTitle: '1. Absences (3 days or more)',
+      absenceTotals:
+        '{{total}} days absent ({{excused}} excused, {{unexcused}} unexcused — of which {{lates}} from three lates)',
+      latesTitle: 'Students whose 3 lates made 1 absence',
+      behaviorTitle: '2. Behaviour in class',
+      deductionsTitle: '3. Conduct points deducted',
+      disciplineTitle: '4. Disciplined this month',
+      testsTitle: '6.1 Test marks below target — {{below}}/{{tested}}',
+      testsHint: 'Test marks under half ({{target}})',
+      guardianTitle: 'III. Guardian contacts (from the Wednesday/Friday reviews)',
+      toFill:
+        'To complete in Word: I. Overview · 5. Extra classes · 7. Outside activities · IV. Suggestions',
+      none: 'None',
+      no: 'No.',
+      name: 'Student',
+      days: 'Days absent',
+      reason: 'Reason',
+      behavior: 'Behaviour',
+      points: 'Points',
+      handledAt: 'Handled at',
+      date: 'Date',
+      content: 'What was discussed',
+    },
+
+    // ── The sheet ───────────────────────────────────────────────────────────
+    classroom: 'Class',
+    homeroomTeacher: 'Homeroom teacher',
+    reviewDay: 'Review day',
+    window: 'Since last review',
+    status: 'Status',
+    roll: 'No.',
+    student: 'Student',
+    why: 'Why',
+    action: 'Action taken',
+    channel: 'Channel',
+    note: 'Note',
+    notePlaceholder: 'Who was spoken to, and what was said',
+    classNote: 'Note on the class',
+    classNotePlaceholder: 'How the class has been this week',
+    onRoll: '{{count}} on roll',
+    flaggedCount: '{{count}} to look at',
+    deadline: 'Due by {{at}}',
+    confirm: 'Confirm review',
+    saveAmendment: 'Save amendment',
+    confirmed: 'Review confirmed',
+    amended: 'Review amended',
+    filedAt: 'Confirmed {{at}}',
+    channelRequired: 'Say how the guardian was contacted',
+    channelPlaceholder: 'Choose a channel',
+    lastReview: 'Last review: {{date}} ({{count}} students)',
+    details: 'Details',
+    expandAll: 'Expand all',
+    collapseAll: 'Collapse all',
+    evidenceAttendance: 'Attendance',
+    evidenceBehavior: 'Behaviour register',
+    evidenceConduct: 'Conduct deductions',
+    evidenceNone: 'Nothing on file',
+    evidenceAction: 'Action: {{action}}',
+    evidenceReason: 'Reason: {{reason}}',
+    minutesLate: '({{count}} min)',
+    period: 'period {{number}}',
+    andMore: 'and {{count}} more',
+    nothingFlagged: 'Nothing unusual',
+    nothingFlaggedHint:
+      'No student in this class is over any threshold — confirm anyway, so the office knows you looked',
+    noReviewDay: 'No review day yet',
+    noReviewDayHint: 'Review days are the Wednesdays and Fridays the school taught on',
+    chooseClassroom: 'Choose a class',
+    officeHint:
+      'The office sees every class — pick one to read its sheet and each student’s detail',
+    viewingAsOffice:
+      'Viewing on behalf of {{teacher}} — a confirmation is recorded as filed by the office',
+    noHomeroom: 'You are not a homeroom teacher',
+    noHomeroomHint: 'This page is for homeroom teachers — tell the office if that is wrong',
+
+    // ── Why a child is on the sheet ─────────────────────────────────────────
+    reason: {
+      absence: {
+        window: 'absent {{value}} day(s) since last review',
+        term: '{{value}} days absent this term',
+      },
+      late: {
+        window: 'late {{value}} time(s) since last review',
+        term: 'late {{value}} times this term',
+      },
+      attendance_rate: {
+        window: 'attendance {{value}}%',
+        term: 'attendance {{value}}% (below {{threshold}}%)',
+      },
+      behavior: {
+        window: '{{value}} behaviour entr(ies) since last review',
+        term: '{{value}} behaviour entries this term',
+      },
+      conduct: {
+        window: '{{value}} conduct points left',
+        term: '{{value}} conduct points left (below {{threshold}})',
+      },
+    },
+
+    actions: {
+      none: 'Nothing yet',
+      watching: 'Keeping an eye on it',
+      warned_student: 'Warned the student',
+      met_student: 'Spoke with the student',
+      contacted_guardian: 'Contacted the guardian',
+      referred_discipline: 'Referred to the discipline committee',
+    },
+    channels: {
+      phone: 'Phone',
+      telegram: 'Telegram',
+      in_person: 'In person',
+      letter: 'Letter',
+    },
+    statuses: {
+      confirmed: 'Confirmed',
+      late: 'Confirmed late',
+      missing: 'Not reviewed',
+      pending: 'Not due yet',
+    },
+
+    // ── The office's grid ───────────────────────────────────────────────────
+    due: 'Owed',
+    reviewed: 'Reviewed',
+    lateOf: '{{count}} late',
+    behind: 'Classes behind',
+    teachersBehind: '{{count}} teachers',
+    guardiansContacted: 'Guardians contacted',
+    rate: 'Rate',
+    lastReviewed: 'Last review',
+    outstandingOnly: 'Only classes behind',
+    noTeacher: 'No homeroom teacher',
+    hoursLate: '{{hours}} hours late',
+    cellFlagged: '{{flagged}} flagged, {{actioned}} acted on',
+    unassignedWarning: '{{count}} class(es) have no homeroom teacher — nobody is being reminded',
+    allReviewed: 'Every class reviewed',
+    allReviewedHint: 'No class is behind for this window',
+    complianceNote:
+      'Review days are the Wednesdays and Fridays the school taught on; a review is due by noon of the next working day',
+
+    // ── The banner ──────────────────────────────────────────────────────────
+    bannerDue: 'Your class is waiting to be reviewed ({{count}})',
+    bannerMissingDays: 'still missing: {{days}}',
+    bannerToday: 'review day {{date}}',
+    bannerOverdue: 'Review not confirmed ({{count}})',
+    openSheet: 'Open the review sheet',
+  },
+
   behaviorLog: {
     title: 'Behaviour register',
     subtitle: 'Track and record student behaviour month by month, one sheet per class',
@@ -758,6 +1078,20 @@ export const en: typeof lo = {
     emptyTallyHint: 'An empty register means there has been nothing to follow up',
     tallyNote:
       'Only students named in the register are listed, ranked by how often they were warned or lost points',
+    // ── Narrowing the tally, and the entries behind a row ───────────────────
+    wholeTerm: 'Whole term',
+    allSubjects: 'All subjects',
+    pickClassFirst: 'Pick a classroom first',
+    actionAtLeast: 'Warned at least',
+    everyone: 'Everyone',
+    actionCountOption: '{{count}} times or more',
+    nobodyOverLine: 'No student has been warned {{count}} times',
+    showEntries: 'Show what was written',
+    hideEntries: 'Hide the entries',
+    entriesTitle: 'Behaviour entries',
+    entriesEmpty: 'Nothing was recorded in this window',
+    entriesMore: 'Showing the latest {{shown}} of {{total}} — the History tab has them all',
+    noAction: 'No action',
 
     // ── Weekly coverage ────────────────────────────────────────────────────
     coverageTab: 'This week',
@@ -1015,6 +1349,10 @@ export const en: typeof lo = {
     sortOrder: 'Order',
   },
   subject: {
+    columnMax: "Set this subject's own monthly maximums",
+    columnMaxHint:
+      'The usual columns are ຂື້ນຫ້ອງ 1 · ປື້ມ 1 · ກິດຈະກຳ 2 · ກວດກາ 6. Turn this on for a subject marked differently — ສັງຄົມ at ມ.1–ມ.3, and ພູມສາດ, ສຶກສາພົນລະເມືອງ and ປະຫວັດສາດ at ມ.5 and ມ.6, keep no notebook mark (1 · 0 · 3 · 6).',
+    columnMaxTotalHint: 'The four must total 10. A column set to 0 is dropped from the entry form.',
     title: 'Subjects',
     groupHint: 'Left blank, this subject’s plans fall into the “unassigned” group',
     noGroup: 'No department',
@@ -1262,7 +1600,9 @@ export const en: typeof lo = {
     lesson: 'Subject / class',
     observedAt: 'Date',
     visitNumber: 'Visit number',
-    visitNumberHint: 'Left blank, the next visit of this term is counted for you',
+    visitNumberHint:
+      'Left blank, it is counted for you — per observer, teacher and subject this term',
+    visitNumberNext: 'Left blank, this will be visit {{number}} — counting your own visits only',
     visitOrdinal: 'Visit {{number}}',
     criterionColumn: 'Area observed',
     indicatorColumn: 'What to look for',
@@ -1410,6 +1750,13 @@ export const en: typeof lo = {
     periodNumber: 'Period',
     rotating: 'Swap slot',
     rotatingWith: 'Swaps with {{partner}}',
+    effectiveFrom: 'New schedule applies from',
+    effectiveFromHint:
+      'Leave blank for today. The weeks before this date keep reading under the old ' +
+      'arrangement, so a teacher is never shown a gap on a day they were not timetabled for. ' +
+      'Set it to the start of term to correct a schedule that was always wrong.',
+    scheduleHistory: 'Previous schedules',
+    scheduleCurrent: 'now',
     rotatingHint:
       'A period two teachers take turns in across two classes — tick it on every ' +
       'entry sharing the slot and the clash check will leave them alone',
@@ -1477,6 +1824,7 @@ export const en: typeof lo = {
     gender: 'Gender',
     dateOfBirth: 'Date of birth',
     age: 'Age',
+    ageYears: '{{age}} years',
     nationalId: 'National ID',
     phone: 'Phone',
     email: 'Email',
@@ -1713,6 +2061,7 @@ export const en: typeof lo = {
       scores: 'Scores',
       'conduct-scores': 'Conduct scores',
       'behavior-logs': 'Behaviour register',
+      'homeroom-reviews': 'Homeroom review',
       attendances: 'Attendance',
       'term-results': 'Term results',
       reports: 'Reports',
@@ -1946,6 +2295,7 @@ export const en: typeof lo = {
     invalidDate: 'Enter a valid date',
     endBeforeStart: 'End date must be after the start date',
     integer: 'Must be a whole number',
+    columnMaxTotal: 'The four columns must total {{total}}',
   },
   errors: {
     title: 'Something went wrong',
@@ -2024,11 +2374,35 @@ export const en: typeof lo = {
     attendance: {
       futureDate: 'Attendance cannot be recorded for a future date',
       outsideSemester: 'The date falls outside the selected semester',
+      notAssignedTeacher:
+        'This is not your lesson on the timetable — claim cover for it if you taught it',
+      lessonNotScheduled: 'That lesson is not on the timetable for this date',
+      assignmentInactive: 'That timetable entry is no longer active',
+    },
+    substitution: {
+      alreadyClaimed: 'Another teacher has already claimed cover for this lesson',
+      ownLesson: 'This is already your lesson — no cover is needed',
+      claimWindowClosed:
+        'The deadline for this lesson’s register has passed, so cover can no longer be ' +
+        'claimed for it — ask the academic office to file it',
+      notATeacher: 'Only a teacher can claim cover for a lesson',
+      notYours: 'You may only withdraw cover you claimed yourself',
     },
     behaviorLog: {
       futureDate: 'Behaviour cannot be recorded for a future date',
       emptyRow: 'Give either a note about the class or at least one student',
       duplicateStudent: 'The same student is listed twice in one entry',
+    },
+    homeroomReview: {
+      notHomeroomTeacher: 'You are not the homeroom teacher of that class',
+      notReviewDay: 'That date is not a review day — a Wednesday or Friday the school taught on',
+      noReviewDayYet: 'The term has not reached its first review day yet',
+      alreadyFiled: 'This class has already confirmed that review day — amend the existing one',
+      studentNotOnRoll: 'A student named is not on this class roster',
+      channelRequired: 'Say how the guardian was contacted',
+      channelNotAllowed: 'A contact channel belongs only to an action that reached a guardian',
+      noHomeroomTeacher: 'That class has no homeroom teacher on file',
+      monthNotInSemester: 'That month does not fall in the chosen term',
     },
     conductRule: {
       duplicateCode: 'A rule with that number already exists',

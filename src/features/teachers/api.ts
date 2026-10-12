@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useCurrentUser } from '@/features/auth/hooks';
-import { get, upload } from '@/lib/api-client';
+import { get, post, upload } from '@/lib/api-client';
 import { createCrudApi, createCrudHooks, useLookupQuery } from '@/lib/crud';
 import { fullName } from '@/lib/utils';
 import type {
@@ -148,4 +148,112 @@ export function useTeacherOptions(search: string) {
       label: `${teacher.teacherCode} — ${fullName(teacher, i18n.language)}`,
     })),
   };
+}
+
+// ── Departure (ການສົ່ງມອບການສອນ) ─────────────────────────────────────────────
+
+/** One lesson a departing teacher still holds. */
+export interface TeacherAssignmentHold {
+  id: string;
+  subjectNameLo: string;
+  classroomName: string;
+  gradeLevelCode: string | null;
+  semesterNameLo: string;
+  periods: number;
+}
+
+export interface TeacherHomeroomHold {
+  id: string;
+  name: string;
+  gradeLevelCode: string | null;
+  studentCount: number;
+}
+
+/**
+ * The posts a teacher still holds — not the history they wrote.
+ *
+ * The distinction is the whole point: registers, marks and reviews keep the name
+ * of whoever wrote them and need nothing done about them, while a timetable slot
+ * and a ຄູປະຈຳຫ້ອງ post are jobs a school cannot leave empty. These are the ones
+ * the office has to act on, so these are the ones the API reports.
+ */
+export interface TeacherCommitments {
+  teacherId: string;
+  status: TeacherStatus;
+  /** Heads a department — reported, never moved by a handover. */
+  isAcademicHead: boolean;
+  /** Whether they can still sign in. */
+  hasActiveAccount: boolean;
+  assignments: TeacherAssignmentHold[];
+  homerooms: TeacherHomeroomHold[];
+  subjectGroups: { id: string; code: string; nameLo: string }[];
+}
+
+export interface TeacherHandoverInput {
+  toTeacherId: string;
+  /** All default to moving everything except a department headship. */
+  assignments?: boolean;
+  homerooms?: boolean;
+  subjectGroups?: boolean;
+  resign?: boolean;
+  note?: string;
+}
+
+export interface TeacherHandoverResult {
+  fromTeacherId: string;
+  toTeacherId: string;
+  assignmentsMoved: number;
+  homeroomsMoved: number;
+  subjectGroupsMoved: number;
+  resigned: boolean;
+}
+
+export const teacherDepartureApi = {
+  commitments: (id: string) => get<TeacherCommitments>(`/teachers/${id}/commitments`),
+  handOver: (id: string, body: TeacherHandoverInput) =>
+    post<TeacherHandoverResult>(`/teachers/${id}/handover`, body),
+};
+
+/**
+ * What this teacher still holds.
+ *
+ * Read on demand rather than with the row: it is three queries on the API side and
+ * the answer only matters on the two screens that act on it — the handover dialog,
+ * and the edit form once a status other than `active` is chosen.
+ */
+export function useTeacherCommitments(id: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['teachers', 'commitments', id],
+    queryFn: () => teacherDepartureApi.commitments(id!),
+    enabled: enabled && Boolean(id),
+    // Not held: the office moves posts one screen away from this one, and a stale
+    // "still responsible for 4 lessons" is the kind of wrong that gets acted on.
+    staleTime: 0,
+  });
+}
+
+/**
+ * Hands a teacher's posts to another, in one transaction on the API.
+ *
+ * Invalidates widely and deliberately: a handover rewrites the timetable, moves a
+ * homeroom and changes a teacher's status, so the lists, the reports built on the
+ * timetable and the rooms themselves are all out of date at once.
+ */
+export function useTeacherHandover(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: TeacherHandoverInput) => teacherDepartureApi.handOver(id!, body),
+    onSuccess: () => {
+      for (const key of [
+        'teachers',
+        'teaching-assignments',
+        'classrooms',
+        'coverage',
+        'timeliness',
+        'homeroom-reviews',
+      ]) {
+        void queryClient.invalidateQueries({ queryKey: [key] });
+      }
+    },
+  });
 }

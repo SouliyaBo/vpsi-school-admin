@@ -1,5 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table';
-import { Eye, KeyRound, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowRightLeft, Eye, KeyRound, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -21,6 +21,7 @@ import { RowActions } from '@/components/common/RowActions';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { FilterSelect, SearchInput, TableToolbar } from '@/components/common/TableToolbar';
 import { TeacherFormDialog } from '../components/TeacherFormDialog';
+import { TeacherHandoverDialog } from '../components/TeacherHandoverDialog';
 import { teachers, useUploadTeacherPhoto } from '../api';
 
 export function TeachersPage() {
@@ -36,6 +37,8 @@ export function TeachersPage() {
 
   /** Row opened in the detail drawer. */
   const [detailId, setDetailId] = useState<string | null>(null);
+  /** Row whose posts are being handed to somebody else. */
+  const [handingOver, setHandingOver] = useState<Teacher | null>(null);
 
   const list = teachers.useList(table.queryParams);
   const remove = teachers.useDelete();
@@ -134,6 +137,19 @@ export function TeachersPage() {
                 onSelect: () => navigate(`/users?create=${row.original.id}`),
               },
               {
+                label: t('handover.action'),
+                icon: ArrowRightLeft,
+                // The row is where a departure is noticed, and the office reaches
+                // for it long before they reach for the timetable screen. Gated on
+                // what the endpoint actually writes, not on `teachers:update`
+                // alone.
+                hidden:
+                  !can('teachers', 'update') ||
+                  !can('teaching-assignments', 'manage') ||
+                  !can('classrooms', 'manage'),
+                onSelect: () => setHandingOver(row.original),
+              },
+              {
                 label: t('common.delete'),
                 icon: Trash2,
                 destructive: true,
@@ -146,7 +162,7 @@ export function TeachersPage() {
         meta: { className: 'w-12 text-end' } satisfies DataTableColumnMeta,
       },
     ],
-    [t, i18n.language, can, dialogs, navigate],
+    [t, i18n.language, can, dialogs, navigate, setHandingOver],
   );
 
   const current = detail.data;
@@ -214,6 +230,13 @@ export function TeachersPage() {
         open={dialogs.formOpen}
         onOpenChange={dialogs.setFormOpen}
         teacher={dialogs.record}
+        onHandOver={setHandingOver}
+      />
+
+      <TeacherHandoverDialog
+        open={handingOver !== null}
+        onOpenChange={(open) => !open && setHandingOver(null)}
+        teacher={handingOver}
       />
 
       <DetailDrawer

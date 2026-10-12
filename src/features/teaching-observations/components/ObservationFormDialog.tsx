@@ -20,6 +20,7 @@ import { FormDialog } from '@/components/common/FormDialog';
 import {
   scoreMap,
   useCreateObservation,
+  useNextVisitNumber,
   useObservationRubric,
   useUpdateObservation,
   type ObservationScoreInput,
@@ -35,9 +36,11 @@ import { ObservationScoreTable } from './ObservationScoreTable';
  * costs nobody a decision; the office may name somebody else, which is what
  * keying in a deputy's handwritten sheet looks like.
  *
- * `visitNumber` is optional because the API counts it — the teacher's next visit
- * of the term. It is offered anyway for the case the paper sheet already has a
- * number on it and the two must agree.
+ * `visitNumber` is optional because the API counts it — this observer's next
+ * visit to this teacher's subject, this term. It is offered anyway for the case
+ * the paper sheet already has a number on it and the two must agree, and the
+ * number that would be used is shown beside it so nobody types a colleague's
+ * number by hand.
  */
 const schema = z.object({
   teacherId: requiredId(),
@@ -131,6 +134,25 @@ export function ObservationFormDialog({
   }, [open, observation, form, ownTeacherId, defaultSemesterId]);
 
   const observedTeacherId = form.watch('teacherId');
+
+  /**
+   * What ປະເມີນຄັ້ງທີ will be if the field is left alone.
+   *
+   * Only while starting a sheet: an existing one carries the number it was filed
+   * under, and that number is not up for recalculation.
+   */
+  const head = form.watch(['teacherId', 'observerId', 'subjectId', 'semesterId']);
+  const nextVisit = useNextVisitNumber(
+    observation
+      ? {}
+      : {
+          teacherId: head[0],
+          observerId: head[1],
+          subjectId: head[2],
+          semesterId: head[3] || undefined,
+        },
+  );
+  const suggestedVisit = observation ? null : (nextVisit.data?.visitNumber ?? null);
 
   /**
    * The observed teacher cannot also be the observer.
@@ -256,7 +278,12 @@ export function ObservationFormDialog({
               control={form.control}
               name="visitNumber"
               label={t('observation.visitNumber')}
-              description={t('observation.visitNumberHint')}
+              description={
+                suggestedVisit
+                  ? t('observation.visitNumberNext', { number: suggestedVisit })
+                  : t('observation.visitNumberHint')
+              }
+              placeholder={suggestedVisit ? String(suggestedVisit) : undefined}
               min={1}
               step={1}
               disabled={Boolean(observation)}

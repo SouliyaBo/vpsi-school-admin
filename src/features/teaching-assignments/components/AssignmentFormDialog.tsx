@@ -12,12 +12,13 @@ import { fullName, localizedName, refId, refObject } from '@/lib/utils';
 import type { Classroom, Subject, Teacher, TeachingAssignment } from '@/types/entities';
 import { Form } from '@/components/ui/form';
 import { EntitySelectField } from '@/components/common/EntitySelect';
-import { FieldSection, TextareaField } from '@/components/common/fields';
+import { DateField, FieldSection, TextareaField } from '@/components/common/fields';
 import { FormDialog } from '@/components/common/FormDialog';
 import { useCreateAssignment, useUpdateAssignment, type TeachingAssignmentInput } from '../api';
 import { assignmentSchema, EMPTY_ASSIGNMENT, type AssignmentFormValues } from '../schemas';
 import { ConflictAlert } from './ConflictAlert';
 import { ScheduleEditor } from './ScheduleEditor';
+import { ScheduleHistory } from './ScheduleHistory';
 
 interface Props {
   open: boolean;
@@ -90,6 +91,10 @@ export function AssignmentFormDialog({ open, onOpenChange, assignment, defaultSe
               isRotating: period.isRotating ?? false,
             })),
             notes: assignment.notes ?? '',
+            // Left blank rather than defaulted to today: a save that did not touch
+            // the schedule should not record a spell, and the API's own default
+            // covers the ordinary revision.
+            effectiveFrom: '',
           }
         : { ...EMPTY_ASSIGNMENT, semesterId: defaultSemesterId ?? '' },
     );
@@ -111,6 +116,10 @@ export function AssignmentFormDialog({ open, onOpenChange, assignment, defaultSe
           id: assignment.id,
           body: {
             schedule: stripEmpty(values.schedule),
+            // Only when the office said so; omitted, the API applies the change
+            // from today and the weeks behind keep reading under the old
+            // arrangement.
+            ...(values.effectiveFrom ? { effectiveFrom: values.effectiveFrom } : {}),
             // Sent even when blank, so notes can be cleared.
             notes: values.notes ?? '',
           },
@@ -180,6 +189,19 @@ export function AssignmentFormDialog({ open, onOpenChange, assignment, defaultSe
                 way to switch off validation rather than to state a fact about
                 how the school runs that period. */}
             <p className="text-xs text-muted-foreground">{t('assignment.rotatingHint')}</p>
+
+            {/* Editing only: a new lesson has no weeks behind it to protect. */}
+            {isEditing && (
+              <>
+                <DateField
+                  control={form.control}
+                  name="effectiveFrom"
+                  label={t('assignment.effectiveFrom')}
+                  description={t('assignment.effectiveFromHint')}
+                />
+                <ScheduleHistory assignment={assignment} />
+              </>
+            )}
           </FieldSection>
 
           <FieldSection columns={1}>

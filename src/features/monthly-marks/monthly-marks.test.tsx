@@ -172,15 +172,36 @@ describe('monthly marks — the entry form', () => {
     await chooseSheet();
 
     const row = (await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/)).closest('tr') as HTMLElement;
-    // The sheet's own numbers: 1 + 1 + 2 + 3.9.
-    expect(within(row).getByText('7.9')).toBeInTheDocument();
+    // The sheet's own numbers: 1 + 1 + 2 + 3.9, written as the whole mark 8.
+    expect(within(row).getByText('8')).toBeInTheDocument();
 
     const test = within(row).getByLabelText(/Test$/);
     await userEvent.clear(test);
-    await userEvent.type(test, '4.45');
+    await userEvent.type(test, '4.6');
 
-    // ລວມ answers under the fingers of whoever is typing — 8.45, not 8.
-    expect(await within(row).findByText('8.45')).toBeInTheDocument();
+    // ລວມ answers under the fingers of whoever is typing — 8.6 lands on 9.
+    expect(await within(row).findByText('9')).toBeInTheDocument();
+  });
+
+  it('writes ລວມ as a whole mark, rounding a half up', async () => {
+    renderWithProviders(<MonthGridForm />);
+    await chooseSheet();
+
+    const row = (await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/)).closest('tr') as HTMLElement;
+    const test = within(row).getByLabelText(/Test$/);
+    // ລວມ is the cell before ເຫດຜົນ, which ends the row, and the assertion is on
+    // the whole of it: a cell still reading 5.5 would pass a text match for 5.
+    const total = () => row.children[row.children.length - 2]?.textContent;
+
+    // 1 + 1 + 2 + 1.5 = 5.5 — the office's own example, which goes up to 6.
+    await userEvent.clear(test);
+    await userEvent.type(test, '1.5');
+    await waitFor(() => expect(total()).toBe('6'));
+
+    // 5.4 goes the other way, to 5.
+    await userEvent.clear(test);
+    await userEvent.type(test, '1.4');
+    await waitFor(() => expect(total()).toBe('5'));
   });
 
   it('opens on a month the term actually collects', async () => {
@@ -222,7 +243,6 @@ describe('monthly marks — the entry form', () => {
       // is what clears a mark back to unwritten.
       entries: [{ studentId: 'stu-1', attendance: 1, notebook: 0.5, activity: 2, test: 3.9 }],
     });
-    console.log('PAYLOAD', JSON.stringify(post.mock.calls[0]![1]));
   });
 
   it('will not save when nothing has been touched', async () => {
@@ -344,6 +364,96 @@ describe('monthly marks — the entry form', () => {
     const row = (await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/)).closest('tr') as HTMLElement;
     expect(within(row).getByLabelText(/Test$/)).toBeDisabled();
     expect(screen.getByText(/submitted/i)).toBeInTheDocument();
+  });
+
+  it('opens ເຫດຜົນ on what the teacher last wrote, and sends it with the marks', async () => {
+    const post = vi
+      .spyOn(apiClient, 'post')
+      .mockResolvedValue({ saved: 1, skipped: 0, errors: [] });
+    stubReads({
+      '/monthly-marks/month': monthGrid({
+        rows: [
+          gridRow({
+            strands: [
+              {
+                strand: null,
+                cells: { attendance: 1, notebook: 1, activity: 2, test: 3.9 },
+                total: 7.9,
+                remark: 'ຂາດຮຽນ 3 ວັນ',
+                isLocked: false,
+              },
+            ],
+          }),
+        ],
+      }),
+    });
+    renderWithProviders(<MonthGridForm />);
+    await chooseSheet();
+
+    const row = (await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/)).closest('tr') as HTMLElement;
+    const remark = within(row).getByLabelText(/Reason$/);
+    expect(remark).toHaveValue('ຂາດຮຽນ 3 ວັນ');
+
+    // A reason on its own is a change worth saving: a teacher may explain a
+    // month without touching a single mark.
+    await userEvent.clear(remark);
+    await userEvent.type(remark, 'ບໍ່ສົ່ງວຽກ');
+    await userEvent.click(screen.getByRole('button', { name: /save 1 change/i }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post.mock.calls[0]![1]).toMatchObject({
+      entries: [{ studentId: 'stu-1', test: 3.9, remark: 'ບໍ່ສົ່ງວຽກ' }],
+    });
+  });
+
+  it('drops ປື້ມ for a subject the school does not keep one for', async () => {
+    // ພູມສາດ at ມ.1: ຂື້ນຫ້ອງ 1 · ກິດຈະກຳ 3 · ກວດກາ 6, and no notebook column
+    // at all — a cell for it would invite a mark the API refuses.
+    stubReads({
+      '/monthly-marks/month': monthGrid({
+        columnMax: { attendance: 1, notebook: 0, activity: 3, test: 6 },
+        columns: ['attendance', 'activity', 'test'],
+        rows: [blankRow()],
+      }),
+    });
+    renderWithProviders(<MonthGridForm />);
+    await chooseSheet();
+
+    const row = (await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/)).closest('tr') as HTMLElement;
+    expect(within(row).queryByLabelText(/Notebook$/)).not.toBeInTheDocument();
+    // The prefill is the subject's own full marks, and they still come to 10.
+    expect(within(row).getByLabelText(/Attendance$/)).toHaveValue(1);
+    expect(within(row).getByLabelText(/Activity$/)).toHaveValue(3);
+    expect(within(row).getByLabelText(/Test$/)).toHaveValue(6);
+    expect(within(row).getByText('10')).toBeInTheDocument();
+  });
+
+  it('leaves the dropped column unwritten rather than sending a zero for it', async () => {
+    const post = vi
+      .spyOn(apiClient, 'post')
+      .mockResolvedValue({ saved: 1, skipped: 0, errors: [] });
+    stubReads({
+      '/monthly-marks/month': monthGrid({
+        columnMax: { attendance: 1, notebook: 0, activity: 3, test: 6 },
+        columns: ['attendance', 'activity', 'test'],
+        rows: [blankRow()],
+      }),
+    });
+    renderWithProviders(<MonthGridForm />);
+    await chooseSheet();
+
+    const row = (await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/)).closest('tr') as HTMLElement;
+    const test = within(row).getByLabelText(/Test$/);
+    await userEvent.clear(test);
+    await userEvent.type(test, '4.5');
+    await userEvent.click(screen.getByRole('button', { name: /save 1 change/i }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    // ປື້ມ goes as null — "not marked", which is what the subject means — and
+    // not as 0, which would read as a notebook the student lost.
+    expect(post.mock.calls[0]![1]).toMatchObject({
+      entries: [{ studentId: 'stu-1', attendance: 1, notebook: null, activity: 3, test: 4.5 }],
+    });
   });
 });
 
@@ -517,7 +627,22 @@ describe('monthly marks — the class summary for a month', () => {
     { studentId: 'stu-1', deducted: 5, remaining: 95, entries: 1, level: 'none', notify: [] },
   ];
   const monthAbsences = [
-    { studentId: 'stu-1', present: 18, absent: 1, late: 0, excused: 1, sick: 1, totalRecorded: 21 },
+    {
+      studentId: 'stu-1',
+      present: 18,
+      absent: 1,
+      late: 0,
+      excused: 1,
+      sick: 1,
+      totalRecorded: 21,
+      lateAsAbsent: 0,
+      lateRemainder: 0,
+      absentUnexcused: 1,
+      absentExcused: 2,
+      absentTotal: 3,
+      latesPerAbsence: 3,
+      attendanceRate: 95.24,
+    },
   ];
 
   /**
@@ -617,8 +742,10 @@ describe('monthly marks — the class summary for a month', () => {
     }
 
     const row = (await screen.findByText(/ຈຸທາມາດ/)).closest('tr') as HTMLElement;
-    // 59.5 over the eight subjects ມ.4 sits.
-    expect(within(row).getByText('59.50')).toBeInTheDocument();
+    // The subject marks print whole, and ລວມ adds those: the 6.5 goes up to 7,
+    // so the row comes to 60 rather than the 59.50 its decimals made. ສະເລ່ຍ is
+    // untouched — it is what ເກຣດ and ລຳດັບ are decided on.
+    expect(within(row).getByText('60')).toBeInTheDocument();
     expect(within(row).getByText('7.44')).toBeInTheDocument();
     // 7.44 out of 10 — the school's B runs 7–8.4.
     expect(within(row).getByText('B')).toBeInTheDocument();
@@ -821,6 +948,57 @@ describe('monthly marks — the class summary for a month', () => {
   });
 
   /**
+   * ລວມ is a whole mark on the office's sheet, and the row has to add up.
+   *
+   * Two rules meet on this row and neither may be read off the other: the marks
+   * and their ລວມ print whole, while ສະເລ່ຍ stays the exact figure ເກຣດ, ລຳດັບ
+   * and ຜ່ານ/ຕົກ are decided on. So ລວມ adds the *printed* marks rather than
+   * rounding their exact sum — a row showing 8 + 7 + … that came to something
+   * else would be the first thing the office queried.
+   */
+  it('writes the month as whole marks, and adds up the marks it prints', async () => {
+    stubMonth([
+      {
+        studentId: 'stu-1',
+        studentCode: '625',
+        studentNameLo: 'ຈຸທາມາດ ສີທາປັນຍາ',
+        studentNickname: 'ໄມ້ຟ້າ',
+        rollNumber: 1,
+        isEnrolled: true,
+        scores: [8, 7, 8, 7, 6.5, 7, 8, 4],
+        total: 55.5,
+        average: 6.94,
+        isComplete: true,
+        subjectsRecorded: 8,
+        grade: 'C',
+        classification: 'middling',
+        rank: 1,
+        isPassing: true,
+      },
+    ]);
+
+    const { bytes } = await exportWorkbook();
+    const { default: ExcelJS } = await import('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(bytes.buffer as ArrayBuffer);
+    const worksheet = workbook.worksheets[0];
+
+    // The eight subject columns run E to L, ລວມ is M and ສະເລ່ຍ is N.
+    expect(worksheet.getCell('E7').value).toBe(8);
+    // Half a mark goes up, which is the whole change: 6.5 is written 7.
+    expect(worksheet.getCell('I7').value).toBe(7);
+    expect(worksheet.getCell('I7').numFmt).toBe('0');
+    // 8 + 7 + 8 + 7 + 7 + 7 + 8 + 4, not the 55.50 the decimals came to.
+    expect(worksheet.getCell('M7').value).toBe(56);
+    expect(worksheet.getCell('M7').numFmt).toBe('0');
+    // ສະເລ່ຍ untouched, to two places.
+    expect(worksheet.getCell('N7').value).toBe(6.94);
+    expect(worksheet.getCell('N7').numFmt).toBe('0.00');
+    // A failing subject is still shaded on the mark it really is.
+    expect(worksheet.getCell('L7').font).toMatchObject({ color: { argb: 'FF9C0006' } });
+  });
+
+  /**
    * ໃບລາຍງານຜູ້ປົກຄອງ — the office's letter home, one file per child.
    *
    * Checked against the school's own Excel form: the title, the name line, the
@@ -926,7 +1104,9 @@ describe('monthly marks — the class summary for a month', () => {
     expect(worksheet.getCell('B4').value).toBe(2.3);
     expect(worksheet.getCell('B4').font).toMatchObject({ name: 'Times New Roman' });
     expect(worksheet.getCell('A5').value).toBe('Month total (out of 10)');
-    expect(worksheet.getCell('B5').value).toBe(6.3);
+    // ລວມ is written whole — 6.3 down to 6 — while ກວດກາ above it keeps its places.
+    expect(worksheet.getCell('B5').value).toBe(6);
+    expect(worksheet.getCell('B5').numFmt).toBe('0');
     expect(worksheet.getCell('A6').value).toBe('Grade per subject');
     expect(worksheet.getCell('B6').value).toBe('C');
     expect(worksheet.getCell('F6').value).toBe('D');
@@ -938,7 +1118,8 @@ describe('monthly marks — the class summary for a month', () => {
 
     // The month's figures, merged down the three rows: ລວມ, then how far short
     // of a full month the child is instead of a count, ສະເລ່ຍ, and no letter yet.
-    expect(worksheet.getCell('J4').value).toBe(31.02);
+    // 6 + 7 + 6 + 7 + 5, the whole marks on the row above.
+    expect(worksheet.getCell('J4').value).toBe(31);
     expect(worksheet.getCell('J4').isMerged).toBe(true);
     expect(worksheet.getCell('K4').value).toBe('5/8 marked');
     expect(worksheet.getCell('L4').value).toBe(3.88);
@@ -954,9 +1135,30 @@ describe('monthly marks — the class summary for a month', () => {
     expect(worksheet.getCell('C7').border?.bottom).toMatchObject({ style: 'thin' });
     expect(worksheet.getCell('J7').value).toBe('ຕັ້ງໃຈຮຽນດີ ຄວນທົບທວນເຄມີເພີ່ມ');
     expect(worksheet.getCell('J7').isMerged).toBe(true);
-    expect(worksheet.getCell('A9').value).toBe('Note:');
-    expect(worksheet.getCell('A10').value).toBe('A = 8.5 - 10');
-    expect(worksheet.getCell('A15').value).toBe('F = 0 - 3.4');
+    // ຄະແນນຄຸນສົມບັດ for the year and ວັນຂາດ for the month, ruled on under the
+    // remarks with the class summary's headings — the five figures sharing the
+    // twelve columns after the label, 3 + 3 + 2 + 2 + 2.
+    expect(worksheet.getCell('A8').value).toBe('Conduct and attendance');
+    expect(worksheet.getCell('A10').isMerged).toBe(true);
+    expect(worksheet.getCell('B8').value).toBe('Conduct points');
+    expect(worksheet.getCell('H8').value).toBe('Absences');
+    expect(worksheet.getCell('B9').value).toBe('Lost');
+    expect(worksheet.getCell('E9').value).toBe('Left');
+    expect(worksheet.getCell('H9').value).toBe('Excused');
+    expect(worksheet.getCell('J9').value).toBe('Unexcused');
+    expect(worksheet.getCell('L9').value).toBe('Total');
+    expect(worksheet.getCell('B10').value).toBe(5);
+    expect(worksheet.getCell('E10').value).toBe(95);
+    expect(worksheet.getCell('H10').value).toBe(2);
+    expect(worksheet.getCell('J10').value).toBe(1);
+    expect(worksheet.getCell('L10').value).toBe(3);
+    // Points lost read red, as they do on the summary.
+    expect(worksheet.getCell('B10').font).toMatchObject({ color: { argb: 'FF9C0006' } });
+    expect(worksheet.getCell('E10').fill).toMatchObject({ fgColor: { argb: 'FFFFC7CE' } });
+
+    expect(worksheet.getCell('A12').value).toBe('Note:');
+    expect(worksheet.getCell('A13').value).toBe('A = 8.5 - 10');
+    expect(worksheet.getCell('A18').value).toBe('F = 0 - 3.4');
 
     // Nothing to sign: the letter is sent, not handed over.
     const words = JSON.stringify(worksheet.getSheetValues());
@@ -973,6 +1175,61 @@ describe('monthly marks — the class summary for a month', () => {
     const archive = await JSZip.loadAsync(bytes);
     const sheetXml = await archive.file('xl/worksheets/sheet1.xml')?.async('string');
     expect(sheetXml).not.toContain('<brk ');
+  });
+
+  /**
+   * ເຫດຜົນ written on the mark sheet is what the letter home starts from.
+   *
+   * The remark used to be typed at the moment of export and kept nowhere, so
+   * the same month sent twice could say two different things and the office
+   * held no record of either. Now the subject teacher writes it beside the
+   * marks, the form opens on it, and a letter downloaded without anyone
+   * touching the form still carries it.
+   */
+  it("opens the letter's remarks on what the teachers wrote beside the marks", async () => {
+    stubMonth([
+      {
+        studentId: 'stu-1',
+        studentCode: '625',
+        studentNameLo: 'ຈຸທາມາດ ສີທາປັນຍາ',
+        studentNickname: null,
+        rollNumber: 1,
+        isEnrolled: true,
+        testScores: [5, 5, 5, 5, 5, 5, 5, 5],
+        scores: [9, 8.5, 9, 8.5, 9, 8.5, 9, 8.5],
+        subjectGrades: ['A', 'A', 'A', 'A', 'A', 'A', 'A', 'A'],
+        remarks: ['ອ່ານໄດ້ດີຂຶ້ນ', null, null, null, null, null, null, 'ບໍ່ສົ່ງປື້ມ'],
+        total: 70,
+        average: 8.75,
+        isComplete: true,
+        subjectsRecorded: 8,
+        grade: 'A',
+        classification: 'strong',
+        rank: 1,
+        isPassing: true,
+      },
+    ]);
+
+    const { bytes } = await exportWorkbook(/parent report — ຈຸທາມາດ/i, async () => {
+      const form = await screen.findByRole('dialog');
+      // The teacher's own words are already in the field, ready to be reworded.
+      expect(within(form).getByLabelText(new RegExp(M4_SUBJECTS[0].nameLo))).toHaveValue(
+        'ອ່ານໄດ້ດີຂຶ້ນ',
+      );
+      expect(within(form).getByLabelText(/overall remark/i)).toHaveValue('');
+      // Downloaded without touching anything: the letter still carries them.
+      await userEvent.click(within(form).getByRole('button', { name: /download report/i }));
+    });
+
+    const { default: ExcelJS } = await import('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(bytes.buffer as ArrayBuffer);
+    const worksheet = workbook.worksheets[0];
+
+    expect(worksheet.getCell('B7').value).toBe('ອ່ານໄດ້ດີຂຶ້ນ');
+    expect(worksheet.getCell('I7').value).toBe('ບໍ່ສົ່ງປື້ມ');
+    // A subject the teacher had nothing to say about stays a ruled blank.
+    expect(worksheet.getCell('C7').value).toBeNull();
   });
 
   /**
@@ -1136,6 +1393,13 @@ describe("monthly marks — one student's card", () => {
     excused: 1,
     sick: 0,
     totalRecorded: 20,
+    // ວັນຂາດ as the API reads them; one late is short of the three that make a day.
+    lateAsAbsent: 0,
+    lateRemainder: 1,
+    absentUnexcused: 1,
+    absentExcused: 1,
+    absentTotal: 2,
+    latesPerAbsence: 3,
     attendanceRate: 95,
   };
 
@@ -1207,10 +1471,13 @@ describe("monthly marks — one student's card", () => {
     const test = screen.getByRole('row', { name: /Test mark/ });
     expect(within(test).getByText('4.90')).toBeInTheDocument();
     const total = screen.getByRole('row', { name: /Month total/ });
-    expect(within(total).getByText('7.90')).toBeInTheDocument();
+    // 7.9, 8, 7, 8 written whole: three 8s and a 7.
+    expect(within(total).getAllByText('8')).toHaveLength(3);
+    expect(within(total).getByText('7')).toBeInTheDocument();
     // ລວມ · ຈຳນວນວິຊາ · ສະເລ່ຍ · ເກຣດ stand beside the first row. No ລຳດັບ:
     // the office asked for it to go (16 Sep 2026) — it is not read out here.
-    expect(within(test).getByText('30.90')).toBeInTheDocument();
+    // ລວມ adds the whole marks — 8 + 8 + 7 + 8 — not the 30.90 of their decimals.
+    expect(within(test).getByText('31')).toBeInTheDocument();
     expect(within(test).getByText('4')).toBeInTheDocument();
     expect(within(test).getByText('7.73')).toBeInTheDocument();
     expect(screen.queryByText('3/42')).not.toBeInTheDocument();
@@ -1223,9 +1490,11 @@ describe("monthly marks — one student's card", () => {
     // in sick days, ບໍ່ຄອບ stands alone.
     expect(screen.getByRole('columnheader', { name: 'Attendance' })).toBeInTheDocument();
     expect(within(test).getByText('18/20')).toBeInTheDocument();
-    const [, month] = vi.mocked(apiClient.get).mock.calls.find(
-      ([url]) => url === `/attendances/summary/student/stu-1/semester/${semester.id}`,
-    ) as [string, { params: { month: string } }];
+    const [, month] = vi
+      .mocked(apiClient.get)
+      .mock.calls.find(
+        ([url]) => url === `/attendances/summary/student/stu-1/semester/${semester.id}`,
+      ) as [string, { params: { month: string } }];
     expect(month.params).toEqual({ month: '10' });
   });
 
@@ -1319,14 +1588,14 @@ describe("monthly marks — one student's card", () => {
     const items = screen.getAllByRole('listitem');
     expect(items).toHaveLength(4);
     const maths = items.find((item) => within(item).queryByText('ຄະນິດສາດ')) as HTMLElement;
-    expect(within(maths).getByText('8.00')).toBeInTheDocument();
+    expect(within(maths).getByText('8')).toBeInTheDocument();
     expect(within(maths).getByText('B')).toBeInTheDocument();
     // ກວດກາ sits under the subject, out of its own maximum.
     expect(within(maths).getByText('5.00')).toBeInTheDocument();
     expect(within(maths).getByText('/6')).toBeInTheDocument();
     // The month's own figures — ສະເລ່ຍ, ລວມ — read once, above the list.
     expect(screen.getByText('7.73')).toBeInTheDocument();
-    expect(screen.getByText('30.90')).toBeInTheDocument();
+    expect(screen.getByText('31')).toBeInTheDocument();
     expect(screen.getByText('95/100')).toBeInTheDocument();
     expect(screen.getByText('18/20')).toBeInTheDocument();
   });

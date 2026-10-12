@@ -1,8 +1,6 @@
 import { FileSpreadsheet, Loader2, Printer, Table2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { attendancesApi } from '@/features/attendances/api';
-import { conductDeductionsApi } from '@/features/conduct-deductions/api';
 import { useActiveSchoolYear } from '@/features/school-years/api';
 import { saveBlob } from '@/lib/save-blob';
 import { notify } from '@/lib/toast';
@@ -31,17 +29,18 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { ErrorState } from '@/components/common/ErrorState';
 import { StudentName } from '@/components/common/StudentName';
 import { classroomHeading } from '@/features/classrooms/api';
-import { useClassMonth, type ClassMonthSheet as ClassMonthData } from '../api';
 import {
-  buildClassMonthWorkbook,
-  classMonthFileName,
-  type StudentRegisterExtras,
-} from '../lib/class-month-workbook';
+  displaySubjectTotal,
+  useClassMonth,
+  type ClassMonthSheet as ClassMonthData,
+} from '../api';
+import { buildClassMonthWorkbook, classMonthFileName } from '../lib/class-month-workbook';
 import {
   ParentReportBatchButton,
   ParentReportRowButton,
   useRemarkStore,
 } from './ParentReportButtons';
+import { loadRegisters } from '../lib/load-registers';
 import { Mark } from './SemesterSheet';
 import { SheetPickers, type SheetTargetState } from './SheetPickers';
 
@@ -129,6 +128,7 @@ export function ClassMonthSheet() {
                 <ParentReportBatchButton
                   sheet={data}
                   schoolYear={schoolYear}
+                  schoolYearId={activeYear.data?.id}
                   remarks={remarks}
                   setRemark={setRemark}
                 />
@@ -200,14 +200,12 @@ export function ClassMonthSheet() {
                             key={data.subjects[index].id}
                             className="text-center tabular-nums"
                           >
-                            <Mark value={score} />
+                            <Mark value={score} whole />
                           </TableCell>
                         ))}
                         <TableCell className="text-center tabular-nums">
-                          {row.total === null ? (
+                          {displaySubjectTotal(row.scores) ?? (
                             <span className="text-muted-foreground">—</span>
-                          ) : (
-                            row.total.toFixed(2)
                           )}
                         </TableCell>
                         <TableCell className="text-center font-semibold tabular-nums">
@@ -237,6 +235,7 @@ export function ClassMonthSheet() {
                             sheet={data}
                             row={row}
                             schoolYear={schoolYear}
+                            schoolYearId={activeYear.data?.id}
                             remarks={remarks}
                             setRemark={setRemark}
                           />
@@ -370,51 +369,6 @@ function ExportButton({
       {busy ? t('monthlyMark.exporting') : t('monthlyMark.exportExcel')}
     </Button>
   );
-}
-
-/**
- * The two columns the mark sheet borrows, read at the moment of export.
- *
- * Fetched on the click rather than with the page: neither register is on screen
- * here, and a tab most people only read should not pull the discipline ledger
- * and the roll on every open. Both are per-class reads the API already serves —
- * nothing is counted on this side.
- *
- * Counted over different windows on purpose. ຄະແນນຄຸນສົມບັດ is a year's budget of
- * 100 that runs to the last day of the year, which is the only window the
- * discipline ledger has; ວັນຂາດ belongs to the month the sheet is headed with,
- * so the roll is asked for that month. A student the registers do not answer for — one who has left, and so is
- * off the roll both are built from — is left out rather than defaulted, and
- * their cells print empty.
- */
-async function loadRegisters(
-  sheet: ClassMonthData,
-  schoolYearId: string | undefined,
-): Promise<Map<string, StudentRegisterExtras>> {
-  const [conduct, attendance] = await Promise.all([
-    schoolYearId
-      ? conductDeductionsApi.classroomStanding(sheet.classroom.id, schoolYearId)
-      : Promise.resolve([]),
-    attendancesApi.classroomSummary(sheet.classroom.id, sheet.semester.id, sheet.month),
-  ]);
-
-  const absences = new Map(attendance.map((row) => [row.studentId, row]));
-  const registers = new Map<string, StudentRegisterExtras>();
-
-  for (const row of conduct) {
-    const roll = absences.get(row.studentId);
-    registers.set(row.studentId, {
-      deducted: row.deducted,
-      remaining: row.remaining,
-      // ຄອບ is any absence the school was told about; the roll files a sick day
-      // separately from an excused one, and the sheet has one column for both.
-      excusedAbsences: (roll?.excused ?? 0) + (roll?.sick ?? 0),
-      unexcusedAbsences: roll?.absent ?? 0,
-      daysRecorded: roll?.totalRecorded ?? 0,
-    });
-  }
-
-  return registers;
 }
 
 /**

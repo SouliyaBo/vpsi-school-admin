@@ -10,17 +10,18 @@ import { errorMessage } from '@/lib/error-message';
 import { stripEmpty } from '@/lib/payload';
 import { fullName } from '@/lib/utils';
 import { notify } from '@/lib/toast';
-import { optionalDate, requiredId } from '@/lib/zod-helpers';
+import { optionalDate, optionalText, requiredId } from '@/lib/zod-helpers';
 import type { Student } from '@/types/entities';
 import { Form } from '@/components/ui/form';
 import { EntitySelectField } from '@/components/common/EntitySelect';
-import { DateField, FieldSection } from '@/components/common/fields';
+import { DateField, FieldSection, TextField } from '@/components/common/fields';
 import { FormDialog } from '@/components/common/FormDialog';
 import { useEnroll, type EnrollmentInput } from '../api';
 
 const schema = z.object({
   classroomId: requiredId(),
   enrolledAt: optionalDate(),
+  englishClass: optionalText(50),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -46,12 +47,12 @@ export function EnrollDialog({ open, onOpenChange, student, onEnrolled }: Props)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { classroomId: '', enrolledAt: '' },
+    defaultValues: { classroomId: '', enrolledAt: '', englishClass: '' },
   });
 
   useEffect(() => {
     if (open) {
-      form.reset({ classroomId: '', enrolledAt: '' });
+      form.reset({ classroomId: '', enrolledAt: '', englishClass: '' });
       enroll.reset();
     }
     // `enroll` is a stable mutation object; re-running on its identity would loop.
@@ -120,6 +121,15 @@ export function EnrollDialog({ open, onOpenChange, student, onEnrolled }: Props)
               name="enrolledAt"
               label={t('enrollment.enrolledAt')}
               description={t('common.optional')}
+            />
+            {/* Asked for here rather than left to a later edit: the office knows
+                the English room at the moment they place the child, and a field
+                only reachable from the detail page goes unfilled. */}
+            <TextField
+              control={form.control}
+              name="englishClass"
+              label={t('enrollment.englishClass')}
+              description={t('enrollment.englishClassHint')}
             />
           </FieldSection>
         </div>

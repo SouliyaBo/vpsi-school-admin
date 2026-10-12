@@ -1,6 +1,6 @@
 {
   "name": "vpsischool-admin",
-  "version": "0.1.8",
+  "version": "0.1.19",
   "private": true,
   "type": "module",
   "scripts": {

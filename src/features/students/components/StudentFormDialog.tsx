@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { useCan, useSeesEveryStudent } from '@/features/auth/hooks';
 import { useClassroomOptions } from '@/features/classrooms/api';
-import { useEnroll } from '@/features/enrollments/api';
+import { useEnroll, useUpdateEnrollment } from '@/features/enrollments/api';
 import { PlacePickerField } from '@/features/locations/components/PlacePickerField';
 import { VillagePickerField } from '@/features/locations/components/VillagePickerField';
 import { useActiveSchoolYear } from '@/features/school-years/api';
@@ -40,11 +40,7 @@ import {
   TextField,
 } from '@/components/common/fields';
 import { FormDialog } from '@/components/common/FormDialog';
-import {
-  EMPTY_GUARDIAN_LINK,
-  GuardianLinksField,
-  toGuardianPayload,
-} from './GuardianLinksField';
+import { EMPTY_GUARDIAN_LINK, GuardianLinksField, toGuardianPayload } from './GuardianLinksField';
 import { students, type StudentInput, type StudentUpdateInput } from '../api';
 
 /**
@@ -67,7 +63,11 @@ const guardianLinkSchema = z
   .superRefine((link, ctx) => {
     if (link.mode === 'existing') {
       if (!link.guardianId) {
-        ctx.addIssue({ code: 'custom', path: ['guardianId'], message: vmsg('validation.required') });
+        ctx.addIssue({
+          code: 'custom',
+          path: ['guardianId'],
+          message: vmsg('validation.required'),
+        });
       }
       return;
     }
@@ -109,6 +109,8 @@ const baseSchema = z.object({
    * nothing about.
    */
   classroomId: optionalId(),
+  /** `ຫ້ອງພາກອັງກິດ`, stored on the placement alongside `classroomId`. */
+  englishClass: optionalText(50),
   guardians: z.array(guardianLinkSchema),
   /**
    * Memberships keyed by organisation, each holding its `ວັນເຂົ້າ`.
@@ -172,15 +174,31 @@ const EMPTY: FormValues = {
   // The office picks `new` deliberately when that is what it means.
   status: 'active',
   classroomId: '',
+  englishClass: '',
   guardians: [EMPTY_GUARDIAN_LINK],
   organizations: { children: '', youth: '', women: '' },
 };
 
 /**
+ * Where the student sits today, as much of it as this form can edit.
+ *
+ * Only `englishClass`: the homeroom is changed by a transfer, which adjusts two
+ * headcounts and belongs to the enrollment screen. `enrollmentId` is the row the
+ * edit is written to — the form never guesses it from the student.
+ */
+export interface EditablePlacement {
+  enrollmentId: string;
+  englishClass: string | null;
+}
+
+/**
  * The record as the form holds it. Also the "before" snapshot the edit path
  * diffs against, so both views of a student are built from one place.
+ *
+ * `placement` is passed in rather than read off the student: `GET /students/:id`
+ * does not carry it, so only the caller knows the active enrollment.
  */
-function toFormValues(student: Student): FormValues {
+function toFormValues(student: Student, placement?: EditablePlacement | null): FormValues {
   return {
     studentCode: student.studentCode,
     firstNameLo: student.firstNameLo,
@@ -204,6 +222,8 @@ function toFormValues(student: Student): FormValues {
     admissionDate: toDateInput(student.admissionDate),
     notes: student.notes ?? '',
     status: student.status,
+    classroomId: '',
+    englishClass: placement?.englishClass ?? '',
     guardians: [],
     organizations: toOrganizationFields(student.organizations),
   };
@@ -228,9 +248,11 @@ function toOrganizationFields(
  * a change.
  */
 function toPayload(values: FormValues) {
-  const { guardians, classroomId, organizations, ...rest } = stripEmpty(values);
+  const { guardians, classroomId, englishClass, organizations, ...rest } = stripEmpty(values);
   void guardians;
   void classroomId;
+  // Both placement fields: they go to `/enrollments`, never onto the student.
+  void englishClass;
 
   return {
     ...rest,
@@ -246,17 +268,27 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   student: Student | null;
   /**
+   * The student's active enrollment, when the caller has it.
+   *
+   * Without it the form has no row to write `ຫ້ອງພາກອັງກິດ` to, so the field is
+   * left out rather than shown and silently discarded.
+   */
+  placement?: EditablePlacement | null;
+  /**
    * `placed` is false when the student was saved but has no classroom — either
    * none was picked, or the placement was rejected. The caller owns the follow-up.
    */
   onCreated?: (student: Student, placed: boolean) => void;
 }
 
-export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Props) {
+export function StudentFormDialog({ open, onOpenChange, student, placement, onCreated }: Props) {
   const { t } = useTranslation();
   const create = students.useCreate();
   const update = students.useUpdate();
   const enroll = useEnroll();
+  // Silent: this form shows one toast for one submit, even when it writes both
+  // the student record and the placement.
+  const updatePlacement = useUpdateEnrollment({ silent: true });
   const activeYear = useActiveSchoolYear();
   const seesEveryStudent = useSeesEveryStudent();
   const can = useCan();
@@ -287,8 +319,8 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
 
   useEffect(() => {
     if (!open) return;
-    form.reset(student ? toFormValues(student) : EMPTY);
-  }, [open, student, form]);
+    form.reset(student ? toFormValues(student, placement) : EMPTY);
+  }, [open, student, placement, form]);
 
   // A homeroom teacher normally has exactly one room, so picking it for them is
   // both the right answer and the one that keeps the child visible afterwards.
@@ -301,7 +333,7 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
 
   function submit(values: FormValues) {
     const payload = toPayload(values);
-    const classroomId = stripEmpty(values).classroomId;
+    const { classroomId, englishClass } = stripEmpty(values);
 
     if (student) {
       // Only what actually changed, so the PATCH does not re-send fields another
@@ -309,15 +341,38 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
       // office actually retyped it — the API takes it from an account holding
       // `students:manage` and re-syncs the copies on enrollments, exam
       // registrations and term results.
-      const patch = changedFields(payload, toPayload(toFormValues(student)));
+      const patch = changedFields(payload, toPayload(toFormValues(student, placement)));
 
-      if (Object.keys(patch).length === 0) {
+      // The room is not part of the student document, so it is diffed on its own
+      // and written to the enrollment. `''` is a real value here — it is how a
+      // child is taken out of the English programme — so the comparison is
+      // against the normalized string rather than truthiness.
+      const roomBefore = placement?.englishClass ?? '';
+      const roomAfter = values.englishClass?.trim() ?? '';
+      const roomChanged = placement != null && roomAfter !== roomBefore;
+
+      if (Object.keys(patch).length === 0 && !roomChanged) {
         onOpenChange(false);
         return;
       }
 
-      void update
-        .mutateAsync({ id: student.id, body: patch as StudentUpdateInput })
+      // Both writes go out together, and the dialog closes only once both land:
+      // closing on the student save alone would show the old room back on the
+      // page the office just edited.
+      const writes: Promise<unknown>[] = [];
+      if (Object.keys(patch).length > 0) {
+        writes.push(update.mutateAsync({ id: student.id, body: patch as StudentUpdateInput }));
+      }
+      if (roomChanged) {
+        writes.push(
+          updatePlacement.mutateAsync({
+            id: placement.enrollmentId,
+            body: { englishClass: roomAfter },
+          }),
+        );
+      }
+
+      void Promise.all(writes)
         .then(() => onOpenChange(false))
         .catch(() => {});
       return;
@@ -335,7 +390,7 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
         // a full classroom is the usual one — must not read as a failed save,
         // so it is reported on its own and the caller offers another class.
         try {
-          await enroll.mutateAsync({ studentId: created.id, classroomId });
+          await enroll.mutateAsync({ studentId: created.id, classroomId, englishClass });
           return { created, placed: true };
         } catch (error) {
           notify.error(t('enrollment.placementFailed', { reason: errorMessage(error) }));
@@ -355,7 +410,7 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
       onOpenChange={onOpenChange}
       title={isEditing ? t('student.edit') : t('student.create')}
       onSubmit={form.handleSubmit(submit)}
-      isSubmitting={create.isPending || update.isPending}
+      isSubmitting={create.isPending || update.isPending || updatePlacement.isPending}
       size="xl"
     >
       <Form {...form}>
@@ -376,13 +431,28 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
               required
               options={GENDERS.map((gender) => ({ value: gender, label: t(`gender.${gender}`) }))}
             />
-            <TextField control={form.control} name="firstNameLo" label={t('person.firstNameLo')} required />
-            <TextField control={form.control} name="lastNameLo" label={t('person.lastNameLo')} required />
+            <TextField
+              control={form.control}
+              name="firstNameLo"
+              label={t('person.firstNameLo')}
+              required
+            />
+            <TextField
+              control={form.control}
+              name="lastNameLo"
+              label={t('person.lastNameLo')}
+              required
+            />
             <TextField control={form.control} name="firstNameEn" label={t('person.firstNameEn')} />
             <TextField control={form.control} name="lastNameEn" label={t('person.lastNameEn')} />
             <TextField control={form.control} name="nickname" label={t('person.nickname')} />
             <TextField control={form.control} name="nicknameEn" label={t('person.nicknameEn')} />
-            <DateField control={form.control} name="dateOfBirth" label={t('person.dateOfBirth')} required />
+            <DateField
+              control={form.control}
+              name="dateOfBirth"
+              label={t('person.dateOfBirth')}
+              required
+            />
             <TextField control={form.control} name="nationality" label={t('student.nationality')} />
             <TextField control={form.control} name="ethnicity" label={t('student.ethnicity')} />
             <TextField control={form.control} name="nationalId" label={t('person.nationalId')} />
@@ -425,23 +495,37 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
               name="villageId"
               label={t('person.village')}
             />
-            <TextField control={form.control} name="addressDetail" label={t('person.addressDetail')} />
+            <TextField
+              control={form.control}
+              name="addressDetail"
+              label={t('person.addressDetail')}
+            />
           </FieldSection>
 
-          {/* On edit there is no classroom picker: moving a placed student is a
-              transfer, which the enrollment module does with both headcounts in
-              one transaction. */}
-          {!isEditing && (
+          {/* The two placement fields are not edited the same way. The homeroom
+              is create-only: moving a placed student is a transfer, which the
+              enrollment module does with both headcounts in one transaction. The
+              English room is only a label on the placement, so it stays editable
+              — but only once a placement exists to hold it. */}
+          {(!isEditing || placement) && (
             <FieldSection title={t('enrollment.placement')}>
-              <EntitySelectField
+              {!isEditing && (
+                <EntitySelectField
+                  control={form.control}
+                  name="classroomId"
+                  label={t('enrollment.classroom')}
+                  description={
+                    activeYear.data ? t('student.classroomHint') : t('enrollment.noActiveYearHint')
+                  }
+                  useOptions={useClassrooms}
+                  searchPlaceholder={t('enrollment.selectClassroom')}
+                />
+              )}
+              <TextField
                 control={form.control}
-                name="classroomId"
-                label={t('enrollment.classroom')}
-                description={
-                  activeYear.data ? t('student.classroomHint') : t('enrollment.noActiveYearHint')
-                }
-                useOptions={useClassrooms}
-                searchPlaceholder={t('enrollment.selectClassroom')}
+                name="englishClass"
+                label={t('enrollment.englishClass')}
+                description={t('enrollment.englishClassHint')}
               />
             </FieldSection>
           )}
@@ -462,7 +546,11 @@ export function StudentFormDialog({ open, onOpenChange, student, onCreated }: Pr
           </FieldSection>
 
           <FieldSection>
-            <DateField control={form.control} name="admissionDate" label={t('student.admissionDate')} />
+            <DateField
+              control={form.control}
+              name="admissionDate"
+              label={t('student.admissionDate')}
+            />
             {/* Moving a child between statuses drives enrolment and certificates,
                 so it stays with the office. A homeroom teacher gets every other
                 field; the API refuses the change either way. */}

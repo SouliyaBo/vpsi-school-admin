@@ -45,6 +45,15 @@ export const assignmentSchema = z
     classroomId: requiredId(),
     semesterId: requiredId(),
     schedule: z.array(periodSchema).min(1, vmsg('assignment.atLeastOnePeriod')),
+    /**
+     * The first day a revised schedule applies to — editing only.
+     *
+     * Blank sends nothing and the API defaults to today, which is what a timetable
+     * revision means. Backdating it to the start of term is how the office says
+     * "this is what the timetable always should have said", which is the one case
+     * where the weeks behind should be re-read under the new arrangement.
+     */
+    effectiveFrom: optionalText(10).optional(),
     notes: optionalText(500),
   })
   .superRefine((values, ctx) => {

@@ -26,6 +26,14 @@ interface FormDialogProps {
   size?: 'md' | 'lg' | 'xl';
   /** Rendered at the start of the footer, e.g. a delete button. */
   footerStart?: ReactNode;
+  /**
+   * Holds the submit button closed for a form that cannot be sent yet.
+   *
+   * For the cases a required field cannot express — a handover with nothing to
+   * hand over. A button that submits to a refusal teaches people to ignore the
+   * refusal.
+   */
+  submitDisabled?: boolean;
 }
 
 const SIZES = {
@@ -52,6 +60,7 @@ export function FormDialog({
   submitLabel,
   size = 'md',
   footerStart,
+  submitDisabled = false,
 }: FormDialogProps) {
   const { t } = useTranslation();
 
@@ -91,7 +100,7 @@ export function FormDialog({
               >
                 {t('common.cancel')}
               </Button>
-              <Button type="submit" loading={isSubmitting}>
+              <Button type="submit" loading={isSubmitting} disabled={submitDisabled}>
                 {isSubmitting ? t('common.saving') : (submitLabel ?? t('common.save'))}
               </Button>
             </div>

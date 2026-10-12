@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as apiClient from '@/lib/api-client';
 import { paginated, renderWithProviders } from '@/test/utils';
+import { BehaviorTally } from './components/BehaviorTally';
 import { MonthlySheet } from './components/MonthlySheet';
 import { MyWeekReminder } from './components/MyWeekReminder';
 import { CoverageReport } from '@/features/coverage/CoverageReport';
@@ -486,6 +487,137 @@ function lastParams(url: string) {
   const calls = vi.mocked(apiClient.get).mock.calls.filter(([path]) => path === url);
   return (calls.at(-1)?.[1] as { params: Record<string, unknown> } | undefined)?.params;
 }
+
+/**
+ * The tally read like the attendance summary: narrowed to part of the term, and
+ * opened up to the entries behind a number.
+ *
+ * The window is the thing worth pinning down. The counts and the entries beneath
+ * them are two separate requests, and a reader who narrows to October and then
+ * opens a row must not be shown September's entries under an October count.
+ */
+describe('behaviour register — the tally', () => {
+  const semester = {
+    id: 'sem-1',
+    nameLo: 'ພາກຮຽນ 1',
+    nameEn: 'Semester 1',
+    isActive: true,
+    startDate: '2025-09-01',
+    endDate: '2025-12-19',
+    schoolYearId: activeYear.id,
+  };
+
+  const TALLY_URL = `/behavior-logs/tally/classroom/${classroom.id}/semester/${semester.id}`;
+
+  const tallyRows = [
+    {
+      studentId: 'stu-1',
+      studentCode: 'S-0001',
+      studentNameLo: 'ທ້າວ ແດນມີ',
+      studentNickname: 'ແດນ',
+      entries: 5,
+      withAction: 4,
+      lastDate: '2025-11-11',
+    },
+    {
+      studentId: 'stu-3',
+      studentCode: 'S-0003',
+      studentNameLo: 'ທ້າວ ວິໄຊ',
+      studentNickname: null,
+      entries: 2,
+      withAction: 1,
+      lastDate: '2025-10-09',
+    },
+  ];
+
+  /** The log rows behind ແດນມີ's count — what opening the row asks for. */
+  const studentEntries = paginated(
+    [
+      {
+        id: 'rec-1',
+        date: '2025-11-11',
+        period: 2,
+        behavior: 'ວົນແຊວ',
+        action: 'ເຕືອນ 2 ຄັ້ງ',
+        classNote: null,
+        remark: null,
+        subjectId: subject,
+        teacherId: teacher,
+        studentId: 'stu-1',
+        classroomId: classroom.id,
+      },
+    ],
+    // More entries than the row shows, so the "there are more" line is exercised.
+    { total: 3 },
+  );
+
+  beforeEach(() => {
+    stubReads({
+      '/semesters/active': semester,
+      [`/semesters/${semester.id}`]: semester,
+      '/semesters': paginated([semester]),
+      [TALLY_URL]: tallyRows,
+      '/behavior-logs': studentEntries,
+    });
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  async function openTally() {
+    renderWithProviders(<BehaviorTally />);
+    await chooseClassroom();
+    await screen.findByText(/ແດນມີ/);
+  }
+
+  it('asks for the whole term until the reader narrows it', async () => {
+    await openTally();
+
+    const params = lastParams(TALLY_URL) ?? {};
+    expect(params.from).toBeUndefined();
+    expect(params.to).toBeUndefined();
+  });
+
+  it('narrows the counts to a month of the term', async () => {
+    await openTally();
+
+    await userEvent.click(screen.getByRole('combobox', { name: /month/i }));
+    await userEvent.click(await screen.findByRole('option', { name: /October 2025/ }));
+
+    // The last day is read off the month's own length, not assumed to be 30.
+    await waitFor(() =>
+      expect(lastParams(TALLY_URL)).toMatchObject({ from: '2025-10-01', to: '2025-10-31' }),
+    );
+  });
+
+  it('opens a row onto the entries behind its count, over the same window', async () => {
+    await openTally();
+
+    // Every row opens, so the first one is ແດນມີ's — the order the API sets.
+    await userEvent.click(screen.getAllByRole('button', { name: /show what was written/i })[0]!);
+
+    await waitFor(() =>
+      expect(lastParams('/behavior-logs')).toMatchObject({
+        studentId: 'stu-1',
+        classroomId: classroom.id,
+        semesterId: semester.id,
+      }),
+    );
+    expect(await screen.findByText('ວົນແຊວ')).toBeInTheDocument();
+    // A row shows the latest twenty and says so rather than implying it is all
+    // there is — the history tab is where the rest lives.
+    expect(screen.getByText(/showing the latest 1 of 3/i)).toBeInTheDocument();
+  });
+
+  it('thins the table to the students who have been warned often enough', async () => {
+    await openTally();
+
+    await userEvent.click(screen.getByRole('combobox', { name: /warned at least/i }));
+    await userEvent.click(await screen.findByRole('option', { name: /3 times or more/ }));
+
+    // ແດນມີ has four; ວິໄຊ has one and drops off.
+    expect(screen.getByText(/ແດນມີ/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText(/ວິໄຊ/)).toBeNull());
+  });
+});
 
 describe('behaviour register — the teacher’s weekly reminder', () => {
   afterEach(() => {

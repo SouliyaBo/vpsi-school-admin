@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useCan } from '@/features/auth/hooks';
 import { classroomHeading, classroomsApi, useClassroomOptions } from '@/features/classrooms/api';
+import { useEnglishClassOptions } from '@/features/enrollments/api';
 import { EnrollDialog } from '@/features/enrollments/components/EnrollDialog';
 import { useGradeLevelOptions } from '@/features/grade-levels/api';
 import { useActiveSchoolYear } from '@/features/school-years/api';
@@ -34,6 +35,18 @@ import {
 } from '../lib/student-list-workbook';
 import { students, studentsApi } from '../api';
 
+/**
+ * The "not yet set" choice in the English-room filter.
+ *
+ * Only ever a value inside the dropdown — it is translated into
+ * `englishClassSet=false` before it reaches the URL or the API, so it can never
+ * collide with a room the office happens to name.
+ */
+const UNASSIGNED_ENGLISH_CLASS = '__unassigned__';
+
+/** The ages offered in the filter — ມ.1 to the oldest ມ.7 student, with room to spare. */
+const AGE_OPTIONS = Array.from({ length: 10 }, (_, index) => 11 + index);
+
 export function StudentsPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -44,7 +57,19 @@ export function StudentsPage() {
   const table = useTableQueryState({
     defaultSortBy: 'studentCode',
     defaultSortOrder: 'asc',
-    filterKeys: ['status', 'gender', 'gradeLevelId', 'classroomId', 'villageId', 'enrolled'],
+    filterKeys: [
+      'status',
+      'gender',
+      'age',
+      'gradeLevelId',
+      'classroomId',
+      'villageId',
+      'enrolled',
+      'englishClass',
+      // Its own key rather than a reserved value on `englishClass`: the labels
+      // are free text, so any sentinel could one day be a real room name.
+      'englishClassSet',
+    ],
   });
   const dialogs = useCrudDialogs<Student>();
 
@@ -57,10 +82,28 @@ export function StudentsPage() {
   const remove = students.useDelete();
   const gradeOptions = useGradeLevelOptions();
   const classroomOptions = useClassroomOptions();
+  const englishClassOptions = useEnglishClassOptions();
   /** The class the list is narrowed to, if any — it heads the exported file. */
   const classLabel = classroomOptions.data?.find(
     (option) => option.value === table.filters.classroomId,
   )?.label;
+  /**
+   * The English room the list is narrowed to, for the exported file's subtitle.
+   *
+   * Taken from the filter rather than the rows: "nobody assigned yet" is a
+   * filter with no label on any row, and a file that said `ນັກຮຽນທັງໝົດ` while
+   * showing a narrowed list is the kind of sheet that gets acted on wrongly.
+   */
+  const englishClassLabel = table.filters.englishClass
+    ? `${t('enrollment.englishClass')} ${table.filters.englishClass}`
+    : table.filters.englishClassSet === 'false'
+      ? `${t('enrollment.englishClass')}: ${t('enrollment.englishClassNone')}`
+      : undefined;
+
+  /** The age the list is narrowed to, for the exported file's subtitle. */
+  const ageLabel = table.filters.age
+    ? `${t('person.age')} ${t('person.ageYears', { age: table.filters.age })}`
+    : undefined;
 
   const columns = useMemo<ColumnDef<Student, unknown>[]>(
     () => [
@@ -148,6 +191,14 @@ export function StudentsPage() {
                   {t('enrollment.rollNumber')} {placement.rollNumber}
                 </p>
               )}
+              {/* Under the homeroom rather than in a column of its own: the two
+                  are read together, and a separate column would be blank down
+                  its whole length until the office has filled the rooms in. */}
+              {placement.englishClass && (
+                <p className="truncate text-xs text-muted-foreground">
+                  {t('enrollment.englishClass')}: {placement.englishClass}
+                </p>
+              )}
             </div>
           );
         },
@@ -215,7 +266,12 @@ export function StudentsPage() {
           <>
             {/* Exports what the filters are showing, not the page — the office
                 asks for "the list", and a list of twenty is never it. */}
-            <ExportButton params={table.queryParams} classLabel={classLabel} />
+            <ExportButton
+              params={table.queryParams}
+              classLabel={classLabel}
+              englishClassLabel={englishClassLabel}
+              ageLabel={ageLabel}
+            />
             {can('students', 'create') && (
               <Button onClick={dialogs.openCreate}>
                 <Plus />
@@ -281,11 +337,48 @@ export function StudentsPage() {
               options={classroomOptions.data ?? []}
               placeholder={t('classroom.title')}
             />
+            {/* Two filter keys behind one control: picking a room sets
+                `englishClass`, while "not yet set" sets `englishClassSet=false`.
+                Written in one patch so neither can be left over from the other. */}
+            <FilterSelect
+              value={
+                table.filters.englishClassSet === 'false'
+                  ? UNASSIGNED_ENGLISH_CLASS
+                  : table.filters.englishClass
+              }
+              onChange={(value) =>
+                table.patch({
+                  filters: {
+                    englishClass: value === UNASSIGNED_ENGLISH_CLASS ? '' : (value ?? ''),
+                    englishClassSet: value === UNASSIGNED_ENGLISH_CLASS ? 'false' : '',
+                  },
+                })
+              }
+              options={[
+                ...(englishClassOptions.data ?? []),
+                // Last, and offered even before any room exists: with the column
+                // newly added this is the whole school, and "who still needs
+                // one" is the question the office actually has.
+                { value: UNASSIGNED_ENGLISH_CLASS, label: t('enrollment.englishClassNone') },
+              ]}
+              placeholder={t('enrollment.englishClass')}
+            />
             <FilterSelect
               value={table.filters.gender}
               onChange={(value) => table.setFilter('gender', value)}
               options={GENDERS.map((gender) => ({ value: gender, label: t(`gender.${gender}`) }))}
               placeholder={t('person.gender')}
+            />
+            {/* From 11: the school's youngest intake is ມ.1, so nothing below
+                it is ever a real answer. */}
+            <FilterSelect
+              value={table.filters.age}
+              onChange={(value) => table.setFilter('age', value)}
+              options={AGE_OPTIONS.map((age) => ({
+                value: String(age),
+                label: t('person.ageYears', { age }),
+              }))}
+              placeholder={t('person.age')}
             />
             <FilterSelect
               value={table.filters.enrolled}
@@ -304,6 +397,16 @@ export function StudentsPage() {
         open={dialogs.formOpen}
         onOpenChange={dialogs.setFormOpen}
         student={dialogs.record}
+        // The list rows carry the placement already, so editing from here can
+        // write the English room without a second read.
+        placement={
+          dialogs.record?.currentEnrollment
+            ? {
+                enrollmentId: dialogs.record.currentEnrollment.enrollmentId,
+                englishClass: dialogs.record.currentEnrollment.englishClass ?? null,
+              }
+            : null
+        }
         // A new student has no class yet, and a class is what makes them appear in
         // rosters, score sheets and attendance — so the offer to place them comes
         // straight after saving rather than being left to be discovered.
@@ -375,7 +478,17 @@ export function StudentsPage() {
  * `exceljs` and these three lists are all fetched at the moment of the click and
  * never with the page — most people who open this screen are looking somebody up.
  */
-function ExportButton({ params, classLabel }: { params: ListParams; classLabel?: string }) {
+function ExportButton({
+  params,
+  classLabel,
+  englishClassLabel,
+  ageLabel,
+}: {
+  params: ListParams;
+  classLabel?: string;
+  englishClassLabel?: string;
+  ageLabel?: string;
+}) {
   const { t, i18n } = useTranslation();
   const [busy, setBusy] = useState(false);
   const activeYear = useActiveSchoolYear();
@@ -419,11 +532,17 @@ function ExportButton({ params, classLabel }: { params: ListParams; classLabel?:
           // A class with nobody assigned, and a child with no class at all, both
           // print blank rather than a dash the office would have to explain.
           homeroomTeacher: placement ? (homeroomByClassroom.get(placement.classroomId) ?? '') : '',
+          englishClass: placement?.englishClass ?? '',
         };
       });
 
       // `ບັນຊີລາຍຊື່ນັກຮຽນ ມ.1/ຂ 2025-2026` — what the list is, of whom, and when.
-      const heading = [t('student.exportTitle'), classLabel, activeYear.data?.code]
+      const heading = [
+        t('student.exportTitle'),
+        classLabel,
+        englishClassLabel,
+        activeYear.data?.code,
+      ]
         .filter(Boolean)
         .join(' ');
 
@@ -433,7 +552,9 @@ function ExportButton({ params, classLabel }: { params: ListParams; classLabel?:
           (import.meta.env.VITE_SCHOOL_NAME_EN as string | undefined) ??
           '',
         title: heading,
-        filters: classLabel ?? t('student.exportEveryStudent'),
+        filters:
+          [classLabel, englishClassLabel, ageLabel].filter(Boolean).join(' · ') ||
+          t('student.exportEveryStudent'),
         sheetName: t('student.exportSheet'),
         rowNumber: t('student.exportRowNumber'),
         studentCode: t('student.exportStudentCode'),
@@ -446,6 +567,7 @@ function ExportButton({ params, classLabel }: { params: ListParams; classLabel?:
         nicknameEn: t('student.exportNicknameEn'),
         classroom: t('enrollment.classroom'),
         homeroomTeacher: t('classroom.homeroomTeacher'),
+        englishClass: t('enrollment.englishClass'),
         total: (count) => t('student.exportTotal', { count }),
         printedOn: t('student.exportPrintedOn', { date: formatDate(new Date()) }),
       });

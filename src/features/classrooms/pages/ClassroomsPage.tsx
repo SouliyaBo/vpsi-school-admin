@@ -9,6 +9,7 @@ import { useCan } from '@/features/auth/hooks';
 import { useGradeLevelOptions } from '@/features/grade-levels/api';
 import { useSchoolYearOptions } from '@/features/school-years/api';
 import { useTeacherOptions } from '@/features/teachers/api';
+import { HomeroomHistory } from '../components/HomeroomHistory';
 import { useCrudDialogs } from '@/hooks/use-crud-dialogs';
 import { useTableQueryState } from '@/hooks/use-table-query-state';
 import { stripEmpty } from '@/lib/payload';
@@ -303,6 +304,9 @@ export function ClassroomsPage() {
               searchPlaceholder={t('teacher.title')}
             />
             <TextField control={form.control} name="room" label={t('classroom.room')} />
+            {/* Only while editing: a room being created has no history, and a
+                panel that said so would be a line of furniture. */}
+            {dialogs.record && <HomeroomHistory classroomId={dialogs.record.id} />}
           </FieldSection>
         </Form>
       </FormDialog>

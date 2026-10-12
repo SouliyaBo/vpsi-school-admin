@@ -125,6 +125,12 @@ export function DayDrawer({
                             {t(`calendar.dayEffect.${event.dayEffect}`)}
                           </Badge>
                           {event.isHalfDay && <Badge variant="outline">{t('calendar.halfDay')}</Badge>}
+                          {/* Without this the row reads as a school-wide
+                              closure, which is the one thing it is not — the
+                              grid deliberately leaves these days open. */}
+                          {isClassScoped(event) && (
+                            <Badge variant="secondary">{t('calendar.appliesToBadge')}</Badge>
+                          )}
                         </div>
                         {event.description && (
                           <p className="whitespace-pre-line pt-1 text-sm text-foreground/80">
@@ -158,5 +164,13 @@ export function DayDrawer({
         </div>
       )}
     </DetailDrawer>
+  );
+}
+
+/** Whether the event closes named classes rather than the whole school. */
+function isClassScoped(event: CalendarEvent): boolean {
+  return (
+    (event.appliesToGradeLevelIds?.length ?? 0) > 0 ||
+    (event.appliesToClassroomIds?.length ?? 0) > 0
   );
 }
