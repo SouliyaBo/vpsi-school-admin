@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { get, put, upload } from '@/lib/api-client';
 import { createCrudApi, createCrudHooks, useLookupQuery } from '@/lib/crud';
-import { fullName } from '@/lib/utils';
+import { cleanParams, fullName } from '@/lib/utils';
 import type { Sibling, Student } from '@/types/entities';
 import type {
   Gender,
@@ -94,6 +94,32 @@ export const students = createCrudHooks<Student, StudentInput, StudentUpdateInpu
   'students',
   studentsApi,
 );
+
+export interface GenderCount {
+  total: number;
+  female: number;
+  male: number;
+}
+
+/** The headcount above the list — see `GET /students/stats`. */
+export interface StudentListStats extends GenderCount {
+  under: GenderCount;
+  ages: (GenderCount & { age: number })[];
+  over: GenderCount;
+  unknown: GenderCount;
+}
+
+/**
+ * The same filters as the list, counted. Keyed under `students` so creating,
+ * editing or deleting a student refreshes the figures with the table.
+ */
+export function useStudentListStats(params: Record<string, unknown>) {
+  return useQuery({
+    queryKey: ['students', 'stats', params],
+    queryFn: () => get<StudentListStats>('/students/stats', { params: cleanParams(params) }),
+    placeholderData: (previous) => previous,
+  });
+}
 
 /**
  * Keyed under `students` so editing a guardian list, which is what decides who

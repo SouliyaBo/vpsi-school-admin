@@ -28,6 +28,7 @@ import { RowActions } from '@/components/common/RowActions';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { FilterSelect, SearchInput, TableToolbar } from '@/components/common/TableToolbar';
 import { StudentFormDialog } from '../components/StudentFormDialog';
+import { StudentStats } from '../components/StudentStats';
 import {
   buildStudentListWorkbook,
   studentListFileName,
@@ -84,6 +85,18 @@ export function StudentsPage() {
   const [justCreated, setJustCreated] = useState<Student | null>(null);
 
   const list = students.useList(table.queryParams);
+  /** The list's filters for the headcount — no paging, sorting or age. */
+  const statsParams = useMemo(() => {
+    const {
+      page: _page,
+      limit: _limit,
+      sortBy: _sortBy,
+      sortOrder: _sortOrder,
+      ...rest
+    } = table.queryParams as Record<string, unknown>;
+    const { age: _age, ageUnder: _ageUnder, ...filters } = rest;
+    return filters;
+  }, [table.queryParams]);
   const remove = students.useDelete();
   const gradeOptions = useGradeLevelOptions();
   const classroomOptions = useClassroomOptions();
@@ -286,6 +299,20 @@ export function StudentsPage() {
               </Button>
             )}
           </>
+        }
+      />
+
+      <StudentStats
+        params={statsParams}
+        selectedAge={table.filters.age ? Number(table.filters.age) : undefined}
+        selectedUnder={table.filters.ageUnder ? Number(table.filters.ageUnder) : undefined}
+        onPickAge={(pick) =>
+          table.patch({
+            filters: {
+              age: pick && 'age' in pick ? String(pick.age) : '',
+              ageUnder: pick && 'under' in pick ? String(pick.under) : '',
+            },
+          })
         }
       />
 

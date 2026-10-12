@@ -1,4 +1,4 @@
-import { ClipboardCheck, FileText, Users } from 'lucide-react';
+import { ClipboardCheck, FileCheck2, FileText, Users } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { useCan } from '@/features/auth/hooks';
@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/common/PageHeader';
 import { MonthlyReport } from '../components/MonthlyReport';
+import { MonthlyReportCompliance } from '../components/MonthlyReportCompliance';
 import { ReviewCompliance } from '../components/ReviewCompliance';
 import { ReviewDueBanner } from '../components/ReviewDueBanner';
 import { ReviewSheet } from '../components/ReviewSheet';
@@ -41,8 +42,8 @@ export function HomeroomReviewsPage() {
   const [params, setParams] = useSearchParams();
   const requested = params.get('tab');
   const tab =
-    requested === 'compliance' && oversees
-      ? 'compliance'
+    (requested === 'compliance' || requested === 'report-compliance') && oversees
+      ? requested
       : requested === 'report'
         ? 'report'
         : 'sheet';
@@ -84,6 +85,12 @@ export function HomeroomReviewsPage() {
             {t('homeroomReview.reportTab')}
           </TabsTrigger>
           {oversees && (
+            <TabsTrigger value="report-compliance">
+              <FileCheck2 />
+              {t('homeroomReview.reportComplianceTab')}
+            </TabsTrigger>
+          )}
+          {oversees && (
             <TabsTrigger value="compliance">
               <Users />
               {t('homeroomReview.complianceTab')}
@@ -97,6 +104,11 @@ export function HomeroomReviewsPage() {
         <TabsContent value="report">
           <MonthlyReport />
         </TabsContent>
+        {oversees && (
+          <TabsContent value="report-compliance">
+            <MonthlyReportCompliance />
+          </TabsContent>
+        )}
         {oversees && (
           <TabsContent value="compliance">
             <ReviewCompliance />

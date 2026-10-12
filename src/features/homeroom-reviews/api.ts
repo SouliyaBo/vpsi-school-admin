@@ -338,6 +338,73 @@ export interface MonthlyReport {
     tested: number;
   };
   guardianContacts: (ReportNamed & { date: string; content: string })[];
+  year: number;
+  /** The teacher's own four sections — what no other screen records. */
+  entry: MonthlyReportEntry;
+  submission: MonthlyReportSubmission;
+  /** The figures are the copy taken when it was sent, not today's. */
+  isSnapshot: boolean;
+  /** The room's current roll — who the teacher's rows may name. */
+  roster: ReportNamed[];
+}
+
+export interface MonthlyReportEntry {
+  overview: string | null;
+  extraClasses: {
+    studentId: string;
+    studentNameLo: string | null;
+    subject: string;
+    teacherName: string | null;
+  }[];
+  outsideActivities: {
+    studentId: string;
+    studentNameLo: string | null;
+    date: string | null;
+    detail: string;
+  }[];
+  suggestions: string | null;
+}
+
+/** On time, late, not sent and overdue, or not sent with time left — mirrors the API. */
+export type MonthlyReportStatus = 'submitted' | 'late' | 'missing' | 'pending';
+
+export interface MonthlyReportSubmission {
+  status: MonthlyReportStatus;
+  /** The 5th of the next month, as a calendar date. */
+  dueDate: string;
+  opensAt: string;
+  canSubmit: boolean;
+  firstSubmittedAt: string | null;
+  lastSubmittedAt: string | null;
+  daysLate: number;
+  hasDraft: boolean;
+}
+
+export type SaveMonthlyReportPayload = MonthlyReportParams & {
+  overview?: string;
+  extraClasses: { studentId: string; subject: string; teacherName?: string }[];
+  outsideActivities: { studentId: string; date?: string; detail: string }[];
+  suggestions?: string;
+};
+
+export interface MonthlyReportCompliance {
+  semester: { id: string; nameLo: string | null };
+  months: { year: number; month: number; monthNameLo: string; dueDate: string }[];
+  rows: {
+    classroomId: string;
+    classroomName: string;
+    gradeLevelCode: string | null;
+    teacherName: string | null;
+    cells: {
+      year: number;
+      month: number;
+      status: MonthlyReportStatus;
+      dueDate: string;
+      firstSubmittedAt: string | null;
+      daysLate: number;
+    }[];
+  }[];
+  summary: Record<MonthlyReportStatus, number>;
 }
 
 export type MonthlyReportParams = {
@@ -364,6 +431,14 @@ export const homeroomReviewsApi = {
   monthlyReport: (params: MonthlyReportParams) =>
     get<MonthlyReport>('/homeroom-reviews/monthly-report', { params: cleanParams(params) }),
   downloadMonthlyReport,
+  saveMonthlyReport: (payload: SaveMonthlyReportPayload) =>
+    put<MonthlyReport>('/homeroom-reviews/monthly-report', payload),
+  submitMonthlyReport: (payload: SaveMonthlyReportPayload) =>
+    post<MonthlyReport>('/homeroom-reviews/monthly-report/submit', payload),
+  monthlyReportCompliance: (semesterId?: string) =>
+    get<MonthlyReportCompliance>('/homeroom-reviews/monthly-report/compliance', {
+      params: cleanParams({ semesterId }),
+    }),
   sheet: (classroomId: string, dueDate?: string) =>
     get<HomeroomReviewSheet>('/homeroom-reviews/sheet', {
       params: cleanParams({ classroomId, dueDate }),
@@ -381,6 +456,27 @@ export function useMonthlyReport(params: Partial<MonthlyReportParams>) {
     queryKey: ['homeroom-reviews', 'monthly-report', params],
     queryFn: () => homeroomReviewsApi.monthlyReport(params as MonthlyReportParams),
     enabled: Boolean(params.classroomId && params.month),
+  });
+}
+
+/** Saves the draft, or sends it; either way the screen shows what the API returns. */
+export function useSaveMonthlyReport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ submit, ...payload }: SaveMonthlyReportPayload & { submit: boolean }) =>
+      submit
+        ? homeroomReviewsApi.submitMonthlyReport(payload)
+        : homeroomReviewsApi.saveMonthlyReport(payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['homeroom-reviews', 'monthly-report'] });
+    },
+  });
+}
+
+export function useMonthlyReportCompliance(semesterId?: string) {
+  return useQuery({
+    queryKey: ['homeroom-reviews', 'monthly-report', 'compliance', semesterId ?? null],
+    queryFn: () => homeroomReviewsApi.monthlyReportCompliance(semesterId),
   });
 }
 

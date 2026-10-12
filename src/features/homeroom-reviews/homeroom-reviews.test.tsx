@@ -5,6 +5,7 @@ import * as apiClient from '@/lib/api-client';
 import { renderWithProviders } from '@/test/utils';
 import { qualifyClassName } from './api';
 import { MonthlyReport, termMonths } from './components/MonthlyReport';
+import { MonthlyReportCompliance } from './components/MonthlyReportCompliance';
 import { ReviewCompliance } from './components/ReviewCompliance';
 import { ReviewDueBanner } from './components/ReviewDueBanner';
 import { ReviewSheet } from './components/ReviewSheet';
@@ -226,6 +227,41 @@ let permits: (resource: string, action?: string) => boolean = () => true;
 const saveBlob = vi.fn();
 vi.mock('@/lib/save-blob', () => ({ saveBlob: (...args: unknown[]) => saveBlob(...args) }));
 
+const reportCompliance = {
+  semester: { id: 'sem-1', nameLo: 'ພາກຮຽນທີ 1' },
+  months: [
+    { year: 2026, month: 9, monthNameLo: 'ກັນຍາ', dueDate: '2026-10-05' },
+    { year: 2026, month: 10, monthNameLo: 'ຕຸລາ', dueDate: '2026-11-05' },
+  ],
+  rows: [
+    {
+      classroomId: classroom.id,
+      classroomName: 'ມ.1/ກ',
+      gradeLevelCode: 'm1',
+      teacherName: 'ສົມເພັດ ພັນໂນລາດ',
+      cells: [
+        {
+          year: 2026,
+          month: 9,
+          status: 'late' as const,
+          dueDate: '2026-10-05',
+          firstSubmittedAt: '2026-10-07T03:00:00.000Z',
+          daysLate: 2,
+        },
+        {
+          year: 2026,
+          month: 10,
+          status: 'pending' as const,
+          dueDate: '2026-11-05',
+          firstSubmittedAt: null,
+          daysLate: 0,
+        },
+      ],
+    },
+  ],
+  summary: { submitted: 0, late: 1, missing: 0, pending: 1 },
+};
+
 const monthlyReport = {
   classroom: { id: classroom.id, name: 'ມ.1/ກ', gradeLevelCode: 'm1', teacherName: null },
   semester: { id: 'sem-1', number: 1, nameLo: 'ພາກຮຽນທີ 1' },
@@ -261,6 +297,20 @@ const monthlyReport = {
     tested: 20,
   },
   guardianContacts: [],
+  year: 2026,
+  entry: { overview: null, extraClasses: [], outsideActivities: [], suggestions: null },
+  submission: {
+    status: 'pending' as const,
+    dueDate: '2026-11-05',
+    opensAt: '2026-10-30T17:00:00.000Z',
+    canSubmit: true,
+    firstSubmittedAt: null,
+    lastSubmittedAt: null,
+    daysLate: 0,
+    hasDraft: false,
+  },
+  isSnapshot: false,
+  roster: [{ studentId: 'stu-1', studentCode: '0801', studentNameLo: 'ທ້າວ ແດນມີ' }],
 };
 
 vi.mock('@/features/auth/hooks', () => ({
@@ -276,6 +326,7 @@ function stubReads(overrides: Record<string, unknown> = {}): void {
     if (url === '/homeroom-reviews/sheet') return sheet as never;
     if (url === '/homeroom-reviews/compliance') return compliance as never;
     if (url === '/homeroom-reviews/monthly-report') return monthlyReport as never;
+    if (url === '/homeroom-reviews/monthly-report/compliance') return reportCompliance as never;
     if (url === '/semesters/active') {
       return {
         id: 'sem-1',
@@ -480,7 +531,70 @@ describe('the monthly report', () => {
     expect(screen.getByText('ໄປໂຮງໝໍກັບແມ່')).toBeInTheDocument();
     expect(screen.getByText(/24 students, 11 female/)).toBeInTheDocument();
     expect(screen.getAllByText('None').length).toBeGreaterThan(0);
-    expect(screen.getByText(/to complete in word/i)).toBeInTheDocument();
+    expect(screen.getByText('Written by the homeroom teacher')).toBeInTheDocument();
+    expect(screen.getByText('Not due yet')).toBeInTheDocument();
+  });
+
+  it('saves the teacher’s sections as a draft without sending them', async () => {
+    permits = (resource, action) => !(resource === 'homeroom-reviews' && action === 'manage');
+    stubReads();
+    const put = vi.spyOn(apiClient, 'put').mockResolvedValue(monthlyReport as never);
+    const post = vi.spyOn(apiClient, 'post');
+    renderWithProviders(<MonthlyReport />);
+
+    await userEvent.type(await screen.findByLabelText('I. Overview'), 'ຫ້ອງຮຽນດີ');
+    await userEvent.click(screen.getByRole('button', { name: /save draft/i }));
+
+    await waitFor(() =>
+      expect(put).toHaveBeenCalledWith(
+        '/homeroom-reviews/monthly-report',
+        expect.objectContaining({
+          classroomId: classroom.id,
+          overview: 'ຫ້ອງຮຽນດີ',
+          extraClasses: [],
+          outsideActivities: [],
+        }),
+      ),
+    );
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('sends the report, with an extra class against a child on the roll', async () => {
+    permits = (resource, action) => !(resource === 'homeroom-reviews' && action === 'manage');
+    stubReads();
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue(monthlyReport as never);
+    renderWithProviders(<MonthlyReport />);
+
+    await screen.findByText('Written by the homeroom teacher');
+    const addButtons = screen.getAllByRole('button', { name: /add row/i });
+    await userEvent.click(addButtons[0]);
+    await userEvent.click(screen.getByRole('combobox', { name: 'Student' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'ທ້າວ ແດນມີ' }));
+    await userEvent.type(screen.getByLabelText('Subject'), 'ພາສາອັງກິດ');
+    await userEvent.click(screen.getByRole('button', { name: /send report/i }));
+
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        '/homeroom-reviews/monthly-report/submit',
+        expect.objectContaining({
+          extraClasses: [{ studentId: 'stu-1', subject: 'ພາສາອັງກິດ' }],
+        }),
+      ),
+    );
+  });
+
+  it('will not send before the month’s last day', async () => {
+    permits = (resource, action) => !(resource === 'homeroom-reviews' && action === 'manage');
+    stubReads({
+      '/homeroom-reviews/monthly-report': {
+        ...monthlyReport,
+        submission: { ...monthlyReport.submission, canSubmit: false },
+      },
+    });
+    renderWithProviders(<MonthlyReport />);
+
+    expect(await screen.findByRole('button', { name: /send report/i })).toBeDisabled();
+    expect(screen.getByText(/can be sent from/i)).toBeInTheDocument();
   });
 
   it('downloads the Word form under the name the API gives it', async () => {
@@ -507,6 +621,27 @@ describe('the monthly report', () => {
 
   it('offers the months the term runs through, across the new year', () => {
     expect(termMonths('2026-09-01', '2027-01-31')).toEqual([9, 10, 11, 12, 1]);
+  });
+});
+
+describe('the monthly report grid', () => {
+  it('shows the office who sent late, by how much, and who is not yet due', async () => {
+    stubReads();
+    renderWithProviders(<MonthlyReportCompliance />);
+
+    expect(await screen.findByText('ສົມເພັດ ພັນໂນລາດ')).toBeInTheDocument();
+    expect(screen.getAllByText('Sent late').length).toBeGreaterThan(0);
+    expect(screen.getByText('2 days late')).toBeInTheDocument();
+    expect(screen.getAllByText('Not due yet').length).toBeGreaterThan(0);
+  });
+
+  it('is not offered to an account without `manage`', async () => {
+    permits = (resource, action) => !(resource === 'homeroom-reviews' && action === 'manage');
+    stubReads();
+    renderWithProviders(<HomeroomReviewsPage />);
+
+    expect(await screen.findByRole('tab', { name: /monthly report/i })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /^monthly reports$/i })).not.toBeInTheDocument();
   });
 });
 

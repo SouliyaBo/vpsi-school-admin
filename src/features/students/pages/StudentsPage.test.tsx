@@ -69,9 +69,24 @@ async function fillStudentFields(dialog: HTMLElement) {
  * blanket `paginated()` for every URL would hand the filter an object to map
  * over.
  */
+const count = (total: number, female: number) => ({ total, female, male: total - female });
+
+/** What `GET /students/stats` answers — 30 children, two of them under 11. */
+const listStats = {
+  ...count(30, 14),
+  under: count(2, 1),
+  ages: Array.from({ length: 10 }, (_, index) => ({
+    age: 11 + index,
+    ...(index === 1 ? count(9, 5) : count(index < 7 ? 3 : 0, index < 7 ? 1 : 0)),
+  })),
+  over: count(0, 0),
+  unknown: count(1, 0),
+};
+
 function stubPageReads(rows: unknown[] = [student], englishClasses: string[] = []) {
   return vi.spyOn(apiClient, 'get').mockImplementation((path: string) => {
     if (path === '/enrollments/english-classes') return Promise.resolve(englishClasses);
+    if (path === '/students/stats') return Promise.resolve(listStats);
     return Promise.resolve(paginated(rows));
   });
 }
@@ -285,6 +300,7 @@ describe('StudentsPage — the roster export', () => {
     vi.spyOn(apiClient, 'get').mockImplementation((path: string, config?: unknown) => {
       const params = (config as { params?: Record<string, unknown> } | undefined)?.params ?? {};
       if (path === '/enrollments/english-classes') return Promise.resolve(['EP-A']);
+      if (path === '/students/stats') return Promise.resolve(listStats);
       if (path === '/classrooms') return Promise.resolve(paginated([classroom]));
       if (path === '/teachers') return Promise.resolve(paginated([teacher]));
       if (path === '/school-years/active')
@@ -484,6 +500,44 @@ describe('StudentsPage — the status filter', () => {
     await userEvent.click(await screen.findByRole('option', { name: '11 years' }));
 
     await waitFor(() => expect(lastListParams()).toMatchObject({ age: '11' }));
+  });
+
+  it('heads the list with the headcount, by gender and by age', async () => {
+    renderWithProviders(<StudentsPage />);
+
+    expect(await screen.findByText('30')).toBeInTheDocument();
+    expect(screen.getByText('All students')).toBeInTheDocument();
+    expect(screen.getByText('14')).toBeInTheDocument();
+    expect(screen.getByText('16')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^12 years 9/ })).toBeInTheDocument();
+    expect(screen.getByText(/no date of birth: 1/i)).toBeInTheDocument();
+  });
+
+  it('lists the children of an age when it is clicked, and lets go on a second click', async () => {
+    renderWithProviders(<StudentsPage />);
+    const twelve = await screen.findByRole('button', { name: /^12 years 9/ });
+
+    await userEvent.click(twelve);
+    await waitFor(() => expect(lastListParams()).toMatchObject({ age: '12' }));
+    expect(twelve).toHaveAttribute('aria-pressed', 'true');
+
+    await userEvent.click(twelve);
+    await waitFor(() => expect(lastListParams()).not.toHaveProperty('age'));
+  });
+
+  it('counts the same filters as the list, but never narrows the count by age', async () => {
+    renderWithProviders(<StudentsPage />);
+    await userEvent.click(await screen.findByRole('button', { name: /^Under 11 2/ }));
+    await waitFor(() => expect(lastListParams()).toMatchObject({ ageUnder: '11' }));
+
+    const statsCalls = vi
+      .mocked(apiClient.get)
+      .mock.calls.filter(([path]) => path === '/students/stats')
+      .map(([, config]) => (config as { params: Record<string, unknown> }).params);
+    for (const params of statsCalls) {
+      expect(params).not.toHaveProperty('ageUnder');
+      expect(params).not.toHaveProperty('page');
+    }
   });
 
   it('offers "under 11", which replaces an exact age rather than adding to it', async () => {

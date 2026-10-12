@@ -37,6 +37,7 @@ import {
   useMyHomerooms,
   type MonthlyReport as MonthlyReportData,
 } from '../api';
+import { ReportEntryForm } from './ReportEntryForm';
 
 /** The calendar months a term touches, in order — ກັນຍາ … ມັງກອນ crosses the year. */
 export function termMonths(startDate: string, endDate: string): number[] {
@@ -174,7 +175,13 @@ export function MonthlyReport() {
       ) : report.error ? (
         <ErrorState error={report.error} onRetry={() => report.refetch()} />
       ) : report.data ? (
-        <ReportPreview data={report.data} />
+        <>
+          <ReportEntryForm
+            key={`${report.data.classroom.id}-${report.data.month}`}
+            data={report.data}
+          />
+          <ReportPreview data={report.data} />
+        </>
       ) : null}
     </div>
   );
@@ -269,9 +276,11 @@ function ReportPreview({ data }: { data: MonthlyReportData }) {
           />
         </Section>
 
-        <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-          {t('homeroomReview.report.toFill')}
-        </p>
+        {data.isSnapshot && (
+          <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+            {t('homeroomReview.report.snapshotNote')}
+          </p>
+        )}
       </CardContent>
     </Card>
   );
