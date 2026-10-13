@@ -37,7 +37,7 @@ import {
  * question asked at the door with the stack in hand.
  */
 
-const MAX_SETS = 8;
+const MAX_SETS = 25;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
