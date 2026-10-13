@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   Clock,
   Hourglass,
   Plus,
@@ -15,8 +16,10 @@ import { notify } from '@/lib/toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -49,14 +52,42 @@ interface ExtraClassRow {
   teacherName: string;
 }
 
+/**
+ * One contact as the teacher writes it: several children can share a date and
+ * what was said. The API stores a row per child, so a row fans out on save and
+ * consecutive saved rows with the same date and content fold back on load.
+ */
 interface ContactRow {
-  studentId: string;
+  studentIds: string[];
+  allStudents: boolean;
   date: string;
   content: string;
 }
 
-/** The contact picker's "every guardian in the room" choice. */
-const ALL_STUDENTS = '__all__';
+function groupContacts(rows: MonthlyReport['entry']['guardianContacts']): ContactRow[] {
+  const grouped: ContactRow[] = [];
+  for (const row of rows ?? []) {
+    const last = grouped[grouped.length - 1];
+    if (
+      !row.allStudents &&
+      row.studentId &&
+      last &&
+      !last.allStudents &&
+      last.date === row.date &&
+      last.content === row.content
+    ) {
+      last.studentIds.push(row.studentId);
+      continue;
+    }
+    grouped.push({
+      studentIds: row.allStudents || !row.studentId ? [] : [row.studentId],
+      allStudents: row.allStudents,
+      date: row.date,
+      content: row.content,
+    });
+  }
+  return grouped;
+}
 
 /** Stands in the picker for a typed name that has no id behind it. */
 const TYPED = '__typed__';
@@ -148,12 +179,8 @@ export function ReportEntryForm({ data }: { data: MonthlyReport }) {
       teacherName: row.teacherName ?? '',
     })),
   );
-  const [contacts, setContacts] = useState<ContactRow[]>(
-    (data.entry.guardianContacts ?? []).map((row) => ({
-      studentId: row.allStudents ? ALL_STUDENTS : (row.studentId ?? ''),
-      date: row.date,
-      content: row.content,
-    })),
+  const [contacts, setContacts] = useState<ContactRow[]>(() =>
+    groupContacts(data.entry.guardianContacts),
   );
 
   // The pickers hand back only an id; remember every label they have shown so a
@@ -184,11 +211,14 @@ export function ReportEntryForm({ data }: { data: MonthlyReport }) {
       (row) => row.studentId || hasSubject(row) || row.teacherId || row.teacherName.trim(),
     );
     const usedActivities = activities.filter((row) => row.studentId || row.detail.trim());
-    const usedContacts = contacts.filter((row) => row.studentId || row.date || row.content.trim());
+    const hasStudents = (row: ContactRow) => row.allStudents || row.studentIds.length > 0;
+    const usedContacts = contacts.filter(
+      (row) => hasStudents(row) || row.date || row.content.trim(),
+    );
     if (
       usedClasses.some((row) => !row.studentId || !hasSubject(row)) ||
       usedActivities.some((row) => !row.studentId || !row.detail.trim()) ||
-      usedContacts.some((row) => !row.studentId || !row.date || !row.content.trim())
+      usedContacts.some((row) => !hasStudents(row) || !row.date || !row.content.trim())
     ) {
       notify.warning(t('homeroomReview.report.incompleteRow'));
       return;
@@ -215,13 +245,12 @@ export function ReportEntryForm({ data }: { data: MonthlyReport }) {
           detail: row.detail.trim(),
           ...(row.date ? { date: row.date } : {}),
         })),
-        guardianContacts: usedContacts.map((row) => ({
-          ...(row.studentId === ALL_STUDENTS
-            ? { allStudents: true }
-            : { studentId: row.studentId }),
-          date: row.date,
-          content: row.content.trim(),
-        })),
+        guardianContacts: usedContacts.flatMap((row) =>
+          (row.allStudents
+            ? [{ allStudents: true as const }]
+            : row.studentIds.map((studentId) => ({ studentId }))
+          ).map((who) => ({ ...who, date: row.date, content: row.content.trim() })),
+        ),
       });
       notify.success(t(submit ? 'homeroomReview.report.submitted' : 'homeroomReview.report.saved'));
     } catch {
@@ -229,21 +258,12 @@ export function ReportEntryForm({ data }: { data: MonthlyReport }) {
     }
   };
 
-  /** `withAll` offers the whole class first — a notice that went to every guardian. */
-  const studentPicker = (
-    value: string,
-    onChange: (value: string) => void,
-    id: string,
-    withAll = false,
-  ) => (
+  const studentPicker = (value: string, onChange: (value: string) => void, id: string) => (
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger id={id} className="min-w-48" aria-label={t('homeroomReview.report.name')}>
         <SelectValue placeholder={t('homeroomReview.report.pickStudent')} />
       </SelectTrigger>
       <SelectContent>
-        {withAll && (
-          <SelectItem value={ALL_STUDENTS}>{t('homeroomReview.report.allStudents')}</SelectItem>
-        )}
         {data.roster.map((student) => (
           <SelectItem key={student.studentId} value={student.studentId}>
             {student.studentNameLo}
@@ -252,6 +272,75 @@ export function ReportEntryForm({ data }: { data: MonthlyReport }) {
       </SelectContent>
     </Select>
   );
+
+  /**
+   * A tick per child, so one contact can name several of them; "all students"
+   * on top stands for a notice that went to every guardian in the room.
+   */
+  const contactPicker = (row: ContactRow, index: number) => {
+    const update = (patch: Partial<ContactRow>) =>
+      setContacts((rows) => rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+    const names = data.roster
+      .filter((student) => row.studentIds.includes(student.studentId))
+      .map((student) => student.studentNameLo);
+    const summary = row.allStudents
+      ? t('homeroomReview.report.allStudents')
+      : names.length === 0
+        ? t('homeroomReview.report.pickStudents')
+        : names.length <= 2
+          ? names.join(', ')
+          : t('homeroomReview.report.studentsPicked', { count: names.length });
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className="min-w-48 justify-between font-normal"
+            aria-label={t('homeroomReview.report.name')}
+            title={names.join(', ') || undefined}
+          >
+            <span className={names.length || row.allStudents ? '' : 'text-muted-foreground'}>
+              {summary}
+            </span>
+            <ChevronDown className="opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-72 p-0">
+          <div className="max-h-80 overflow-y-auto p-2">
+            <label className="flex cursor-pointer items-center gap-2 rounded-sm border-b px-2 py-1.5 text-sm font-medium hover:bg-accent">
+              <Checkbox
+                checked={row.allStudents}
+                onCheckedChange={(checked) =>
+                  update({ allStudents: checked === true, studentIds: [] })
+                }
+              />
+              {t('homeroomReview.report.allStudents')}
+            </label>
+            {data.roster.map((student) => (
+              <label
+                key={student.studentId}
+                className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+              >
+                <Checkbox
+                  checked={row.studentIds.includes(student.studentId)}
+                  onCheckedChange={(checked) =>
+                    update({
+                      allStudents: false,
+                      studentIds:
+                        checked === true
+                          ? [...row.studentIds, student.studentId]
+                          : row.studentIds.filter((id) => id !== student.studentId),
+                    })
+                  }
+                />
+                {student.studentNameLo}
+              </label>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  };
 
   return (
     <Card>
@@ -402,15 +491,7 @@ export function ReportEntryForm({ data }: { data: MonthlyReport }) {
           <p className="text-sm text-muted-foreground">{t('homeroomReview.report.contactsHint')}</p>
           {contacts.map((row, index) => (
             <div key={index} className="flex flex-wrap items-center gap-2">
-              {studentPicker(
-                row.studentId,
-                (value) =>
-                  setContacts((rows) =>
-                    rows.map((r, i) => (i === index ? { ...r, studentId: value } : r)),
-                  ),
-                `contact-student-${index}`,
-                true,
-              )}
+              {contactPicker(row, index)}
               <Input
                 type="date"
                 className="w-40"
@@ -447,7 +528,10 @@ export function ReportEntryForm({ data }: { data: MonthlyReport }) {
             variant="outline"
             size="sm"
             onClick={() =>
-              setContacts((rows) => [...rows, { studentId: '', date: '', content: '' }])
+              setContacts((rows) => [
+                ...rows,
+                { studentIds: [], allStudents: false, date: '', content: '' },
+              ])
             }
           >
             <Plus />

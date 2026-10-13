@@ -877,6 +877,8 @@ export const en: typeof lo = {
       suggestions: 'IV. Suggestions',
       allStudents: 'All students',
       pickStudent: 'Choose a student',
+      pickStudents: 'Choose students',
+      studentsPicked: '{{count}} students',
       subject: 'Subject',
       tutor: 'Taught by',
       detail: 'Details',

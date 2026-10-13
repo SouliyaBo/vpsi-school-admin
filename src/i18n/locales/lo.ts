@@ -862,6 +862,8 @@ export const lo = {
       suggestions: 'IV. ຂໍ້ສະເໜີ',
       allStudents: 'ນັກຮຽນທັງໝົດ',
       pickStudent: 'ເລືອກນັກຮຽນ',
+      pickStudents: 'ເລືອກນັກຮຽນ (ໄດ້ຫຼາຍຄົນ)',
+      studentsPicked: 'ນັກຮຽນ {{count}} ຄົນ',
       subject: 'ວິຊາທີ່ຮຽນ',
       tutor: 'ອາຈານທີ່ສອນ',
       detail: 'ລາຍລະອຽດ',

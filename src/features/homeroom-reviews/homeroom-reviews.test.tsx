@@ -669,9 +669,10 @@ describe('the monthly report', () => {
 
     const addButtons = screen.getAllByRole('button', { name: /add row/i });
     await userEvent.click(addButtons[2]);
-    const pickers = screen.getAllByRole('combobox', { name: 'Student' });
+    const pickers = screen.getAllByRole('button', { name: 'Student' });
     await userEvent.click(pickers[pickers.length - 1]);
-    await userEvent.click(await screen.findByRole('option', { name: 'ທ້າວ ແດນມີ' }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'ທ້າວ ແດນມີ' }));
+    await userEvent.keyboard('{Escape}');
     const dates = screen.getAllByLabelText('Date of contact');
     await userEvent.type(dates[dates.length - 1], '2026-10-22');
     const contents = screen.getAllByLabelText('What was discussed');
@@ -699,8 +700,9 @@ describe('the monthly report', () => {
 
     await screen.findByText('Written by the homeroom teacher');
     await userEvent.click(screen.getAllByRole('button', { name: /add row/i })[2]);
-    await userEvent.click(screen.getByRole('combobox', { name: 'Student' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'All students' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Student' }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'All students' }));
+    await userEvent.keyboard('{Escape}');
     await userEvent.type(screen.getByLabelText('Date of contact'), '2026-10-21');
     await userEvent.type(screen.getByLabelText('What was discussed'), 'ເຊີນປະຊຸມຜູ້ປົກຄອງ');
     await userEvent.click(screen.getByRole('button', { name: /save draft/i }));
@@ -711,6 +713,48 @@ describe('the monthly report', () => {
         expect.objectContaining({
           guardianContacts: [
             { allStudents: true, date: '2026-10-21', content: 'ເຊີນປະຊຸມຜູ້ປົກຄອງ' },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it('records one contact for several ticked students, as a row each', async () => {
+    permits = (resource, action) => !(resource === 'homeroom-reviews' && action === 'manage');
+    stubReads({
+      '/homeroom-reviews/monthly-report': {
+        ...monthlyReport,
+        roster: [
+          ...monthlyReport.roster,
+          { studentId: 'stu-2', studentCode: '0802', studentNameLo: 'ນາງ ມາລີ' },
+          { studentId: 'stu-3', studentCode: '0803', studentNameLo: 'ທ້າວ ສົມໃຈ' },
+        ],
+      },
+    });
+    const put = vi.spyOn(apiClient, 'put').mockResolvedValue(monthlyReport as never);
+    renderWithProviders(<MonthlyReport />);
+
+    await screen.findByText('Written by the homeroom teacher');
+    await userEvent.click(screen.getAllByRole('button', { name: /add row/i })[2]);
+    await userEvent.click(screen.getByRole('button', { name: 'Student' }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'ທ້າວ ແດນມີ' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'ນາງ ມາລີ' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'ທ້າວ ສົມໃຈ' }));
+    await userEvent.keyboard('{Escape}');
+    expect(screen.getByRole('button', { name: 'Student' })).toHaveTextContent('3 students');
+    await userEvent.type(screen.getByLabelText('Date of contact'), '2026-10-21');
+    await userEvent.type(screen.getByLabelText('What was discussed'), 'ໂທແຈ້ງການຂາດ');
+    await userEvent.click(screen.getByRole('button', { name: /save draft/i }));
+
+    const row = { date: '2026-10-21', content: 'ໂທແຈ້ງການຂາດ' };
+    await waitFor(() =>
+      expect(put).toHaveBeenCalledWith(
+        '/homeroom-reviews/monthly-report',
+        expect.objectContaining({
+          guardianContacts: [
+            { studentId: 'stu-1', ...row },
+            { studentId: 'stu-2', ...row },
+            { studentId: 'stu-3', ...row },
           ],
         }),
       ),
