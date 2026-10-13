@@ -191,6 +191,19 @@ function ReportPreview({ data }: { data: MonthlyReportData }) {
   const { t } = useTranslation();
   const name = (row: { studentNameLo: string; studentCode: string | null }) =>
     row.studentCode ? `${row.studentNameLo} (${row.studentCode})` : row.studentNameLo;
+  // The reviews' contacts and the ones the teacher added below, as the Word file prints them.
+  const guardianContacts = [
+    ...data.guardianContacts,
+    ...(data.entry.guardianContacts ?? []).map((row) => ({
+      ...row,
+      studentNameLo: row.allStudents
+        ? t('homeroomReview.report.allStudents')
+        : (row.studentNameLo ?? ''),
+      studentCode: row.allStudents
+        ? null
+        : (data.roster.find((student) => student.studentId === row.studentId)?.studentCode ?? null),
+    })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
   const targets = [...new Set(data.tests.subjects.map((s) => `${s.target}/${s.testMax}`))].join(
     ', ',
   );
@@ -268,11 +281,7 @@ function ReportPreview({ data }: { data: MonthlyReportData }) {
         <Section title={t('homeroomReview.report.guardianTitle')}>
           <ReportTable
             headers={[t('homeroomReview.report.date'), t('homeroomReview.report.content')]}
-            rows={data.guardianContacts.map((row) => [
-              name(row),
-              formatDate(row.date),
-              row.content,
-            ])}
+            rows={guardianContacts.map((row) => [name(row), formatDate(row.date), row.content])}
           />
         </Section>
 

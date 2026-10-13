@@ -300,13 +300,15 @@ interface ReportNamed {
  *
  * Read-only: every row is derived from the roll call, the register, the
  * discipline ledger, the reviews and the monthly marks. What the system does not
- * hold — ສະພາບລວມ, extra classes, outside activities, ຂໍ້ສະເໜີ — is written in
- * the Word export, which leaves blank rows for it.
+ * hold — ສະພາບລວມ, extra classes, outside activities, contacts made outside a
+ * review, ຂໍ້ສະເໜີ — the teacher writes in `entry`.
  */
 export interface MonthlyReport {
   classroom: {
     id: string;
     name: string;
+    /** Narrows the extra-class subject picker to the room's grade. */
+    gradeLevelId?: string | null;
     gradeLevelCode: string | null;
     teacherName: string | null;
   };
@@ -353,7 +355,10 @@ export interface MonthlyReportEntry {
   extraClasses: {
     studentId: string;
     studentNameLo: string | null;
+    /** `null` on a row typed before the subject picker; `subject` is then the typed text. */
+    subjectId: string | null;
     subject: string;
+    teacherId: string | null;
     teacherName: string | null;
   }[];
   outsideActivities: {
@@ -361,6 +366,15 @@ export interface MonthlyReportEntry {
     studentNameLo: string | null;
     date: string | null;
     detail: string;
+  }[];
+  /** III. contacts the teacher added by hand — the reviews' own are `guardianContacts`. */
+  guardianContacts: {
+    /** `null` for a contact to every guardian in the room. */
+    studentId: string | null;
+    allStudents: boolean;
+    studentNameLo: string | null;
+    date: string;
+    content: string;
   }[];
   suggestions: string | null;
 }
@@ -382,8 +396,17 @@ export interface MonthlyReportSubmission {
 
 export type SaveMonthlyReportPayload = MonthlyReportParams & {
   overview?: string;
-  extraClasses: { studentId: string; subject: string; teacherName?: string }[];
+  /** `subjectId`/`teacherId` from the pickers; `subject`/`teacherName` only for an old typed row. */
+  extraClasses: {
+    studentId: string;
+    subjectId?: string;
+    subject?: string;
+    teacherId?: string;
+    teacherName?: string;
+  }[];
   outsideActivities: { studentId: string; date?: string; detail: string }[];
+  /** `allStudents` in place of `studentId` for a contact to every guardian in the room. */
+  guardianContacts: { studentId?: string; allStudents?: true; date: string; content: string }[];
   suggestions?: string;
 };
 

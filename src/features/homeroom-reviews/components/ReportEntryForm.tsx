@@ -8,7 +8,7 @@ import {
   Send,
   Trash2,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatDate, formatDateTime } from '@/lib/utils';
 import { notify } from '@/lib/toast';
@@ -25,6 +25,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { EntitySelect } from '@/components/common/EntitySelect';
+import { useSubjectOptions } from '@/features/subjects/api';
+import { useTeacherOptions } from '@/features/teachers/api';
 import {
   useSaveMonthlyReport,
   type MonthlyReport,
@@ -32,11 +35,31 @@ import {
   type MonthlyReportSubmission,
 } from '../api';
 
+/**
+ * A picked subject and teacher, by id. `subject`/`teacherName` hold the stored
+ * name: for a picked row it labels the picker before its options load; for a
+ * row typed before the pickers existed it is the only value, and is sent back
+ * as typed until the teacher picks something in its place.
+ */
 interface ExtraClassRow {
   studentId: string;
+  subjectId: string;
   subject: string;
+  teacherId: string;
   teacherName: string;
 }
+
+interface ContactRow {
+  studentId: string;
+  date: string;
+  content: string;
+}
+
+/** The contact picker's "every guardian in the room" choice. */
+const ALL_STUDENTS = '__all__';
+
+/** Stands in the picker for a typed name that has no id behind it. */
+const TYPED = '__typed__';
 
 interface ActivityRow {
   studentId: string;
@@ -104,8 +127,9 @@ export function SubmissionBar({ submission }: { submission: MonthlyReportSubmiss
 }
 
 /**
- * The four sections nobody else records — ສະພາບລວມ, ນັກຮຽນທີ່ຮຽນເພີ່ມ,
- * ການເຄື່ອນໄຫວພາຍນອກ and ຂໍ້ສະເໜີ — and the two buttons: keep a draft, or send.
+ * The sections nobody else records — ສະພາບລວມ, ນັກຮຽນທີ່ຮຽນເພີ່ມ,
+ * ການເຄື່ອນໄຫວພາຍນອກ, guardian contacts made outside a review, and ຂໍ້ສະເໜີ —
+ * and the two buttons: keep a draft, or send.
  *
  * Held in local state and sent whole; the parent remounts this per room and
  * month (`key`), so switching month never carries one month's text into another.
@@ -118,10 +142,30 @@ export function ReportEntryForm({ data }: { data: MonthlyReport }) {
   const [extraClasses, setExtraClasses] = useState<ExtraClassRow[]>(
     data.entry.extraClasses.map((row) => ({
       studentId: row.studentId,
+      subjectId: row.subjectId ?? '',
       subject: row.subject,
+      teacherId: row.teacherId ?? '',
       teacherName: row.teacherName ?? '',
     })),
   );
+  const [contacts, setContacts] = useState<ContactRow[]>(
+    (data.entry.guardianContacts ?? []).map((row) => ({
+      studentId: row.allStudents ? ALL_STUDENTS : (row.studentId ?? ''),
+      date: row.date,
+      content: row.content,
+    })),
+  );
+
+  // The pickers hand back only an id; remember every label they have shown so a
+  // pick still reads by name once the search that found it is cleared.
+  const labels = useRef(new Map<string, string>());
+  const remember = <T extends { data?: { value: string; label: string }[] }>(result: T) => {
+    result.data?.forEach((option) => labels.current.set(option.value, option.label));
+    return result;
+  };
+  const gradeLevelId = data.classroom.gradeLevelId ?? undefined;
+  const useGradeSubjects = (search: string) => remember(useSubjectOptions(search, gradeLevelId));
+  const useStaff = (search: string) => remember(useTeacherOptions(search));
   const [activities, setActivities] = useState<ActivityRow[]>(
     data.entry.outsideActivities.map((row) => ({
       studentId: row.studentId,
@@ -135,11 +179,16 @@ export function ReportEntryForm({ data }: { data: MonthlyReport }) {
   const send = async (submit: boolean) => {
     // A row with nothing in it is a row the teacher added and did not use; one
     // with text but no child cannot be filed against anybody.
-    const usedClasses = extraClasses.filter((row) => row.studentId || row.subject.trim());
+    const hasSubject = (row: ExtraClassRow) => Boolean(row.subjectId || row.subject.trim());
+    const usedClasses = extraClasses.filter(
+      (row) => row.studentId || hasSubject(row) || row.teacherId || row.teacherName.trim(),
+    );
     const usedActivities = activities.filter((row) => row.studentId || row.detail.trim());
+    const usedContacts = contacts.filter((row) => row.studentId || row.date || row.content.trim());
     if (
-      usedClasses.some((row) => !row.studentId || !row.subject.trim()) ||
-      usedActivities.some((row) => !row.studentId || !row.detail.trim())
+      usedClasses.some((row) => !row.studentId || !hasSubject(row)) ||
+      usedActivities.some((row) => !row.studentId || !row.detail.trim()) ||
+      usedContacts.some((row) => !row.studentId || !row.date || !row.content.trim())
     ) {
       notify.warning(t('homeroomReview.report.incompleteRow'));
       return;
@@ -154,13 +203,24 @@ export function ReportEntryForm({ data }: { data: MonthlyReport }) {
         suggestions: suggestions.trim() || undefined,
         extraClasses: usedClasses.map((row) => ({
           studentId: row.studentId,
-          subject: row.subject.trim(),
-          ...(row.teacherName.trim() ? { teacherName: row.teacherName.trim() } : {}),
+          ...(row.subjectId ? { subjectId: row.subjectId } : { subject: row.subject.trim() }),
+          ...(row.teacherId
+            ? { teacherId: row.teacherId }
+            : row.teacherName.trim()
+              ? { teacherName: row.teacherName.trim() }
+              : {}),
         })),
         outsideActivities: usedActivities.map((row) => ({
           studentId: row.studentId,
           detail: row.detail.trim(),
           ...(row.date ? { date: row.date } : {}),
+        })),
+        guardianContacts: usedContacts.map((row) => ({
+          ...(row.studentId === ALL_STUDENTS
+            ? { allStudents: true }
+            : { studentId: row.studentId }),
+          date: row.date,
+          content: row.content.trim(),
         })),
       });
       notify.success(t(submit ? 'homeroomReview.report.submitted' : 'homeroomReview.report.saved'));
@@ -169,12 +229,21 @@ export function ReportEntryForm({ data }: { data: MonthlyReport }) {
     }
   };
 
-  const studentPicker = (value: string, onChange: (value: string) => void, id: string) => (
+  /** `withAll` offers the whole class first — a notice that went to every guardian. */
+  const studentPicker = (
+    value: string,
+    onChange: (value: string) => void,
+    id: string,
+    withAll = false,
+  ) => (
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger id={id} className="min-w-48" aria-label={t('homeroomReview.report.name')}>
         <SelectValue placeholder={t('homeroomReview.report.pickStudent')} />
       </SelectTrigger>
       <SelectContent>
+        {withAll && (
+          <SelectItem value={ALL_STUDENTS}>{t('homeroomReview.report.allStudents')}</SelectItem>
+        )}
         {data.roster.map((student) => (
           <SelectItem key={student.studentId} value={student.studentId}>
             {student.studentNameLo}
@@ -213,26 +282,36 @@ export function ReportEntryForm({ data }: { data: MonthlyReport }) {
                   ),
                 `extra-student-${index}`,
               )}
-              <Input
-                className="w-48"
-                aria-label={t('homeroomReview.report.subject')}
+              <EntitySelect
+                className="w-64"
+                label={t('homeroomReview.report.subject')}
                 placeholder={t('homeroomReview.report.subject')}
-                value={row.subject}
-                onChange={(event) =>
+                useOptions={useGradeSubjects}
+                value={row.subjectId || (row.subject ? TYPED : null)}
+                selectedLabel={
+                  (row.subjectId && labels.current.get(row.subjectId)) || row.subject || null
+                }
+                onChange={(value) =>
                   setExtraClasses((rows) =>
-                    rows.map((r, i) => (i === index ? { ...r, subject: event.target.value } : r)),
+                    rows.map((r, i) =>
+                      i === index ? { ...r, subjectId: value ?? '', subject: '' } : r,
+                    ),
                   )
                 }
               />
-              <Input
-                className="w-48"
-                aria-label={t('homeroomReview.report.tutor')}
+              <EntitySelect
+                className="w-64"
+                label={t('homeroomReview.report.tutor')}
                 placeholder={t('homeroomReview.report.tutor')}
-                value={row.teacherName}
-                onChange={(event) =>
+                useOptions={useStaff}
+                value={row.teacherId || (row.teacherName ? TYPED : null)}
+                selectedLabel={
+                  (row.teacherId && labels.current.get(row.teacherId)) || row.teacherName || null
+                }
+                onChange={(value) =>
                   setExtraClasses((rows) =>
                     rows.map((r, i) =>
-                      i === index ? { ...r, teacherName: event.target.value } : r,
+                      i === index ? { ...r, teacherId: value ?? '', teacherName: '' } : r,
                     ),
                   )
                 }
@@ -251,7 +330,10 @@ export function ReportEntryForm({ data }: { data: MonthlyReport }) {
             variant="outline"
             size="sm"
             onClick={() =>
-              setExtraClasses((rows) => [...rows, { studentId: '', subject: '', teacherName: '' }])
+              setExtraClasses((rows) => [
+                ...rows,
+                { studentId: '', subjectId: '', subject: '', teacherId: '', teacherName: '' },
+              ])
             }
           >
             <Plus />
@@ -308,6 +390,64 @@ export function ReportEntryForm({ data }: { data: MonthlyReport }) {
             size="sm"
             onClick={() =>
               setActivities((rows) => [...rows, { studentId: '', date: '', detail: '' }])
+            }
+          >
+            <Plus />
+            {t('homeroomReview.report.addRow')}
+          </Button>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-sm font-medium">{t('homeroomReview.report.contacts')}</p>
+          <p className="text-sm text-muted-foreground">{t('homeroomReview.report.contactsHint')}</p>
+          {contacts.map((row, index) => (
+            <div key={index} className="flex flex-wrap items-center gap-2">
+              {studentPicker(
+                row.studentId,
+                (value) =>
+                  setContacts((rows) =>
+                    rows.map((r, i) => (i === index ? { ...r, studentId: value } : r)),
+                  ),
+                `contact-student-${index}`,
+                true,
+              )}
+              <Input
+                type="date"
+                className="w-40"
+                aria-label={t('homeroomReview.report.contactDate')}
+                value={row.date}
+                onChange={(event) =>
+                  setContacts((rows) =>
+                    rows.map((r, i) => (i === index ? { ...r, date: event.target.value } : r)),
+                  )
+                }
+              />
+              <Input
+                className="min-w-64 flex-1"
+                aria-label={t('homeroomReview.report.content')}
+                placeholder={t('homeroomReview.report.content')}
+                value={row.content}
+                onChange={(event) =>
+                  setContacts((rows) =>
+                    rows.map((r, i) => (i === index ? { ...r, content: event.target.value } : r)),
+                  )
+                }
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={t('common.delete')}
+                onClick={() => setContacts((rows) => rows.filter((_, i) => i !== index))}
+              >
+                <Trash2 />
+              </Button>
+            </div>
+          ))}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setContacts((rows) => [...rows, { studentId: '', date: '', content: '' }])
             }
           >
             <Plus />

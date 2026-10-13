@@ -298,7 +298,13 @@ const monthlyReport = {
   },
   guardianContacts: [],
   year: 2026,
-  entry: { overview: null, extraClasses: [], outsideActivities: [], suggestions: null },
+  entry: {
+    overview: null,
+    extraClasses: [],
+    outsideActivities: [],
+    guardianContacts: [],
+    suggestions: null,
+  },
   submission: {
     status: 'pending' as const,
     dueDate: '2026-11-05',
@@ -327,6 +333,18 @@ function stubReads(overrides: Record<string, unknown> = {}): void {
     if (url === '/homeroom-reviews/compliance') return compliance as never;
     if (url === '/homeroom-reviews/monthly-report') return monthlyReport as never;
     if (url === '/homeroom-reviews/monthly-report/compliance') return reportCompliance as never;
+    if (url === '/subjects') {
+      return {
+        data: [{ id: 'sub-en', code: 'ENG1', nameLo: 'ພາສາອັງກິດ', nameEn: 'English' }],
+        meta: { total: 1, page: 1, limit: 100, totalPages: 1 },
+      } as never;
+    }
+    if (url === '/teachers') {
+      return {
+        data: [{ id: 'tch-1', teacherCode: 'T001', firstNameLo: 'ສົມພອນ', lastNameLo: 'ແກ້ວ' }],
+        meta: { total: 1, page: 1, limit: 25, totalPages: 1 },
+      } as never;
+    }
     if (url === '/semesters/active') {
       return {
         id: 'sem-1',
@@ -559,7 +577,7 @@ describe('the monthly report', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('sends the report, with an extra class against a child on the roll', async () => {
+  it('sends the report, with an extra class picked from the subject and staff lists', async () => {
     permits = (resource, action) => !(resource === 'homeroom-reviews' && action === 'manage');
     stubReads();
     const post = vi.spyOn(apiClient, 'post').mockResolvedValue(monthlyReport as never);
@@ -570,17 +588,147 @@ describe('the monthly report', () => {
     await userEvent.click(addButtons[0]);
     await userEvent.click(screen.getByRole('combobox', { name: 'Student' }));
     await userEvent.click(await screen.findByRole('option', { name: 'ທ້າວ ແດນມີ' }));
-    await userEvent.type(screen.getByLabelText('Subject'), 'ພາສາອັງກິດ');
+    await userEvent.click(screen.getByRole('combobox', { name: 'Subject' }));
+    await userEvent.click(await screen.findByRole('button', { name: /ENG1/ }));
+    await userEvent.click(screen.getByRole('combobox', { name: 'Taught by' }));
+    await userEvent.click(await screen.findByRole('button', { name: /T001/ }));
+    expect(screen.getByRole('combobox', { name: 'Subject' })).toHaveTextContent('ENG1');
     await userEvent.click(screen.getByRole('button', { name: /send report/i }));
 
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith(
         '/homeroom-reviews/monthly-report/submit',
         expect.objectContaining({
-          extraClasses: [{ studentId: 'stu-1', subject: 'ພາສາອັງກິດ' }],
+          extraClasses: [{ studentId: 'stu-1', subjectId: 'sub-en', teacherId: 'tch-1' }],
         }),
       ),
     );
+  });
+
+  it('keeps an extra class typed before the pickers as it was written', async () => {
+    permits = (resource, action) => !(resource === 'homeroom-reviews' && action === 'manage');
+    stubReads({
+      '/homeroom-reviews/monthly-report': {
+        ...monthlyReport,
+        entry: {
+          ...monthlyReport.entry,
+          extraClasses: [
+            {
+              studentId: 'stu-1',
+              studentNameLo: 'ທ້າວ ແດນມີ',
+              subjectId: null,
+              subject: 'ກີຕ້າ',
+              teacherId: null,
+              teacherName: 'ອຈ ນອກ',
+            },
+          ],
+        },
+      },
+    });
+    const put = vi.spyOn(apiClient, 'put').mockResolvedValue(monthlyReport as never);
+    renderWithProviders(<MonthlyReport />);
+
+    expect(await screen.findByRole('combobox', { name: 'Subject' })).toHaveTextContent('ກີຕ້າ');
+    await userEvent.click(screen.getByRole('button', { name: /save draft/i }));
+
+    await waitFor(() =>
+      expect(put).toHaveBeenCalledWith(
+        '/homeroom-reviews/monthly-report',
+        expect.objectContaining({
+          extraClasses: [{ studentId: 'stu-1', subject: 'ກີຕ້າ', teacherName: 'ອຈ ນອກ' }],
+        }),
+      ),
+    );
+  });
+
+  it('records a guardian contact by hand, and prints it with the reviews’ contacts', async () => {
+    permits = (resource, action) => !(resource === 'homeroom-reviews' && action === 'manage');
+    stubReads({
+      '/homeroom-reviews/monthly-report': {
+        ...monthlyReport,
+        entry: {
+          ...monthlyReport.entry,
+          guardianContacts: [
+            {
+              studentId: 'stu-1',
+              allStudents: false,
+              studentNameLo: 'ທ້າວ ແດນມີ',
+              date: '2026-10-20',
+              content: 'ພົບປະເລື່ອງການບ້ານ',
+            },
+          ],
+        },
+      },
+    });
+    const put = vi.spyOn(apiClient, 'put').mockResolvedValue(monthlyReport as never);
+    renderWithProviders(<MonthlyReport />);
+
+    // The saved row is in the form, and in the report below it.
+    expect(await screen.findByDisplayValue('ພົບປະເລື່ອງການບ້ານ')).toBeInTheDocument();
+    expect(screen.getByText('ພົບປະເລື່ອງການບ້ານ')).toBeInTheDocument();
+
+    const addButtons = screen.getAllByRole('button', { name: /add row/i });
+    await userEvent.click(addButtons[2]);
+    const pickers = screen.getAllByRole('combobox', { name: 'Student' });
+    await userEvent.click(pickers[pickers.length - 1]);
+    await userEvent.click(await screen.findByRole('option', { name: 'ທ້າວ ແດນມີ' }));
+    const dates = screen.getAllByLabelText('Date of contact');
+    await userEvent.type(dates[dates.length - 1], '2026-10-22');
+    const contents = screen.getAllByLabelText('What was discussed');
+    await userEvent.type(contents[contents.length - 1], 'ໂທແຈ້ງການຂາດ');
+    await userEvent.click(screen.getByRole('button', { name: /save draft/i }));
+
+    await waitFor(() =>
+      expect(put).toHaveBeenCalledWith(
+        '/homeroom-reviews/monthly-report',
+        expect.objectContaining({
+          guardianContacts: [
+            { studentId: 'stu-1', date: '2026-10-20', content: 'ພົບປະເລື່ອງການບ້ານ' },
+            { studentId: 'stu-1', date: '2026-10-22', content: 'ໂທແຈ້ງການຂາດ' },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it('records one contact for every guardian in the room', async () => {
+    permits = (resource, action) => !(resource === 'homeroom-reviews' && action === 'manage');
+    stubReads();
+    const put = vi.spyOn(apiClient, 'put').mockResolvedValue(monthlyReport as never);
+    renderWithProviders(<MonthlyReport />);
+
+    await screen.findByText('Written by the homeroom teacher');
+    await userEvent.click(screen.getAllByRole('button', { name: /add row/i })[2]);
+    await userEvent.click(screen.getByRole('combobox', { name: 'Student' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'All students' }));
+    await userEvent.type(screen.getByLabelText('Date of contact'), '2026-10-21');
+    await userEvent.type(screen.getByLabelText('What was discussed'), 'ເຊີນປະຊຸມຜູ້ປົກຄອງ');
+    await userEvent.click(screen.getByRole('button', { name: /save draft/i }));
+
+    await waitFor(() =>
+      expect(put).toHaveBeenCalledWith(
+        '/homeroom-reviews/monthly-report',
+        expect.objectContaining({
+          guardianContacts: [
+            { allStudents: true, date: '2026-10-21', content: 'ເຊີນປະຊຸມຜູ້ປົກຄອງ' },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it('refuses a hand-added contact with no date', async () => {
+    permits = (resource, action) => !(resource === 'homeroom-reviews' && action === 'manage');
+    stubReads();
+    const put = vi.spyOn(apiClient, 'put');
+    renderWithProviders(<MonthlyReport />);
+
+    await screen.findByText('Written by the homeroom teacher');
+    await userEvent.click(screen.getAllByRole('button', { name: /add row/i })[2]);
+    await userEvent.type(screen.getByLabelText('What was discussed'), 'ໂທແຈ້ງ');
+    await userEvent.click(screen.getByRole('button', { name: /save draft/i }));
+
+    expect(put).not.toHaveBeenCalled();
   });
 
   it('will not send before the month’s last day', async () => {
