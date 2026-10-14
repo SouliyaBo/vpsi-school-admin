@@ -27,6 +27,7 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { RowActions } from '@/components/common/RowActions';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { FilterSelect, SearchInput, TableToolbar } from '@/components/common/TableToolbar';
+import { DistrictReportDialog } from '../components/DistrictReportDialog';
 import { StudentFormDialog } from '../components/StudentFormDialog';
 import { StudentStats } from '../components/StudentStats';
 import {
@@ -292,6 +293,7 @@ export function StudentsPage() {
               englishClassLabel={englishClassLabel}
               ageLabel={ageLabel}
             />
+            <DistrictReportDialog />
             {can('students', 'create') && (
               <Button onClick={dialogs.openCreate}>
                 <Plus />

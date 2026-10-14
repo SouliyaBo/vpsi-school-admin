@@ -365,6 +365,8 @@ export interface Student extends BaseDocument {
   organizations: StudentOrganizationMembership[];
   admissionDate?: string | null;
   status: StudentStatus;
+  /** ວັນທີໂຈະການຮຽນ — set only while `status` is `suspended`. */
+  suspendedAt?: string | null;
   notes?: string | null;
   /** Present on list responses. `null` means the student has no class yet. */
   currentEnrollment?: StudentPlacement | null;

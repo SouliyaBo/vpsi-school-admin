@@ -262,6 +262,11 @@ export function StudentDetailPage() {
             <p className="text-sm text-muted-foreground">
               {t('student.admissionDate')}: {formatDate(student.admissionDate)}
             </p>
+            {student.status === 'suspended' && (
+              <p className="text-sm text-muted-foreground">
+                {t('student.suspendedAt')}: {formatDate(student.suspendedAt)}
+              </p>
+            )}
             {village && (
               <p className="text-sm text-muted-foreground">
                 {t('person.village')}: {localizedName(village, i18n.language)}

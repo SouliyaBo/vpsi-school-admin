@@ -3496,6 +3496,8 @@ export interface components {
             villageId?: string;
             addressDetail?: string;
             admissionDate?: string;
+            /** @description ວັນທີໂຈະການຮຽນ — kept only while `status` is `suspended` */
+            suspendedAt?: string;
             notes?: string;
             /**
              * @description Defaults to `active`. Send `new` for an intake not yet placed in a class.
@@ -3527,6 +3529,8 @@ export interface components {
             villageId?: string;
             addressDetail?: string;
             admissionDate?: string;
+            /** @description ວັນທີໂຈະການຮຽນ — kept only while `status` is `suspended` */
+            suspendedAt?: string;
             /** @enum {string} */
             status?: "new" | "active" | "graduated" | "no_certificate" | "transferred" | "dropped" | "suspended";
             notes?: string;

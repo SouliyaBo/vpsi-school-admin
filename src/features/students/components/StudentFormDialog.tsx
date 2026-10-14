@@ -100,6 +100,7 @@ const baseSchema = z.object({
   villageId: optionalId(),
   addressDetail: optionalText(300),
   admissionDate: optionalDate(),
+  suspendedAt: optionalDate(),
   notes: optionalText(1000),
   status: z.enum(STUDENT_STATUSES).optional(),
   /**
@@ -168,6 +169,7 @@ const EMPTY: FormValues = {
   villageId: '',
   addressDetail: '',
   admissionDate: '',
+  suspendedAt: '',
   notes: '',
   // Kept at `active` because the dashboard headcounts filter on it — defaulting
   // an intake to `new` would drop it out of every total until it is placed.
@@ -220,6 +222,7 @@ function toFormValues(student: Student, placement?: EditablePlacement | null): F
     villageId: refId(student.villageId) ?? '',
     addressDetail: student.addressDetail ?? '',
     admissionDate: toDateInput(student.admissionDate),
+    suspendedAt: toDateInput(student.suspendedAt),
     notes: student.notes ?? '',
     status: student.status,
     classroomId: '',
@@ -248,7 +251,8 @@ function toOrganizationFields(
  * a change.
  */
 function toPayload(values: FormValues) {
-  const { guardians, classroomId, englishClass, organizations, ...rest } = stripEmpty(values);
+  const { guardians, classroomId, englishClass, organizations, suspendedAt, ...rest } =
+    stripEmpty(values);
   void guardians;
   void classroomId;
   // Both placement fields: they go to `/enrollments`, never onto the student.
@@ -256,6 +260,8 @@ function toPayload(values: FormValues) {
 
   return {
     ...rest,
+    // Only a suspension has a date; the API clears it when the status moves on.
+    ...(values.status === 'suspended' && suspendedAt ? { suspendedAt } : {}),
     organizations: STUDENT_ORGANIZATIONS.filter((name) => organizations[name]).map((name) => ({
       organization: name,
       joinedDate: organizations[name] as string,
@@ -316,6 +322,7 @@ export function StudentFormDialog({ open, onOpenChange, student, placement, onCr
     resolver: zodResolver(isEditing ? baseSchema : createSchema),
     defaultValues: EMPTY,
   });
+  const status = form.watch('status');
 
   useEffect(() => {
     if (!open) return;
@@ -563,6 +570,16 @@ export function StudentFormDialog({ open, onOpenChange, student, placement, onCr
                   value: status,
                   label: t(`studentStatus.${status}`),
                 }))}
+              />
+            )}
+            {/* The date places the suspension in a school year — the district
+                report counts only this year's. */}
+            {seesEveryStudent && status === 'suspended' && (
+              <DateField
+                control={form.control}
+                name="suspendedAt"
+                label={t('student.suspendedAt')}
+                description={t('student.suspendedAtHint')}
               />
             )}
             <TextareaField

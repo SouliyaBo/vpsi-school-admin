@@ -614,6 +614,26 @@ describe('StudentsPage — editing', () => {
     expect(body).toEqual({ status: 'graduated' });
   });
 
+  it('asks when a suspension began, and sends the date with the status', async () => {
+    const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue({
+      ...student,
+      status: 'suspended',
+    });
+
+    const dialog = await openEditDialog();
+    expect(within(dialog).queryByLabelText('Suspended on')).not.toBeInTheDocument();
+
+    await userEvent.click(within(dialog).getByRole('combobox', { name: /status/i }));
+    await userEvent.click(await screen.findByRole('option', { name: /suspended/i }));
+    fireEvent.change(within(dialog).getByLabelText('Suspended on'), {
+      target: { value: '2026-09-15' },
+    });
+    await userEvent.click(within(dialog).getByRole('button', { name: /save/i }));
+
+    await waitFor(() => expect(patch).toHaveBeenCalled());
+    expect(patch.mock.calls[0]![1]).toEqual({ status: 'suspended', suspendedAt: '2026-09-15' });
+  });
+
   /**
    * A child regularly joins a class before the school can issue a real code, so
    * the office enters a stand-in and replaces it once the papers are in.
