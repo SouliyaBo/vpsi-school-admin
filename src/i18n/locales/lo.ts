@@ -1597,6 +1597,8 @@ export const lo = {
     scanUploading: 'ກຳລັງອ່ານ… {{percent}}%',
     scanUploaded: 'ອ່ານແລ້ວ {{count}} ໃບ — ກວດທານໃນລາຍການລຸ່ມນີ້',
     scanEmpty: 'ຍັງບໍ່ມີຮູບທີ່ອັບໂຫຼດ',
+    scanTally:
+      'ອັບໂຫຼດແລ້ວ {{total}} ຮູບ · ຢືນຢັນແລ້ວ {{confirmed}} · ລໍຖ້າກວດທານ {{pending}} · ອ່ານບໍ່ໄດ້ {{failed}}',
     scanPending: 'ລໍຖ້າກວດທານ',
     scanConfirmed: 'ຢືນຢັນແລ້ວ',
     scanFailed: 'ອ່ານບໍ່ໄດ້',

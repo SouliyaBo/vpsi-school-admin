@@ -182,10 +182,22 @@ export function ScanPanel({ paper, view, readOnly = false }: Props) {
         )}
 
         {scans.data && scans.data.length > 0 && (
+          <p className="text-sm font-medium">
+            {t('examPaper.scanTally', {
+              total: scans.data.length,
+              confirmed: scans.data.filter((scan) => scan.status === 'confirmed').length,
+              pending: scans.data.filter((scan) => scan.status === 'pending').length,
+              failed: scans.data.filter((scan) => scan.status === 'failed').length,
+            })}
+          </p>
+        )}
+
+        {scans.data && scans.data.length > 0 && (
           <ul className="divide-y">
-            {scans.data.map((scan) => (
+            {scans.data.map((scan, index) => (
               <ScanRow
                 key={scan.id}
+                number={index + 1}
                 scan={scan}
                 readOnly={readOnly}
                 onReview={() => setReviewing(scan.id)}
@@ -244,11 +256,13 @@ function flaggedCount(scan: ExamScan): number {
 }
 
 function ScanRow({
+  number,
   scan,
   readOnly,
   onReview,
   onDelete,
 }: {
+  number: number;
   scan: ExamScan;
   readOnly: boolean;
   onReview: () => void;
@@ -258,6 +272,9 @@ function ScanRow({
   const flagged = flaggedCount(scan);
   return (
     <li className="flex flex-wrap items-center gap-3 py-2">
+      <span className="w-6 shrink-0 text-end text-sm tabular-nums text-muted-foreground">
+        {number}
+      </span>
       {scan.imageUrl ? (
         <img src={scan.imageUrl} alt="" className="h-14 w-10 rounded border object-cover" />
       ) : (

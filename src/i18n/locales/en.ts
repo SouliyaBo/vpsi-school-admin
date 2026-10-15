@@ -1628,6 +1628,8 @@ export const en: typeof lo = {
     scanUploading: 'Reading… {{percent}}%',
     scanUploaded: '{{count}} sheets read — check them in the list below',
     scanEmpty: 'No photos uploaded yet',
+    scanTally:
+      '{{total}} photos uploaded · {{confirmed}} confirmed · {{pending}} to check · {{failed}} unreadable',
     scanPending: 'To review',
     scanConfirmed: 'Confirmed',
     scanFailed: 'Unreadable',
