@@ -8,6 +8,7 @@ import {
   THIN_BORDER,
 } from '@/lib/workbook';
 import {
+  everyone,
   MOVEMENT_ROWS,
   MOVEMENT_SIGN,
   startOfYear,
@@ -53,6 +54,10 @@ export interface DistrictReportLabels {
   allGrades: string;
   start: string;
   current: string;
+  /** ບໍ່ເອົາໃບປະກາດ */
+  noCertificate: string;
+  /** ລວມທັງໝົດ: ປະຈຸບັນ + ບໍ່ເອົາໃບປະກາດ. */
+  everyone: string;
   movements: Record<MovementRow, string>;
   printedOn: string;
   /** Left out when the month's sheets could not be read. */
@@ -63,7 +68,9 @@ export interface DistrictReportLabels {
  * The table as the office's own sheet lays it out: a grade per pair of columns,
  * ລ then ຍ, a ລວມ pair at the end, one row per movement.
  *
- * ປະຈຸບັນ and the ລວມ columns are formulas, not figures, so a number corrected
+ * Under ປະຈຸບັນ come ບໍ່ເອົາໃບປະກາດ and ລວມທັງໝົດ, the two added up.
+ *
+ * ປະຈຸບັນ, ລວມທັງໝົດ and the ລວມ columns are formulas, not figures, so a number corrected
  * in Excel carries through the way it would on the paper form. Each formula is
  * written with its result, so the file reads right before Excel recalculates.
  */
@@ -212,6 +219,42 @@ export async function buildDistrictReportWorkbook(
   };
   styleRow(
     Array.from({ length: lastColumn }, (_, column) => current.getCell(column + 1)),
+    true,
+  );
+
+  const noCertificate = worksheet.addRow([labels.noCertificate]);
+  const all = worksheet.addRow([labels.everyone]);
+  const totals = { noCertificate: { total: 0, female: 0 }, all: { total: 0, female: 0 } };
+  grades.forEach((grade, index) => {
+    const gradeFigures = figures.get(grade.gradeLevelId)!;
+    const sum = everyone(gradeFigures);
+    ([0, 1] as const).forEach((offset) => {
+      const key = offset === 0 ? 'total' : 'female';
+      const column = 2 + index * 2 + offset;
+      const letter = columnLetter(column);
+      noCertificate.getCell(column).value = gradeFigures.noCertificate[key];
+      all.getCell(column).value = {
+        formula: `${letter}${currentRowNumber}+${letter}${noCertificate.number}`,
+        result: sum[key],
+      };
+      totals.noCertificate[key] += gradeFigures.noCertificate[key];
+      totals.all[key] += sum[key];
+    });
+  });
+  ([0, 1] as const).forEach((offset) => {
+    const key = offset === 0 ? 'total' : 'female';
+    noCertificate.getCell(sumColumn + offset).value = {
+      formula: sumFormula(noCertificate.number, offset),
+      result: totals.noCertificate[key],
+    };
+    all.getCell(sumColumn + offset).value = {
+      formula: sumFormula(all.number, offset),
+      result: totals.all[key],
+    };
+  });
+  styleRow(Array.from({ length: lastColumn }, (_, column) => noCertificate.getCell(column + 1)));
+  styleRow(
+    Array.from({ length: lastColumn }, (_, column) => all.getCell(column + 1)),
     true,
   );
 

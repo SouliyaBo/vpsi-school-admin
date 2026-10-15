@@ -367,6 +367,8 @@ export interface Student extends BaseDocument {
   status: StudentStatus;
   /** ວັນທີໂຈະການຮຽນ — set only while `status` is `suspended`. */
   suspendedAt?: string | null;
+  /** What a `suspended` child was suspended from; set by the API, never posted. */
+  statusBeforeSuspension?: StudentStatus | null;
   notes?: string | null;
   /** Present on list responses. `null` means the student has no class yet. */
   currentEnrollment?: StudentPlacement | null;

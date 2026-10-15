@@ -256,7 +256,7 @@ export const en: typeof lo = {
     districtReport: {
       button: 'District report draft',
       title: 'District report draft',
-      hint: 'Current students are counted from the roll (students who declined the certificate are left out). Transferred out and dropped out come from student statuses (students suspended this school year count as dropped out) — check and correct them. The system cannot know transfers in, returns from suspension or repeaters, so enter those. Start of year is worked back from the rest.',
+      hint: 'Current students are counted from the roll; students who declined the certificate get a row of their own and are added in the grand total. Transferred out and dropped out come from student statuses (students suspended since the previous school year ended count as dropped out and stay in the start of year; those who had declined the certificate before are not counted) — check and correct them. The system cannot know transfers in, returns from suspension or repeaters, so enter those. Start of year is worked back from the rest.',
       tableTitle: '2. Number of students',
       sheet: 'District report',
       grade: 'Grade',
@@ -270,7 +270,9 @@ export const en: typeof lo = {
         dropped: 'Dropped out',
         suspended: 'Suspended / returned',
         repeating: 'Repeating the grade',
-        current: 'Current',
+        current: 'Current (with certificate)',
+        noCertificate: 'Declined the certificate',
+        everyone: 'Grand total',
       },
       undatedSuspensions:
         '{{count}} suspended students have no suspension date, so they are not counted — add the date when editing the student',

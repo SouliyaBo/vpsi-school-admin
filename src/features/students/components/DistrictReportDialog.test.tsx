@@ -7,7 +7,10 @@ import { DistrictReportDialog } from './DistrictReportDialog';
 
 const placed = (gradeLevelId: string) => ({ currentEnrollment: { gradeLevelId } });
 
-/** ມ.1: three on the roll (two girls), a girl transferred out; ມ.2: one suspended. ບໍ່ເອົາໃບປະກາດ is not counted. */
+/**
+ * ມ.1: three on the roll (two girls), a girl transferred out, a girl who
+ * declined the certificate; ມ.2: one suspended this term, one over the holidays.
+ */
 const roster = [
   { id: 's1', status: 'active', gender: 'male', ...placed('g1') },
   { id: 's2', status: 'active', gender: 'female', ...placed('g1') },
@@ -18,6 +21,14 @@ const roster = [
     status: 'suspended',
     gender: 'male',
     suspendedAt: '2026-09-15T00:00:00.000Z',
+    ...placed('g2'),
+  },
+  // Left over the holidays, before opening day but after last year ended: counted.
+  {
+    id: 's9',
+    status: 'suspended',
+    gender: 'male',
+    suspendedAt: '2026-07-20T00:00:00.000Z',
     ...placed('g2'),
   },
   // Suspended with no date: not counted, and the dialog says so.
@@ -48,6 +59,21 @@ describe('DistrictReportDialog', () => {
           startDate: '2026-09-01T00:00:00.000Z',
           endDate: '2027-06-30T00:00:00.000Z',
         });
+      if (path === '/school-years')
+        return Promise.resolve(
+          paginated([
+            {
+              id: 'sy',
+              startDate: '2026-09-01T00:00:00.000Z',
+              endDate: '2027-06-30T00:00:00.000Z',
+            },
+            {
+              id: 'sy0',
+              startDate: '2025-09-01T00:00:00.000Z',
+              endDate: '2026-06-30T00:00:00.000Z',
+            },
+          ]),
+        );
       if (path === '/grade-levels')
         return Promise.resolve(
           paginated([
@@ -106,7 +132,7 @@ describe('DistrictReportDialog', () => {
     expect(await screen.findByLabelText('Transferred out ມ.1 T')).toHaveValue(1);
     expect(screen.getByLabelText('Transferred out ມ.1 F')).toHaveValue(1);
     // A suspension dated this year lands in ປະລະ, not in the ໂຈະ…ມາຮຽນຄືນ row.
-    expect(screen.getByLabelText('Dropped out ມ.2 T')).toHaveValue(1);
+    expect(screen.getByLabelText('Dropped out ມ.2 T')).toHaveValue(2);
     expect(screen.getByLabelText('Dropped out ມ.2 F')).toHaveValue(0);
     expect(screen.getByLabelText('Suspended / returned ມ.2 T')).toHaveValue(0);
     expect(screen.getByText(/1 suspended students have no suspension date/)).toBeInTheDocument();
@@ -148,12 +174,17 @@ describe('DistrictReportDialog', () => {
     const figures = (label: string) =>
       [2, 3, 4, 5, 8, 9].map((column) => result(rowOf(label).getCell(column).value));
 
-    // ມ.1 start: 3 now + 1 out − 2 repeating = 2 (girls 2 + 1 − 1 = 2).
-    expect(figures('Start of year')).toEqual([2, 2, 2, 0, 4, 2]);
+    // ມ.1 start: 3 now + 1 out − 2 repeating = 2 (girls 2 + 1 − 1 = 2); ມ.2: 1 + 2 dropped.
+    expect(figures('Start of year')).toEqual([2, 2, 3, 0, 5, 2]);
     expect(figures('Repeating the grade')).toEqual([2, 1, 0, 0, 2, 1]);
-    expect(figures('Current')).toEqual([3, 2, 1, 0, 4, 2]);
-    const current = rowOf('Current').getCell(2).value as { formula: string };
+    expect(figures('Current (with certificate)')).toEqual([3, 2, 1, 0, 4, 2]);
+    const current = rowOf('Current (with certificate)').getCell(2).value as { formula: string };
     expect(current.formula).toMatch(/^B\d+\+B\d+-B\d+-B\d+\+B\d+\+B\d+$/);
+    // Both figures go to the district: with the certificate, and with everyone.
+    expect(figures('Declined the certificate')).toEqual([1, 1, 0, 0, 1, 1]);
+    expect(figures('Grand total')).toEqual([4, 3, 1, 0, 5, 3]);
+    const all = rowOf('Grand total').getCell(2).value as { formula: string };
+    expect(all.formula).toMatch(/^B\d+\+B\d+$/);
     expect(filenames).toEqual(['District report draft 2026-2027.xlsx']);
 
     // 3. The month's exam table, ມ.ຕົ້ນ first: ລ, ຍ, then the share of the roll.

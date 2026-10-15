@@ -31,8 +31,10 @@ import {
 import { studentsApi } from '../api';
 import {
   countDistrictReport,
+  everyone,
   LAST_LOWER_SECONDARY_LEVEL,
   MOVEMENT_ROWS,
+  reportYear,
   undatedSuspensions,
   startOfYear,
   type GradeColumn,
@@ -89,11 +91,13 @@ function DistrictReportBody({ onDone }: { onDone: () => void }) {
   const source = useQuery({
     queryKey: ['students', 'district-report'],
     queryFn: async () => {
-      const [roster, gradeLevels, year] = await Promise.all([
+      const [roster, gradeLevels, year, years] = await Promise.all([
         fetchEveryPage(studentsApi.list, { status: 'all' }),
         fetchEveryPage(gradeLevelsApi.list, { sortBy: 'level', sortOrder: 'asc' }),
         // No active year is a normal state; the suspensions are then not narrowed.
         schoolYearsApi.active().catch(() => null),
+        // Where the previous year ended is where this year's ປະລະ starts.
+        fetchEveryPage(schoolYearsApi.list, {}),
       ]);
       const grades: GradeColumn[] = gradeLevels.map((grade) => ({
         gradeLevelId: grade.id,
@@ -119,8 +123,9 @@ function DistrictReportBody({ onDone }: { onDone: () => void }) {
         gender: student.gender,
         gradeLevelId: student.currentEnrollment?.gradeLevelId ?? null,
         suspendedAt: student.suspendedAt ?? null,
+        statusBeforeSuspension: student.statusBeforeSuspension ?? null,
       }));
-      const figures = countDistrictReport(students, grades, year);
+      const figures = countDistrictReport(students, grades, year && reportYear(year, years));
       return {
         grades,
         figures,
@@ -242,6 +247,8 @@ function DistrictReportTable({
         allGrades: t('student.districtReport.allGrades'),
         start: t('student.districtReport.rows.start'),
         current: t('student.districtReport.rows.current'),
+        noCertificate: t('student.districtReport.rows.noCertificate'),
+        everyone: t('student.districtReport.rows.everyone'),
         movements: Object.fromEntries(
           MOVEMENT_ROWS.map((row) => [row, t(`student.districtReport.rows.${row}`)]),
         ) as Record<MovementRow, string>,
@@ -354,6 +361,31 @@ function DistrictReportTable({
                   />
                 ))}
                 <Pair count={sum((grade) => grade.current)} bold />
+              </tr>
+              <tr>
+                <th className="border px-2 py-1 text-start font-normal">
+                  {t('student.districtReport.rows.noCertificate')}
+                </th>
+                {grades.map((grade) => (
+                  <Pair
+                    key={grade.gradeLevelId}
+                    count={figures.get(grade.gradeLevelId)!.noCertificate}
+                  />
+                ))}
+                <Pair count={sum((grade) => grade.noCertificate)} />
+              </tr>
+              <tr>
+                <th className="border px-2 py-1 text-start">
+                  {t('student.districtReport.rows.everyone')}
+                </th>
+                {grades.map((grade) => (
+                  <Pair
+                    key={grade.gradeLevelId}
+                    count={everyone(figures.get(grade.gradeLevelId)!)}
+                    bold
+                  />
+                ))}
+                <Pair count={sum(everyone)} bold />
               </tr>
             </tbody>
           </table>
