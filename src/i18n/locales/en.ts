@@ -253,6 +253,12 @@ export const en: typeof lo = {
     exportPrintedOn: 'Printed {{date}}',
     suspendedAt: 'Suspended on',
     suspendedAtHint: 'The district report counts only students suspended this school year',
+    statusBeforeSuspension: 'Before the suspension',
+    statusBeforeSuspensionHint: 'Students who declined the certificate are not in the district report',
+    suspendedFrom: {
+      active: 'Took the certificate',
+      no_certificate: 'Declined the certificate',
+    },
     districtReport: {
       button: 'District report draft',
       title: 'District report draft',
@@ -1849,6 +1855,10 @@ export const en: typeof lo = {
       'Leave blank for today. The weeks before this date keep reading under the old ' +
       'arrangement, so a teacher is never shown a gap on a day they were not timetabled for. ' +
       'Set it to the start of term to correct a schedule that was always wrong.',
+    startsFrom: 'Starts teaching from',
+    startsFromHint:
+      'No roll call is owed before this day — right for a lesson added mid-term or a new ' +
+      'teacher taking a class over. Clear it for a lesson taught since the start of term.',
     scheduleHistory: 'Previous schedules',
     scheduleCurrent: 'now',
     rotatingHint:

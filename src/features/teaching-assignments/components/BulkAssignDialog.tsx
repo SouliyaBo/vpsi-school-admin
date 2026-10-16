@@ -10,7 +10,7 @@ import { subjectLabel, useSubjectsByGrade } from '@/features/subjects/api';
 import { useTeacherOptions } from '@/features/teachers/api';
 import { stripEmpty } from '@/lib/payload';
 import { notify } from '@/lib/toast';
-import { fullName, refId, refObject } from '@/lib/utils';
+import { fullName, refId, refObject, toDateInput } from '@/lib/utils';
 import type { Subject, Teacher } from '@/types/entities';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -18,7 +18,7 @@ import { FieldsetMessage, Form } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/common/EmptyState';
 import { EntitySelectField } from '@/components/common/EntitySelect';
-import { FieldSection } from '@/components/common/fields';
+import { DateField, FieldSection } from '@/components/common/fields';
 import { FormDialog } from '@/components/common/FormDialog';
 import {
   teachingAssignments,
@@ -97,7 +97,13 @@ export function BulkAssignDialog({ open, onOpenChange, defaultSemesterId }: Prop
     if (!open) return;
     bulkCreate.reset();
     setOutcomes({});
-    form.reset({ ...EMPTY_BULK_ASSIGNMENT, semesterId: defaultSemesterId ?? '' });
+    form.reset({
+      ...EMPTY_BULK_ASSIGNMENT,
+      semesterId: defaultSemesterId ?? '',
+      // Today, as on the single form: a batch entered mid-term owed from the start
+      // of term charges its teacher with every roll call since August.
+      effectiveFrom: toDateInput(new Date()),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultSemesterId, form]);
 
@@ -135,6 +141,7 @@ export function BulkAssignDialog({ open, onOpenChange, defaultSemesterId }: Prop
       semesterId: values.semesterId,
       subjectId: target.subjectId,
       schedule: stripEmpty(target.schedule) as SchedulePeriodInput[],
+      ...(values.effectiveFrom ? { effectiveFrom: values.effectiveFrom } : {}),
     }));
 
     const results = await bulkCreate.mutateAsync(items);
@@ -199,6 +206,15 @@ export function BulkAssignDialog({ open, onOpenChange, defaultSemesterId }: Prop
               required
               useOptions={useTeacherOptions}
               placeholder={t('assignment.selectTeacher')}
+            />
+          </FieldSection>
+
+          <FieldSection columns={1}>
+            <DateField
+              control={form.control}
+              name="effectiveFrom"
+              label={t('assignment.startsFrom')}
+              description={t('assignment.startsFromHint')}
             />
           </FieldSection>
 

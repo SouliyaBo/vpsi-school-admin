@@ -46,12 +46,17 @@ export const assignmentSchema = z
     semesterId: requiredId(),
     schedule: z.array(periodSchema).min(1, vmsg('assignment.atLeastOnePeriod')),
     /**
-     * The first day a revised schedule applies to — editing only.
+     * Editing: the first day a revised schedule applies to. Blank sends nothing
+     * and the API defaults to today, which is what a timetable revision means.
+     * Backdating it to the start of term is how the office says "this is what the
+     * timetable always should have said", which is the one case where the weeks
+     * behind should be re-read under the new arrangement.
      *
-     * Blank sends nothing and the API defaults to today, which is what a timetable
-     * revision means. Backdating it to the start of term is how the office says
-     * "this is what the timetable always should have said", which is the one case
-     * where the weeks behind should be re-read under the new arrangement.
+     * Creating: ເລີ່ມສອນແຕ່, the first day the lesson is owed, prefilled with
+     * today. Blank owes it from the start of term, which is right only for the
+     * term's own timetable — a lesson added in October owed since August is how
+     * the 5 Oct 2026 revision charged nine teachers with roll calls from before
+     * they had the class.
      */
     effectiveFrom: optionalText(10).optional(),
     notes: optionalText(500),
@@ -120,6 +125,8 @@ export const bulkAssignmentSchema = z
     semesterId: requiredId(),
     classroomId: requiredId(),
     teacherId: requiredId(),
+    /** ເລີ່ມສອນແຕ່, shared by every subject in the batch — see `assignmentSchema`. */
+    effectiveFrom: optionalText(10).optional(),
     targets: z
       .array(
         z.object({

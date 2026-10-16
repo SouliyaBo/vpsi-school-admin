@@ -3498,6 +3498,11 @@ export interface components {
             admissionDate?: string;
             /** @description ວັນທີໂຈະການຮຽນ — kept only while `status` is `suspended` */
             suspendedAt?: string;
+            /**
+             * @description ກ່ອນໂຈະ — whether a suspended child still took the certificate (`active`) or had declined it (`no_certificate`); the latter is left out of the district report. Read off the previous status when omitted; kept only while `status` is `suspended`.
+             * @enum {string}
+             */
+            statusBeforeSuspension?: "active" | "no_certificate";
             notes?: string;
             /**
              * @description Defaults to `active`. Send `new` for an intake not yet placed in a class.
@@ -3531,6 +3536,11 @@ export interface components {
             admissionDate?: string;
             /** @description ວັນທີໂຈະການຮຽນ — kept only while `status` is `suspended` */
             suspendedAt?: string;
+            /**
+             * @description ກ່ອນໂຈະ — whether a suspended child still took the certificate (`active`) or had declined it (`no_certificate`); the latter is left out of the district report. Read off the previous status when omitted; kept only while `status` is `suspended`.
+             * @enum {string}
+             */
+            statusBeforeSuspension?: "active" | "no_certificate";
             /** @enum {string} */
             status?: "new" | "active" | "graduated" | "no_certificate" | "transferred" | "dropped" | "suspended";
             notes?: string;

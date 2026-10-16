@@ -35,6 +35,10 @@ export interface StudentOrganizationInput {
   joinedDate: string;
 }
 
+/** ກ່ອນໂຈະ: the two statuses a child can be suspended from that the report tells apart. */
+export const SUSPENDED_FROM = ['active', 'no_certificate'] as const;
+export type SuspendedFrom = (typeof SUSPENDED_FROM)[number];
+
 export interface StudentInput {
   studentCode: string;
   firstNameLo: string;
@@ -59,6 +63,10 @@ export interface StudentInput {
   notes?: string;
   /** Defaults to `active` server-side; the form sends `new` for an unplaced intake. */
   status?: StudentStatus;
+  /** ວັນທີໂຈະການຮຽນ; only with `status: 'suspended'`. */
+  suspendedAt?: string;
+  /** ກ່ອນໂຈະ; only with `status: 'suspended'`, read off the old status when left out. */
+  statusBeforeSuspension?: SuspendedFrom;
   /** At least one, and exactly one of them must be primary. */
   guardians: StudentGuardianInput[];
   /** At most one entry per organisation. Replaces the whole list when sent. */

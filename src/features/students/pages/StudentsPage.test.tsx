@@ -631,7 +631,32 @@ describe('StudentsPage — editing', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: /save/i }));
 
     await waitFor(() => expect(patch).toHaveBeenCalled());
-    expect(patch.mock.calls[0]![1]).toEqual({ status: 'suspended', suspendedAt: '2026-09-15' });
+    // ກ່ອນໂຈະ is prefilled from the status the child had, and sent with it.
+    expect(patch.mock.calls[0]![1]).toEqual({
+      status: 'suspended',
+      suspendedAt: '2026-09-15',
+      statusBeforeSuspension: 'active',
+    });
+  });
+
+  it('lets the office say a suspended child had declined the certificate', async () => {
+    const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue({
+      ...student,
+      status: 'suspended',
+    });
+
+    const dialog = await openEditDialog();
+    await userEvent.click(within(dialog).getByRole('combobox', { name: /status/i }));
+    await userEvent.click(await screen.findByRole('option', { name: /suspended/i }));
+    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Before the suspension' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Declined the certificate' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: /save/i }));
+
+    await waitFor(() => expect(patch).toHaveBeenCalled());
+    expect(patch.mock.calls[0]![1]).toEqual({
+      status: 'suspended',
+      statusBeforeSuspension: 'no_certificate',
+    });
   });
 
   /**

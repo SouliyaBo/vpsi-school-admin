@@ -265,6 +265,11 @@ export function StudentDetailPage() {
             {student.status === 'suspended' && (
               <p className="text-sm text-muted-foreground">
                 {t('student.suspendedAt')}: {formatDate(student.suspendedAt)}
+                {' · '}
+                {t('student.statusBeforeSuspension')}:{' '}
+                {t(
+                  `student.suspendedFrom.${student.statusBeforeSuspension === 'no_certificate' ? 'no_certificate' : 'active'}`,
+                )}
               </p>
             )}
             {village && (

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as apiClient from '@/lib/api-client';
 import { ApiError } from '@/lib/api-error';
+import { toDateInput } from '@/lib/utils';
 import { paginated, renderWithProviders } from '@/test/utils';
 import { AssignmentList } from './components/AssignmentList';
 import { TeacherTimetable } from './components/TeacherTimetable';
@@ -460,11 +461,34 @@ describe('teaching assignments — several subjects at once', () => {
       // `isRotating: false` travels rather than being dropped: it is a real
       // answer — this period is not part of a swap — not a blank field.
       schedule: [{ dayOfWeek: 1, startTime: '15:10', endTime: '16:00', isRotating: false }],
+      // Today unless the office changes it: a batch added mid-term is not owed
+      // the roll calls from before it existed.
+      effectiveFrom: toDateInput(new Date()),
     });
     expect(bodies[1]).toMatchObject({
       subjectId: subjectC.id,
       schedule: [{ dayOfWeek: 1, startTime: '16:05', endTime: '16:55' }],
+      effectiveFrom: toDateInput(new Date()),
     });
+  });
+
+  it('sends no start date once the office clears it, for the term’s own timetable', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue(assignment);
+    const dialog = await openWithTwoSubjects();
+
+    const starts = within(dialog).getAllByLabelText(/^start$/i);
+    const ends = within(dialog).getAllByLabelText(/^end$/i);
+    fireEvent.change(ends[0]!, { target: { value: '16:00' } });
+    fireEvent.change(starts[1]!, { target: { value: '16:05' } });
+    fireEvent.change(ends[1]!, { target: { value: '16:55' } });
+    await userEvent.clear(within(dialog).getByLabelText(/starts teaching from/i));
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /create 2 assignments/i }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    for (const [, body] of vi.mocked(post).mock.calls) {
+      expect(body).not.toHaveProperty('effectiveFrom');
+    }
   });
 
   it('keeps the subjects that worked and re-offers only the one that clashed', async () => {
@@ -656,6 +680,23 @@ describe('teaching assignments — a revised schedule', () => {
     expect(vi.mocked(apiClient.patch).mock.calls[0]![1]).toMatchObject({
       effectiveFrom: '2026-10-06',
     });
+  });
+
+  it('dates a new lesson from today unless the office clears it', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue(assignment);
+    renderWithProviders(<AssignmentList />);
+    const [add] = await screen.findAllByRole('button', { name: /^add assignment$/i });
+    await userEvent.click(add!);
+    const dialog = await screen.findByRole('dialog');
+
+    // A lesson added mid-term is owed from the day it starts; owed from the start
+    // of term, its teacher was charged with every roll call since August.
+    const field = within(dialog).getByLabelText(/starts teaching from/i);
+    expect(field).toHaveValue(toDateInput(new Date()));
+
+    await userEvent.clear(field);
+    expect(field).toHaveValue('');
+    expect(post).not.toHaveBeenCalled();
   });
 
   it('shows the arrangements the lesson has already had', async () => {

@@ -8,7 +8,7 @@ import { useSemesterOptions } from '@/features/semesters/api';
 import { useSubjectOptions } from '@/features/subjects/api';
 import { useTeacherOptions } from '@/features/teachers/api';
 import { stripEmpty } from '@/lib/payload';
-import { fullName, localizedName, refId, refObject } from '@/lib/utils';
+import { fullName, localizedName, refId, refObject, toDateInput } from '@/lib/utils';
 import type { Classroom, Subject, Teacher, TeachingAssignment } from '@/types/entities';
 import { Form } from '@/components/ui/form';
 import { EntitySelectField } from '@/components/common/EntitySelect';
@@ -96,7 +96,13 @@ export function AssignmentFormDialog({ open, onOpenChange, assignment, defaultSe
             // covers the ordinary revision.
             effectiveFrom: '',
           }
-        : { ...EMPTY_ASSIGNMENT, semesterId: defaultSemesterId ?? '' },
+        : {
+            ...EMPTY_ASSIGNMENT,
+            semesterId: defaultSemesterId ?? '',
+            // Today, because a lesson added after the term has started cannot have
+            // been owed before it existed. Cleared for the term's own timetable.
+            effectiveFrom: toDateInput(new Date()),
+          },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, assignment, defaultSemesterId, form]);
@@ -190,8 +196,7 @@ export function AssignmentFormDialog({ open, onOpenChange, assignment, defaultSe
                 how the school runs that period. */}
             <p className="text-xs text-muted-foreground">{t('assignment.rotatingHint')}</p>
 
-            {/* Editing only: a new lesson has no weeks behind it to protect. */}
-            {isEditing && (
+            {isEditing ? (
               <>
                 <DateField
                   control={form.control}
@@ -201,6 +206,13 @@ export function AssignmentFormDialog({ open, onOpenChange, assignment, defaultSe
                 />
                 <ScheduleHistory assignment={assignment} />
               </>
+            ) : (
+              <DateField
+                control={form.control}
+                name="effectiveFrom"
+                label={t('assignment.startsFrom')}
+                description={t('assignment.startsFromHint')}
+              />
             )}
           </FieldSection>
 

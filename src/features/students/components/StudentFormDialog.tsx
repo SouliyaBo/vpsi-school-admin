@@ -41,7 +41,7 @@ import {
 } from '@/components/common/fields';
 import { FormDialog } from '@/components/common/FormDialog';
 import { EMPTY_GUARDIAN_LINK, GuardianLinksField, toGuardianPayload } from './GuardianLinksField';
-import { students, type StudentInput, type StudentUpdateInput } from '../api';
+import { students, SUSPENDED_FROM, type StudentInput, type StudentUpdateInput } from '../api';
 
 /**
  * One guardian row. Which fields are required depends on the row's mode, so the
@@ -101,6 +101,7 @@ const baseSchema = z.object({
   addressDetail: optionalText(300),
   admissionDate: optionalDate(),
   suspendedAt: optionalDate(),
+  statusBeforeSuspension: z.enum(SUSPENDED_FROM),
   notes: optionalText(1000),
   status: z.enum(STUDENT_STATUSES).optional(),
   /**
@@ -170,6 +171,7 @@ const EMPTY: FormValues = {
   addressDetail: '',
   admissionDate: '',
   suspendedAt: '',
+  statusBeforeSuspension: 'active',
   notes: '',
   // Kept at `active` because the dashboard headcounts filter on it — defaulting
   // an intake to `new` would drop it out of every total until it is placed.
@@ -223,6 +225,13 @@ function toFormValues(student: Student, placement?: EditablePlacement | null): F
     addressDetail: student.addressDetail ?? '',
     admissionDate: toDateInput(student.admissionDate),
     suspendedAt: toDateInput(student.suspendedAt),
+    // ກ່ອນໂຈະ as stored, or — for a child not yet suspended — what they would be
+    // suspended from today. An older record's `transferred` reads as ເອົາໃບປະກາດ.
+    statusBeforeSuspension:
+      (student.status === 'suspended' ? student.statusBeforeSuspension : student.status) ===
+      'no_certificate'
+        ? 'no_certificate'
+        : 'active',
     notes: student.notes ?? '',
     status: student.status,
     classroomId: '',
@@ -251,8 +260,15 @@ function toOrganizationFields(
  * a change.
  */
 function toPayload(values: FormValues) {
-  const { guardians, classroomId, englishClass, organizations, suspendedAt, ...rest } =
-    stripEmpty(values);
+  const {
+    guardians,
+    classroomId,
+    englishClass,
+    organizations,
+    suspendedAt,
+    statusBeforeSuspension,
+    ...rest
+  } = stripEmpty(values);
   void guardians;
   void classroomId;
   // Both placement fields: they go to `/enrollments`, never onto the student.
@@ -262,6 +278,7 @@ function toPayload(values: FormValues) {
     ...rest,
     // Only a suspension has a date; the API clears it when the status moves on.
     ...(values.status === 'suspended' && suspendedAt ? { suspendedAt } : {}),
+    ...(values.status === 'suspended' ? { statusBeforeSuspension } : {}),
     organizations: STUDENT_ORGANIZATIONS.filter((name) => organizations[name]).map((name) => ({
       organization: name,
       joinedDate: organizations[name] as string,
@@ -580,6 +597,21 @@ export function StudentFormDialog({ open, onOpenChange, student, placement, onCr
                 name="suspendedAt"
                 label={t('student.suspendedAt')}
                 description={t('student.suspendedAtHint')}
+              />
+            )}
+            {/* ກ່ອນໂຈະ: a child who had already declined the certificate is not
+                reported to the district as a suspension. Prefilled from the
+                status the child had; the office corrects it here. */}
+            {seesEveryStudent && status === 'suspended' && (
+              <SelectField
+                control={form.control}
+                name="statusBeforeSuspension"
+                label={t('student.statusBeforeSuspension')}
+                description={t('student.statusBeforeSuspensionHint')}
+                options={SUSPENDED_FROM.map((from) => ({
+                  value: from,
+                  label: t(`student.suspendedFrom.${from}`),
+                }))}
               />
             )}
             <TextareaField

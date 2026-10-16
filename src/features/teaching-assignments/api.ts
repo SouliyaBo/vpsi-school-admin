@@ -20,6 +20,8 @@ export interface TeachingAssignmentInput {
   classroomId: string;
   semesterId: string;
   schedule: SchedulePeriodInput[];
+  /** ເລີ່ມສອນແຕ່ — omitted, the lesson is owed from the start of term. */
+  effectiveFrom?: string;
   notes?: string;
 }
 
