@@ -817,10 +817,14 @@ export interface ExamPaperSummary extends BaseDocument {
   preamble: string;
   questionCount: number;
   optionLabelStyle: ExamOptionLabelStyle;
+  /** ຄຳຖາມຕົວໜາ — every question printed bold; absent on an older API, read as on. */
+  boldQuestions?: boolean;
   variantCount: number;
   shuffleOptions: boolean;
   seed?: number | null;
   generatedAt?: string | null;
+  /** ຮອບ — the code printed on every document made from the current sets. */
+  drawStamp?: string | null;
   /** What the paper is out of; every question is worth the same share. */
   totalPoints?: number | null;
 }

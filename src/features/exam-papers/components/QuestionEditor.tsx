@@ -4,13 +4,16 @@ import {
   ArrowUp,
   Lock,
   Plus,
+  Rows2,
   Save,
   Trash2,
+  Underline,
   Undo2,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { notify } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import type { ExamPaper, ExamQuestion } from '@/types/entities';
 import { EXAM_OPTION_LABEL_STYLES, type ExamOptionLabelStyle } from '@/types/enums';
@@ -29,7 +32,10 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { OPTION_LETTERS, useUpdateExamPaper, type ExamQuestionInput } from '../api';
+import { hasUnderline, toggleUnderline } from '../lib/underline';
+import { hasVerse, unversify, versify } from '../lib/verse';
 import { hasMath, MathText } from './MathText';
+import { VerseText } from './VerseText';
 
 /**
  * The review — what the reader made of the file, for the teacher to correct.
@@ -45,6 +51,7 @@ import { hasMath, MathText } from './MathText';
 interface Draft {
   preamble: string;
   optionLabelStyle: ExamOptionLabelStyle;
+  boldQuestions: boolean;
   questions: ExamQuestion[];
 }
 
@@ -52,6 +59,7 @@ function fromPaper(paper: ExamPaper): Draft {
   return {
     preamble: paper.preamble,
     optionLabelStyle: paper.optionLabelStyle,
+    boldQuestions: paper.boldQuestions ?? true,
     questions: paper.questions.map((question) => ({
       ...question,
       images: [...question.images],
@@ -110,6 +118,8 @@ export function QuestionEditor({ paper, readOnly = false }: Props) {
   const update = useUpdateExamPaper();
   const [draft, setDraft] = useState<Draft>(() => fromPaper(paper));
   const [dirty, setDirty] = useState(false);
+  // Each question's text box, so ຈັດເປັນກອນ can read what the teacher selected.
+  const textBoxes = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
   // A fresh read from the server (after save, or a reload) replaces an
   // unedited draft; an edited one is the teacher's and stays.
@@ -164,6 +174,7 @@ export function QuestionEditor({ paper, readOnly = false }: Props) {
         body: {
           preamble: draft.preamble,
           optionLabelStyle: draft.optionLabelStyle,
+          boldQuestions: draft.boldQuestions,
           questions: draft.questions.map(toInput),
         },
       },
@@ -230,6 +241,20 @@ export function QuestionEditor({ paper, readOnly = false }: Props) {
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="exam-bold">{t('examPaper.boldQuestions')}</Label>
+            <div className="flex items-center gap-3">
+              <Switch
+                id="exam-bold"
+                checked={draft.boldQuestions}
+                disabled={readOnly}
+                onCheckedChange={(checked) => edit((next) => (next.boldQuestions = checked))}
+              />
+              <span className="text-xs text-muted-foreground">
+                {t('examPaper.boldQuestionsHint')}
+              </span>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -260,8 +285,11 @@ export function QuestionEditor({ paper, readOnly = false }: Props) {
                       }
                     />
                     <Textarea
+                      ref={(element) => {
+                        textBoxes.current[question.key] = element;
+                      }}
                       aria-label={t('examPaper.questionText')}
-                      rows={2}
+                      rows={hasVerse(question.text) ? 5 : 2}
                       value={question.text}
                       disabled={readOnly}
                       onChange={(event) =>
@@ -273,11 +301,77 @@ export function QuestionEditor({ paper, readOnly = false }: Props) {
                         {t('examPaper.imageTokenHint')}
                       </p>
                     )}
-                    {hasMath(question.text) && (
-                      <MathText
-                        text={question.text}
-                        className="block rounded-md bg-muted/50 px-2 py-1 text-sm"
-                      />
+                    {!readOnly && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            const box = textBoxes.current[question.key];
+                            const from = box?.selectionStart ?? 0;
+                            const to = box?.selectionEnd ?? 0;
+                            const selected = question.text.slice(from, to);
+                            if (!selected.trim()) {
+                              notify.info(t('examPaper.verseSelectFirst'));
+                              return;
+                            }
+                            editQuestion(index, (q) => {
+                              q.text = q.text.slice(0, from) + versify(selected) + q.text.slice(to);
+                            });
+                          }}
+                        >
+                          <Rows2 />
+                          {t('examPaper.verseMake')}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            const box = textBoxes.current[question.key];
+                            const from = box?.selectionStart ?? 0;
+                            const to = box?.selectionEnd ?? 0;
+                            const next = toggleUnderline(question.text, from, to);
+                            if (next === question.text) {
+                              notify.info(t('examPaper.underlineSelectFirst'));
+                              return;
+                            }
+                            editQuestion(index, (q) => (q.text = next));
+                          }}
+                        >
+                          <Underline />
+                          {t('examPaper.underline')}
+                        </Button>
+                        {hasVerse(question.text) && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => editQuestion(index, (q) => (q.text = unversify(q.text)))}
+                          >
+                            {t('examPaper.verseUndo')}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                    {hasVerse(question.text) && (
+                      <p className="text-xs text-muted-foreground">{t('examPaper.verseHint')}</p>
+                    )}
+                    {hasUnderline(question.text) && (
+                      <p className="text-xs text-muted-foreground">
+                        {t('examPaper.underlineHint')}
+                      </p>
+                    )}
+                    {hasVerse(question.text) || hasUnderline(question.text) ? (
+                      <VerseText text={question.text} />
+                    ) : (
+                      hasMath(question.text) && (
+                        <MathText
+                          text={question.text}
+                          className="block rounded-md bg-muted/50 px-2 py-1 text-sm"
+                        />
+                      )
                     )}
                     <Pictures
                       images={question.images}

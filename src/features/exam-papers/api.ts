@@ -42,6 +42,7 @@ export interface UpdateExamPaperInput {
   semesterId?: string | null;
   preamble?: string;
   optionLabelStyle?: ExamOptionLabelStyle;
+  boldQuestions?: boolean;
   totalPoints?: number | null;
   questions?: ExamQuestionInput[];
 }
@@ -148,7 +149,15 @@ export interface ExamScan {
   studentCode?: string | null;
   studentNameLo?: string | null;
   setLabel?: string | null;
-  qr?: { paperId: string; set: string | null; studentId: string | null } | null;
+  qr?: {
+    paperId: string;
+    set: string | null;
+    studentId: string | null;
+    /** ຮອບ the sheet was printed from; none on sheets printed before 20 Oct 2026. */
+    stamp?: string | null;
+  } | null;
+  /** Printed from an earlier drawing of the sets than the paper's current one. */
+  staleDraw?: boolean;
   codeFromBubbles?: string | null;
   answers: (number | null)[];
   questions: ScanQuestion[];
@@ -328,7 +337,7 @@ export function useDownloadSets() {
 export function useDownloadAnswerKey() {
   return useMutation({
     mutationFn: ({ id, title }: { id: string; title: string }) =>
-      downloadNamed(`/exam-papers/${id}/answer-key`, `${fileSafe(title)}／ເສີຍ.pdf`),
+      downloadNamed(`/exam-papers/${id}/answer-key`, `${fileSafe(title)}／ຄະໜານຕອບ.pdf`),
   });
 }
 

@@ -309,6 +309,20 @@ describe('the review', () => {
       ['q2', 2, true],
     ]);
   });
+
+  it('prints the questions bold unless the teacher turns it off', async () => {
+    const patch = vi.spyOn(apiClient, 'patch').mockImplementation(async () => PAPER as never);
+    // A paper from before the switch existed reads as on.
+    renderWithProviders(<QuestionEditor paper={PAPER as never} />);
+
+    const bold = screen.getByRole('switch', { name: 'Bold questions' });
+    expect(bold).toBeChecked();
+    await userEvent.click(bold);
+    await userEvent.click(screen.getByRole('button', { name: 'Save questions' }));
+
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect((patch.mock.calls[0][1] as { boldQuestions: boolean }).boldQuestions).toBe(false);
+  });
 });
 
 describe('the sets', () => {
@@ -330,6 +344,24 @@ describe('the sets', () => {
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     expect(post.mock.calls[0][0]).toBe('/exam-papers/paper-1/generate');
     expect(post.mock.calls[0][1]).toEqual({ count: 3, shuffleOptions: false });
+  });
+
+  it('asks before drawing again, since everything printed stops matching', async () => {
+    stubReads(DRAWN);
+    const post = vi.spyOn(apiClient, 'post').mockImplementation(async () => DRAWN as never);
+    renderWithProviders(<SetsPanel paper={{ ...DRAWN, drawStamp: '7F3K' } as never} />);
+
+    // The draw's code is on the panel, to compare against what is printed.
+    expect(screen.getByText('7F3K')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Draw again (new shuffle)' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/draw 7F3K stops being valid/)).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Draw again (new shuffle)' }));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post.mock.calls[0][0]).toBe('/exam-papers/paper-1/generate');
   });
 
   it('saves a Word download as .docx even when the API’s file name cannot be read', async () => {
@@ -522,6 +554,29 @@ describe('scanning', () => {
     expect(screen.getByRole('button', { name: 'Upload 1 photos' })).toBeInTheDocument();
   });
 
+  it('flags a sheet printed from an earlier drawing of the sets', async () => {
+    vi.spyOn(apiClient, 'get').mockImplementation(async (url: string) => {
+      if (url === '/exam-papers/paper-1/scans') {
+        return [
+          {
+            ...SCAN,
+            qr: { paperId: 'paper-1', set: 'B', studentId: null, stamp: 'A1B2' },
+            staleDraw: true,
+          },
+        ] as never;
+      }
+      return paginated([]) as never;
+    });
+    renderWithProviders(
+      <ScanPanel paper={{ ...DRAWN, drawStamp: '7F3K' } as never} view={RESPONSES as never} />,
+    );
+    expect(
+      await screen.findByText(
+        'This sheet was printed from draw A1B2, not the current draw (7F3K) — its set and answers may not match',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('lists what the reader proposed and what it was unsure of', async () => {
     renderWithProviders(<ScanPanel paper={DRAWN as never} view={RESPONSES as never} />);
     expect(await screen.findByText('Pupil unknown — choose one')).toBeInTheDocument();
@@ -586,5 +641,92 @@ describe('pictures in the text', () => {
   it('drops the removed picture’s token and renumbers the ones after it', () => {
     expect(withoutImageToken('ໃຫ້ ⟦1⟧ ແລະ ⟦2⟧ ແລ້ວ ⟦3⟧', 1)).toBe('ໃຫ້ ⟦1⟧ ແລະ  ແລ້ວ ⟦2⟧');
     expect(withoutImageToken('⟦1⟧', 0)).toBe('');
+  });
+});
+
+describe('a ຄຳກອນ in the question', () => {
+  beforeEach(() => {
+    permits = () => true;
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  /** The ມ.5 ພາສາລາວ question the office sent, 20 Oct 2026. */
+  const PROVERB = '“ສາວບໍ່ມັກອ້າຍ ບໍ່ມັກຕາຍກໍຕາມຊ່າງ ບໍ່ໄດ້ຫໍ່ຂີ້ຈ້າງ ໃຫ້ຕາມກົ້ນແລ່ນນຳ”';
+  const withProverb = {
+    ...PAPER,
+    questions: [
+      { ...PAPER.questions[0], text: `ຄຳຜະຫຍາທີ່ວ່າ: ${PROVERB} ໃຊ້ສິລະປະການປະດິດແຕ່ງແບບໃດ?` },
+      PAPER.questions[1],
+    ],
+  };
+
+  it('sets the selected words as verse, two ວັກ to a row, and undoes it', async () => {
+    renderWithProviders(<QuestionEditor paper={withProverb as never} />);
+    const stem = screen.getAllByRole('textbox', { name: 'Question' })[0] as HTMLTextAreaElement;
+    const from = stem.value.indexOf(PROVERB);
+    stem.setSelectionRange(from, from + PROVERB.length);
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Set as verse' })[0]);
+
+    expect(stem.value).toBe(
+      'ຄຳຜະຫຍາທີ່ວ່າ: ⟪“ສາວບໍ່ມັກອ້າຍ | ບໍ່ມັກຕາຍກໍຕາມຊ່າງ\nບໍ່ໄດ້ຫໍ່ຂີ້ຈ້າງ | ໃຫ້ຕາມກົ້ນແລ່ນນຳ”⟫ ໃຊ້ສິລະປະການປະດິດແຕ່ງແບບໃດ?',
+    );
+    // The preview sets it in columns, as the printer will.
+    expect(screen.getByText('ບໍ່ມັກຕາຍກໍຕາມຊ່າງ')).toBeInTheDocument();
+    expect(screen.getByText('ບໍ່ໄດ້ຫໍ່ຂີ້ຈ້າງ')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save questions' })).toBeEnabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Undo verse' }));
+    expect(stem.value).toBe(`ຄຳຜະຫຍາທີ່ວ່າ: ${PROVERB} ໃຊ້ສິລະປະການປະດິດແຕ່ງແບບໃດ?`);
+  });
+
+  it('says to select the verse first when nothing is selected', async () => {
+    renderWithProviders(<QuestionEditor paper={withProverb as never} />);
+    const stem = screen.getAllByRole('textbox', { name: 'Question' })[0] as HTMLTextAreaElement;
+    stem.setSelectionRange(0, 0);
+    await userEvent.click(screen.getAllByRole('button', { name: 'Set as verse' })[0]);
+    expect(
+      await screen.findByText(
+        'Select the verse in the question box first, then press Set as verse',
+      ),
+    ).toBeInTheDocument();
+    expect(stem.value).not.toContain('⟪');
+  });
+});
+
+describe('ຂີດກ້ອງ in the question', () => {
+  beforeEach(() => {
+    permits = () => true;
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  const SENTENCE = 'ປະໂຫຍກ “ປ້າຂອງຂ້ອຍພວມໄປຕະຫຼາດ” ສ່ວນທີ່ຂີດກ້ອງແມ່ນພາກສ່ວນໃດ?';
+  const sheet = (text: string) => ({
+    ...PAPER,
+    questions: [{ ...PAPER.questions[0], text }, PAPER.questions[1]],
+  });
+
+  it('underlines the selected word, shows it underlined, and takes it off again', async () => {
+    renderWithProviders(<QuestionEditor paper={sheet(SENTENCE) as never} />);
+    const stem = screen.getAllByRole('textbox', { name: 'Question' })[0] as HTMLTextAreaElement;
+    const from = stem.value.indexOf('ພວມ');
+    stem.setSelectionRange(from, from + 'ພວມ'.length);
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Underline' })[0]);
+
+    expect(stem.value).toBe(SENTENCE.replace('ພວມ', '[u]ພວມ[/u]'));
+    expect(screen.getByText('ພວມ').closest('u')).not.toBeNull();
+
+    // Anywhere inside the run, pressed again, takes it off.
+    stem.setSelectionRange(stem.value.indexOf('ພວມ') + 1, stem.value.indexOf('ພວມ') + 1);
+    await userEvent.click(screen.getAllByRole('button', { name: 'Underline' })[0]);
+    expect(stem.value).toBe(SENTENCE);
+  });
+
+  it('shows a question uploaded with an underline the same way', () => {
+    renderWithProviders(
+      <QuestionEditor paper={sheet(SENTENCE.replace('ພວມ', '[u]ພວມ[/u]')) as never} />,
+    );
+    expect(screen.getByText('ພວມ').closest('u')).not.toBeNull();
   });
 });

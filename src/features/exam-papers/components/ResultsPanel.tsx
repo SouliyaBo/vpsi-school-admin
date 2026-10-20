@@ -27,6 +27,8 @@ import {
 } from '@/components/ui/table';
 import { EntitySelect } from '@/components/common/EntitySelect';
 import { ErrorState } from '@/components/common/ErrorState';
+import { stripUnderline } from '../lib/underline';
+import { unversify } from '../lib/verse';
 import { ScanPanel } from './ScanPanel';
 import {
   answersToString,
@@ -486,7 +488,9 @@ function Summary({ view }: { view: ResponsesView }) {
           {hardest.map((question) => (
             <li key={question.original} className="flex gap-2">
               <span className="w-8 shrink-0 tabular-nums">{question.original}.</span>
-              <span className="min-w-0 flex-1 truncate">{question.text}</span>
+              <span className="min-w-0 flex-1 truncate">
+                {stripUnderline(unversify(question.text))}
+              </span>
               <span className="shrink-0 tabular-nums text-muted-foreground">
                 {t('examPaper.correctOf', { correct: question.correct, marked: summary.marked })}
               </span>

@@ -199,6 +199,7 @@ export function ScanPanel({ paper, view, readOnly = false }: Props) {
                 key={scan.id}
                 number={index + 1}
                 scan={scan}
+                currentStamp={paper.drawStamp ?? null}
                 readOnly={readOnly}
                 onReview={() => setReviewing(scan.id)}
                 onDelete={() => deleteScan.mutate({ id: paper.id, scanId: scan.id })}
@@ -251,6 +252,17 @@ function FilePreview({ file, onRemove }: { file: File; onRemove: () => void }) {
   );
 }
 
+/**
+ * A sheet printed from an earlier ສ້າງຊຸດ than the paper's current sets — the
+ * office's 20 Oct 2026 case, where sheets with sets A–I met papers in A–L.
+ */
+function StaleDrawNote({ stamp, current }: { stamp: string; current: string }) {
+  const { t } = useTranslation();
+  return (
+    <p className="text-xs font-medium text-danger">{t('examPaper.staleDraw', { stamp, current })}</p>
+  );
+}
+
 function flaggedCount(scan: ExamScan): number {
   return scan.questions.filter((q) => q.flag === 'faint' || q.flag === 'double').length;
 }
@@ -258,12 +270,15 @@ function flaggedCount(scan: ExamScan): number {
 function ScanRow({
   number,
   scan,
+  currentStamp,
   readOnly,
   onReview,
   onDelete,
 }: {
   number: number;
   scan: ExamScan;
+  /** The paper's ຮອບ now, to name beside a sheet printed from another. */
+  currentStamp: string | null;
   readOnly: boolean;
   onReview: () => void;
   onDelete: () => void;
@@ -304,6 +319,9 @@ function ScanRow({
                 .filter(Boolean)
                 .join(' · ')}
         </p>
+        {scan.staleDraw && (
+          <StaleDrawNote stamp={scan.qr?.stamp ?? '—'} current={currentStamp ?? '—'} />
+        )}
       </div>
       <Badge
         variant={
@@ -466,6 +484,9 @@ function ScanReviewDialog({
           </div>
 
           <div className="flex min-h-0 flex-col gap-3 overflow-auto">
+            {scan.staleDraw && (
+              <StaleDrawNote stamp={scan.qr?.stamp ?? '—'} current={paper.drawStamp ?? '—'} />
+            )}
             <div className="space-y-1 text-xs text-muted-foreground">
               <p>
                 {t('examPaper.scanQr')}:{' '}

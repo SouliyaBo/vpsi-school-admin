@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { EntitySelect } from '@/components/common/EntitySelect';
 import {
   useDownloadAnswerKey,
@@ -69,6 +70,13 @@ export function SetsPanel({ paper, readOnly = false }: Props) {
   const [columnsInput, setColumnsInput] = useState('4');
   const columns = clamp(Number(columnsInput) || 1, 1, 12);
   const [showPlan, setShowPlan] = useState(false);
+  // Re-drawing invalidates everything already printed, so it is asked twice.
+  const [confirmRedraw, setConfirmRedraw] = useState(false);
+  const draw = () =>
+    generate.mutate(
+      { id: paper.id, body: { count, shuffleOptions } },
+      { onSettled: () => setConfirmRedraw(false) },
+    );
 
   const hasSets = paper.variants.length > 0;
   const seatPlan = useSeatPlan(showPlan ? paper.id : undefined, classroomId, columns);
@@ -125,8 +133,23 @@ export function SetsPanel({ paper, readOnly = false }: Props) {
               {t('examPaper.generatedAt')}: {formatDate(paper.generatedAt)} ·{' '}
               {t('examPaper.setCount', { count: paper.variants.length })} · {t('examPaper.seed')}{' '}
               <span className="font-mono">{paper.seed}</span>
+              {paper.drawStamp && (
+                <>
+                  {' '}
+                  · {t('examPaper.drawStamp')}{' '}
+                  <span className="font-mono font-semibold text-foreground">
+                    {paper.drawStamp}
+                  </span>
+                </>
+              )}
               <br />
               <span className="text-xs">{t('examPaper.seedHint')}</span>
+              {paper.drawStamp && (
+                <>
+                  <br />
+                  <span className="text-xs">{t('examPaper.drawStampHint')}</span>
+                </>
+              )}
             </p>
           )}
 
@@ -135,7 +158,7 @@ export function SetsPanel({ paper, readOnly = false }: Props) {
               <Button
                 type="button"
                 disabled={generate.isPending || paper.questions.length === 0}
-                onClick={() => generate.mutate({ id: paper.id, body: { count, shuffleOptions } })}
+                onClick={() => (hasSets ? setConfirmRedraw(true) : draw())}
               >
                 <Shuffle />
                 {hasSets ? t('examPaper.regenerate') : t('examPaper.generate')}
@@ -145,6 +168,17 @@ export function SetsPanel({ paper, readOnly = false }: Props) {
                   {t('examPaper.regenerateWarning')}
                 </p>
               )}
+              <ConfirmDialog
+                open={confirmRedraw}
+                onOpenChange={setConfirmRedraw}
+                title={t('examPaper.regenerateConfirmTitle')}
+                description={t('examPaper.regenerateConfirmDescription', {
+                  stamp: paper.drawStamp ?? '—',
+                })}
+                confirmLabel={t('examPaper.regenerate')}
+                isPending={generate.isPending}
+                onConfirm={draw}
+              />
             </div>
           )}
         </CardContent>

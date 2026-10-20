@@ -2,11 +2,13 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
+import { splitUnderline } from '../lib/underline';
 
 /**
  * Question text with its `$…$` formulas drawn, as the printer will draw
  * them. A formula KaTeX cannot read is shown as it was typed, in red, so the
  * teacher sees what to fix; the printer prints that one as typed too.
+ * Words inside `[u]…[/u]` are underlined, as printed.
  */
 
 const MATH = /\$\$([^$]+?)\$\$|\$([^$\n]+?)\$/g;
@@ -48,9 +50,28 @@ function parts(text: string): Part[] {
 }
 
 export function MathText({ text, className }: { text: string; className?: string }) {
-  const rendered = useMemo(() => parts(text), [text]);
+  const pieces = useMemo(
+    () => splitUnderline(text).map((piece) => ({ ...piece, parts: parts(piece.text) })),
+    [text],
+  );
   return (
     <span className={cn('whitespace-pre-wrap', className)}>
+      {pieces.map((piece, index) =>
+        piece.underline ? (
+          <u key={index} className="underline-offset-4">
+            <Parts parts={piece.parts} />
+          </u>
+        ) : (
+          <Parts key={index} parts={piece.parts} />
+        ),
+      )}
+    </span>
+  );
+}
+
+function Parts({ parts: rendered }: { parts: Part[] }) {
+  return (
+    <>
       {rendered.map((part) =>
         part.html !== undefined ? (
           // KaTeX escapes what it does not typeset, so its markup is safe to set.
@@ -63,6 +84,6 @@ export function MathText({ text, className }: { text: string; className?: string
           <span key={part.key}>{part.text}</span>
         ),
       )}
-    </span>
+    </>
   );
 }

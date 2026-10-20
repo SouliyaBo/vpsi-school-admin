@@ -1521,10 +1521,19 @@ export const en: typeof lo = {
     preambleHint:
       'Everything before question 1 in the file — school, subject, name/class line — printed at the head of every set as written',
     optionLabelStyle: 'Option letters',
+    boldQuestions: 'Bold questions',
+    boldQuestionsHint: 'Print every question in bold — the options and formulas stay regular',
     optionLabelLatin: 'A. B. C. D.',
     optionLabelLao: 'ກ. ຂ. ຄ. ງ.',
     section: 'Part',
     sectionHint: 'Questions are shuffled within their part only',
+    verseMake: 'Set as verse',
+    underline: 'Underline',
+    underlineSelectFirst: 'Select the words in the question box first, then press Underline',
+    underlineHint: 'Underlined words sit between [u] and [/u] — select them and press Underline again to remove it',
+    verseUndo: 'Undo verse',
+    verseSelectFirst: 'Select the verse in the question box first, then press Set as verse',
+    verseHint: 'Verse sits between ⟪ ⟫ — one line per row, | between the phrases. Printed in two columns',
     questionText: 'Question',
     imageTokenHint:
       '⟦1⟧ ⟦2⟧ … mark where each picture/equation sits in the sentence — move them, but do not type over them',
@@ -1564,6 +1573,13 @@ export const en: typeof lo = {
       'A new draw gives different sets — if any were printed already, reprint them all',
     seed: 'Seed',
     seedHint: 'Kept on record — the sets stay the same even after the questions are edited',
+    drawStamp: 'Draw',
+    drawStampHint:
+      'Printed on every document — papers, answer sheets, the answer key and the seat plan used together must show the same draw code',
+    regenerateConfirmTitle: 'Draw all the sets again?',
+    regenerateConfirmDescription:
+      'Every set is shuffled anew and draw {{stamp}} stops being valid: papers, answer sheets, the answer key and the seat plan already printed must all be printed again. Sheets already keyed or scanned are re-marked against the new sets.',
+    staleDraw: 'This sheet was printed from draw {{stamp}}, not the current draw ({{current}}) — its set and answers may not match',
 
     downloadsTitle: 'Downloads',
     allSets: 'All sets',
@@ -1576,7 +1592,7 @@ export const en: typeof lo = {
 
     seatPlanTitle: 'Seat plan (who gets which set)',
     seatPlanDescription:
-      'The class in roll order, seated row by row — neighbours beside or behind each other hold different sets',
+      'The class in roll order, seated row by row — every set is used, evenly, and neighbours beside or behind each other hold different sets',
     columns: 'Seats per row',
     columnsHint: 'Left to right, as the room is actually seated',
     showSeatPlan: 'Show plan',
