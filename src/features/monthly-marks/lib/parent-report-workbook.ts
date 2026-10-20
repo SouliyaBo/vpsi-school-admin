@@ -8,7 +8,7 @@ import {
   safeFileName,
   THIN_BORDER,
 } from '@/lib/workbook';
-import { displaySubjectTotal, displayTotal, type ClassMonthSheet } from '../api';
+import { displaySubjectTotal, displayTotal, isBelowPass, type ClassMonthSheet } from '../api';
 import type { StudentRegisterExtras } from './class-month-workbook';
 
 /**
@@ -30,9 +30,6 @@ import type { StudentRegisterExtras } from './class-month-workbook';
  * banded or averaged here, so the letter home cannot say something the screen
  * behind it does not.
  */
-
-/** ຜ່ານ at half marks, as the API scores it — a mark under it prints red. */
-const PASSING_MARK = 5;
 
 const FAIL_FONT = numberFont({ color: { argb: 'FF9C0006' }, bold: true });
 
@@ -223,7 +220,7 @@ export async function buildParentReportWorkbook(
 
     // ── The three mark rows, then the remark ─────────────────────────────
     const testRow = worksheet.addRow([labels.testRow, ...student.testScores]);
-    // ລວມ is written whole, as the office writes a month's total.
+    // ລວມ is written to one place, as the office writes a month's total.
     const totalRow = worksheet.addRow([labels.totalRow, ...student.scores.map(displayTotal)]);
     const gradeRow = worksheet.addRow([
       labels.subjectGradeRow,
@@ -246,10 +243,12 @@ export async function buildParentReportWorkbook(
         cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
         if (column >= firstSubject && column < totalColumn) {
           if (row === testRow) cell.numFmt = '0.00';
-          if (row === totalRow) cell.numFmt = '0';
-          // The letter row goes red under a failing ລວມ, so the F reads as one.
+          if (row === totalRow) cell.numFmt = '0.0';
+          // The letter row goes red under a failing ລວມ, so the F reads as one —
+          // failing on the subject's own line, 4.5 for a subject out of 9.
           const total = student.scores[column - firstSubject];
-          if (typeof total === 'number' && total < PASSING_MARK && row !== testRow) {
+          const fullMark = sheet.subjects[column - firstSubject]?.fullMark;
+          if (isBelowPass(total ?? null, fullMark) && row !== testRow) {
             cell.font = FAIL_FONT;
           }
         }
@@ -291,11 +290,11 @@ export async function buildParentReportWorkbook(
       cell.value = value;
       cell.font = numberFont({ bold: column !== countColumn });
       if (typeof value === 'number' && column !== countColumn) {
-        // ລວມ adds the whole marks the row above shows, so it is whole too;
+        // ລວມ adds the marks the row above shows, so it is to one place too;
         // ສະເລ່ຍ is the exact figure ເກຣດ is decided on and keeps its places.
-        cell.numFmt = column === totalColumn ? '0' : '0.00';
+        cell.numFmt = column === totalColumn ? '0.0' : '0.00';
       }
-      if (typeof student.average === 'number' && student.average < PASSING_MARK) {
+      if (isBelowPass(student.average)) {
         if (column === averageColumn || column === gradeColumn) cell.font = FAIL_FONT;
       }
     }

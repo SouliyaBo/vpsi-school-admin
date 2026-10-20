@@ -125,12 +125,18 @@ export function SheetPickers({
   );
 }
 
+/** More than the two decimal places a mark is typed to. */
+const TOO_PRECISE = /\.\d{3,}/;
+
 /**
  * One cell of the form.
  *
  * Held as text while it is being typed — a number input bound to a number cannot
  * represent "0." on the way to "0.5", and clearing it has to mean "unmarked"
  * rather than zero. What leaves is `null` or a number the column can hold.
+ *
+ * Marks are typed to two decimal places at most (the office's rule since 20 Oct
+ * 2026; it was one before): a third digit after the point is not taken.
  */
 export function MarkInput({
   value,
@@ -154,7 +160,7 @@ export function MarkInput({
     <Input
       type="number"
       inputMode="decimal"
-      step="0.1"
+      step="0.01"
       min={0}
       max={max}
       aria-label={label}
@@ -164,6 +170,7 @@ export function MarkInput({
       onChange={(event) => {
         const raw = event.target.value;
         if (raw === '') return onChange(null);
+        if (TOO_PRECISE.test(raw)) return;
         const parsed = Number(raw);
         onChange(Number.isNaN(parsed) ? null : parsed);
       }}

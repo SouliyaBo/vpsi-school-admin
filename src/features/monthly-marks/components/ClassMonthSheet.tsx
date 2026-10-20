@@ -200,11 +200,11 @@ export function ClassMonthSheet() {
                             key={data.subjects[index].id}
                             className="text-center tabular-nums"
                           >
-                            <Mark value={score} whole />
+                            <Mark value={score} rounded fullMark={data.subjects[index].fullMark} />
                           </TableCell>
                         ))}
                         <TableCell className="text-center tabular-nums">
-                          {displaySubjectTotal(row.scores) ?? (
+                          {displaySubjectTotal(row.scores)?.toFixed(1) ?? (
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>

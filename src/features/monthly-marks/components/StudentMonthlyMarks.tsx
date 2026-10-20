@@ -24,15 +24,13 @@ import { ErrorState } from '@/components/common/ErrorState';
 import { classroomHeading } from '@/features/classrooms/api';
 import {
   displaySubjectTotal,
-  displayTotal,
+  formatTotal,
+  isBelowPass,
   useStudentMonths,
   type MonthSubjectHeader,
   type StudentMonthlySheet,
   type StudentMonthSummary,
 } from '../api';
-
-/** ຜ່ານ at half marks, as the API scores it — a mark under it reads red. */
-const PASSING_MARK = 5;
 
 /** The picker's whole-term choice, beside the term's months. */
 const TERM_VIEW = 'term';
@@ -222,6 +220,8 @@ function MonthBlock({
   const blanks = data.subjects.map(() => null);
   const testScores = entry.testScores ?? blanks;
   const subjectGrades = entry.subjectGrades ?? blanks;
+  // What each column is out of — 9 for ພາສາລາວ and the social subjects.
+  const fullMarkAt = (index: number) => data.subjects[index]?.fullMark;
 
   return (
     <Block
@@ -237,7 +237,9 @@ function MonthBlock({
         subject,
         mark: entry.scores[index],
         grade: subjectGrades[index],
-        details: [{ label: t('monthlyMark.column.test'), value: testScores[index], max: 6 }],
+        details: [
+          { label: t('monthlyMark.column.test'), value: testScores[index], max: subject.testMax },
+        ],
       }))}
       rows={[
         {
@@ -246,12 +248,14 @@ function MonthBlock({
         },
         {
           label: t('monthlyMark.parentReportTotalRow'),
-          cells: entry.scores.map((score) => <Figure value={score} whole failBelowPass />),
+          cells: entry.scores.map((score, index) => (
+            <Figure value={score} rounded failBelowPass fullMark={fullMarkAt(index)} />
+          )),
         },
         {
           label: t('monthlyMark.parentReportSubjectGradeRow'),
           cells: subjectGrades.map((grade, index) => (
-            <Letter grade={grade} mark={entry.scores[index]} />
+            <Letter grade={grade} mark={entry.scores[index]} fullMark={fullMarkAt(index)} />
           )),
         },
       ]}
@@ -264,7 +268,7 @@ function MonthBlock({
         conduct,
         attendance,
       }}
-      wholeMarks
+      roundedMarks
       note={
         entry.average !== null && !entry.isComplete
           ? t('monthlyMark.studentIncompleteNote', {
@@ -323,15 +327,25 @@ function TermBlock({
       rows={[
         ...data.months.map((month, monthIndex) => ({
           label: t('monthlyMark.studentMonthRow', { month: t(`month.${month}`) }),
-          cells: rows.map((row) => <Figure value={row.monthScores[monthIndex]} failBelowPass />),
+          cells: rows.map((row) => (
+            <Figure
+              value={row.monthScores[monthIndex]}
+              failBelowPass
+              fullMark={row.subject.fullMark}
+            />
+          )),
         })),
         {
           label: t('monthlyMark.studentThreeMonthRow'),
-          cells: rows.map((row) => <Figure value={row.threeMonth} failBelowPass />),
+          cells: rows.map((row) => (
+            <Figure value={row.threeMonth} failBelowPass fullMark={row.subject.fullMark} />
+          )),
         },
         {
           label: t('monthlyMark.studentExamRow'),
-          cells: rows.map((row) => <Figure value={row.examScore} failBelowPass />),
+          cells: rows.map((row) => (
+            <Figure value={row.examScore} failBelowPass fullMark={row.subject.fullMark} />
+          )),
         },
         ...(anyBonus
           ? [
@@ -343,13 +357,19 @@ function TermBlock({
           : []),
         {
           label: t('monthlyMark.studentTermRow'),
-          cells: rows.map((row) => <Figure value={row.semesterMark} failBelowPass />),
+          cells: rows.map((row) => (
+            <Figure value={row.semesterMark} failBelowPass fullMark={row.subject.fullMark} />
+          )),
           emphasis: true,
         },
         {
           label: t('monthlyMark.parentReportSubjectGradeRow'),
           cells: rows.map((row) => (
-            <Letter grade={row.semesterGrade ?? null} mark={row.semesterMark} />
+            <Letter
+              grade={row.semesterGrade ?? null}
+              mark={row.semesterMark}
+              fullMark={row.subject.fullMark}
+            />
           )),
         },
       ]}
@@ -438,12 +458,13 @@ interface BlockProps {
   standing: Standing;
   note: string | null;
   /**
-   * Whether the headline marks are a month's ລວມ, which the office writes whole.
+   * Whether the headline marks are a month's ລວມ, which the office writes to
+   * one decimal place.
    *
    * The term view hands the same block its ພາກຮຽນ figures, and those keep their
    * two places — the rounding is the monthly sheet's rule, not the block's.
    */
-  wholeMarks?: boolean;
+  roundedMarks?: boolean;
 }
 
 /**
@@ -552,10 +573,10 @@ function PhoneBlock({
   items,
   standing,
   note,
-  wholeMarks = false,
+  roundedMarks = false,
 }: BlockProps) {
   const { t } = useTranslation();
-  const failing = standing.average !== null && standing.average < PASSING_MARK;
+  const failing = isBelowPass(standing.average);
   const subjects = data.subjects.length;
 
   return (
@@ -584,8 +605,8 @@ function PhoneBlock({
             <dd className="font-medium tabular-nums">
               {standing.total === null
                 ? '—'
-                : wholeMarks
-                  ? standing.total
+                : roundedMarks
+                  ? standing.total.toFixed(1)
                   : standing.total.toFixed(2)}
             </dd>
           </div>
@@ -654,7 +675,7 @@ function PhoneBlock({
         </div>
         <ul className="divide-y divide-border rounded-lg border border-border">
           {items.map((item) => {
-            const fails = item.mark !== null && item.mark < PASSING_MARK;
+            const fails = isBelowPass(item.mark, item.subject.fullMark);
             return (
               <li key={item.subject.id} className="flex items-center gap-3 px-3 py-2.5">
                 <div className="min-w-0 flex-1">
@@ -679,8 +700,8 @@ function PhoneBlock({
                   >
                     {item.mark === null
                       ? '—'
-                      : wholeMarks
-                        ? displayTotal(item.mark)
+                      : roundedMarks
+                        ? formatTotal(item.mark)
                         : item.mark.toFixed(2)}
                   </span>
                   <span
@@ -715,11 +736,11 @@ function ReportBlock({
   rows,
   standing,
   note,
-  wholeMarks = false,
+  roundedMarks = false,
 }: BlockProps) {
   const { t } = useTranslation();
   const subjects = data.subjects;
-  const failing = standing.average !== null && standing.average < PASSING_MARK;
+  const failing = isBelowPass(standing.average);
   const conduct = standing.conduct;
   const attendance = standing.attendance;
 
@@ -835,7 +856,7 @@ function ReportBlock({
                 {rowIndex === 0 && (
                   <>
                     <td rowSpan={rows.length} className={standingCell}>
-                      <Figure value={standing.total} whole={wholeMarks} />
+                      <Figure value={standing.total} rounded={roundedMarks} />
                     </td>
                     <td rowSpan={rows.length} className={cn(standingCell, 'font-normal')}>
                       {standing.average === null
@@ -920,36 +941,48 @@ function ReportBlock({
 /**
  * A figure to two places, or a dash; red under the pass line when asked.
  *
- * `whole` is for the marks the office writes whole — a month's ລວມ and the row
- * of them. The red still follows the exact figure, so a 4.7 prints as a red 5.
+ * `rounded` is for the marks the office writes to one place — a month's ລວມ and
+ * the row of them. The red still follows the exact figure, so a 4.96 prints as a
+ * red 5.0.
  */
 function Figure({
   value,
   failBelowPass = false,
-  whole = false,
+  rounded = false,
+  fullMark,
 }: {
   value: number | null;
   failBelowPass?: boolean;
-  whole?: boolean;
+  rounded?: boolean;
+  /** What the mark is out of — its pass line is half of it (4.5 of 9). */
+  fullMark?: number;
 }) {
   if (value === null) return <span className="text-muted-foreground">—</span>;
   return (
     <span
       className={cn(
         'tabular-nums',
-        failBelowPass && value < PASSING_MARK && 'font-medium text-danger',
+        failBelowPass && isBelowPass(value, fullMark) && 'font-medium text-danger',
       )}
     >
-      {whole ? displayTotal(value) : value.toFixed(2)}
+      {rounded ? formatTotal(value) : value.toFixed(2)}
     </span>
   );
 }
 
 /** The letter under a mark, red when the mark it bands is a failing one. */
-function Letter({ grade, mark }: { grade: Grade | null; mark: number | null }) {
+function Letter({
+  grade,
+  mark,
+  fullMark,
+}: {
+  grade: Grade | null;
+  mark: number | null;
+  fullMark?: number;
+}) {
   if (grade === null) return <span className="text-muted-foreground">—</span>;
   return (
-    <span className={cn('font-semibold', mark !== null && mark < PASSING_MARK && 'text-danger')}>
+    <span className={cn('font-semibold', isBelowPass(mark, fullMark) && 'text-danger')}>
       {grade}
     </span>
   );

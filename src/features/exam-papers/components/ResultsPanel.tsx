@@ -202,6 +202,10 @@ export function ResultsPanel({ paper, readOnly = false }: Props) {
  * does not know; the subject and the term are on the paper, and the rule of
  * which pupils get what is the marking's. What could stop the send is said
  * before the button, not after it.
+ *
+ * The one exception is a paper for a split subject — ສັງຄົມ is written as one
+ * paper but marked as ພູມສາດ, ປະຫວັດສາດ and ສຶກສາພົນລະເມືອງ — where the teacher
+ * also says which of those the points are for.
  */
 function PushCard({
   paper,
@@ -218,14 +222,24 @@ function PushCard({
   const [month, setMonth] = useState<string>(String(view.monthly.months[0] ?? ''));
   const [reason, setReason] = useState('');
   const { monthly } = view;
+  const isSplit = monthly.markedSubjects.length > 1;
+  const [markedSubjectId, setMarkedSubjectId] = useState<string>('');
+  // ກວດກາ is out of 5 in ພາສາລາວ and the social subjects, 6 elsewhere — so the
+  // limit is the one of the subject the points go to.
+  const target = isSplit
+    ? monthly.markedSubjects.find((subject) => subject.id === markedSubjectId)
+    : monthly.markedSubjects[0];
+  const testMax = target?.testMax ?? monthly.testMax;
 
   const blocker = !monthly.subject
     ? t('examPaper.pushNoSubject')
-    : (view.totalPoints ?? 0) > monthly.testMax
-      ? t('examPaper.pushTooMany', { total: view.totalPoints, max: monthly.testMax })
-      : view.summary.marked === 0
-        ? t('examPaper.pushNothingKeyed')
-        : null;
+    : isSplit && !markedSubjectId
+      ? t('examPaper.pushChooseSubject', { subject: monthly.subject.nameLo })
+      : (view.totalPoints ?? 0) > testMax
+        ? t('examPaper.pushTooMany', { total: view.totalPoints, max: testMax })
+        : view.summary.marked === 0
+          ? t('examPaper.pushNothingKeyed')
+          : null;
 
   return (
     <Card>
@@ -236,7 +250,7 @@ function PushCard({
         </CardTitle>
         <CardDescription>
           {t('examPaper.pushDescription', {
-            max: monthly.testMax,
+            max: testMax,
             subject: monthly.subject?.nameLo ?? '—',
           })}
           {monthly.semester && ` · ${monthly.semester.nameLo}`}
@@ -244,6 +258,27 @@ function PushCard({
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-end gap-3">
+          {isSplit && (
+            <div className="space-y-2">
+              <Label htmlFor="push-subject">{t('examPaper.pushSubject')}</Label>
+              <Select
+                value={markedSubjectId}
+                onValueChange={setMarkedSubjectId}
+                disabled={readOnly}
+              >
+                <SelectTrigger id="push-subject" className="w-52">
+                  <SelectValue placeholder={t('examPaper.pushSubjectPlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {monthly.markedSubjects.map((subject) => (
+                    <SelectItem key={subject.id} value={subject.id}>
+                      {subject.nameLo}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="push-month">{t('examPaper.pushMonth')}</Label>
             <Select value={month} onValueChange={setMonth} disabled={readOnly}>
@@ -278,6 +313,7 @@ function PushCard({
                     id: paper.id,
                     body: {
                       classroomId: view.classroom.id,
+                      subjectId: isSplit ? markedSubjectId : undefined,
                       month: Number(month),
                       overrideReason: reason.trim() || undefined,
                     },

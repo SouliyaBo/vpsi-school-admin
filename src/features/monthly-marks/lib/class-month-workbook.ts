@@ -8,7 +8,7 @@ import {
   safeFileName,
   THIN_BORDER,
 } from '@/lib/workbook';
-import { displaySubjectTotal, displayTotal, type ClassMonthSheet } from '../api';
+import { displaySubjectTotal, displayTotal, isBelowPass, type ClassMonthSheet } from '../api';
 
 /**
  * ສະຫຼຸບປະຈຳເດືອນ as the office's own workbook.
@@ -30,9 +30,6 @@ import { displaySubjectTotal, displayTotal, type ClassMonthSheet } from '../api'
  * carried forward through both terms, and ວັນຂາດ is the month the sheet is
  * headed with.
  */
-
-/** ຜ່ານ at half marks, as the API scores it — the red cells are drawn on it. */
-const PASSING_MARK = 5;
 
 /** Excel's own "Bad" cell style, which is what the school's red blocks mean. */
 const FAIL_FILL = {
@@ -362,21 +359,25 @@ export async function buildClassMonthWorkbook(
       if (!student.isEnrolled) cell.fill = LEFT_FILL;
     }
 
-    // The subject marks and ລວມ are whole, as the office writes them; ສະເລ່ຍ
+    // The subject marks and ລວມ are to one place, as the office writes them; ສະເລ່ຍ
     // keeps its two places, because it is the figure ເກຣດ and ລຳດັບ are decided
     // on and it is not rounded anywhere.
     for (let column = firstSubject; column <= averageColumn; column += 1) {
       const cell = row.getCell(column);
-      cell.numFmt = column === averageColumn ? '0.00' : '0';
-      // Shaded on the exact mark, not the printed one: a 4.7 rounds to 5 and is
+      cell.numFmt = column === averageColumn ? '0.00' : '0.0';
+      // Shaded on the exact mark, not the printed one: a 4.96 rounds to 5.0 and is
       // still a fail, and the sheet has to go on saying so.
+      // A subject's pass line is half of what it is out of — 4.5 for the
+      // 9-point subjects; the average's is 5.
+      const isSubject = column !== averageColumn && column !== totalColumn;
       const exact =
         column === averageColumn
           ? student.average
           : column === totalColumn
             ? student.total
             : student.scores[column - firstSubject];
-      if (typeof exact === 'number' && exact < PASSING_MARK) {
+      const fullMark = isSubject ? sheet.subjects[column - firstSubject]?.fullMark : undefined;
+      if (typeof exact === 'number' && isBelowPass(exact, fullMark)) {
         cell.fill = FAIL_FILL;
         cell.font = FAIL_FONT;
       }
@@ -400,7 +401,7 @@ export async function buildClassMonthWorkbook(
   //
   // Two pass/fail pairs, because the school counts it both ways and reads the
   // difference: ຈຳນວນນັກຮຽນ counts a student as ເສັງຕົກ if any single subject is
-  // below 5, while ສະເລ່ຍ counts their month as a whole. A class where the two
+  // below its pass line (5, or 4.5 of 9), while ສະເລ່ຍ counts their month as a whole. A class where the two
   // disagree is one carrying a subject, which is what the pair is there to show.
   //
   // Counted over the students who are on the roll and have a mark: a child who
@@ -408,11 +409,9 @@ export async function buildClassMonthWorkbook(
   worksheet.addRow([]);
   const counted = sheet.rows.filter((student) => student.isEnrolled && student.average !== null);
   const failedSubject = counted.filter((student) =>
-    student.scores.some((score) => score !== null && score < PASSING_MARK),
+    student.scores.some((score, index) => isBelowPass(score, sheet.subjects[index]?.fullMark)),
   ).length;
-  const failedAverage = counted.filter(
-    (student) => (student.average as number) < PASSING_MARK,
-  ).length;
+  const failedAverage = counted.filter((student) => isBelowPass(student.average)).length;
 
   const absenceTotal = (pick: (extras: StudentRegisterExtras) => number) =>
     sheet.rows.reduce((sum, student) => {

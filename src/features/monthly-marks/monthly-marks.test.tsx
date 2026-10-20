@@ -22,7 +22,14 @@ import { classMonthFileName } from './lib/class-month-workbook';
 
 const activeYear = { id: 'sy-1', code: '2025-2026', nameLo: 'ປີ 2025-2026', isActive: true };
 const semester = { id: 'sem-1', number: 1, nameLo: 'ພາກຮຽນ I', nameEn: 'Semester 1' };
-const subject = { id: 'sub-1', code: 'LAO-M1', nameLo: 'ພາສາລາວ', nameEn: 'Lao', strands: [] };
+const subject = {
+  id: 'sub-1',
+  code: 'LAO-M1',
+  nameLo: 'ພາສາລາວ',
+  nameEn: 'Lao',
+  strands: [],
+  fullMark: 10,
+};
 const classroom = {
   id: 'cls-1',
   name: 'ກ',
@@ -172,18 +179,18 @@ describe('monthly marks — the entry form', () => {
     await chooseSheet();
 
     const row = (await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/)).closest('tr') as HTMLElement;
-    // The sheet's own numbers: 1 + 1 + 2 + 3.9, written as the whole mark 8.
-    expect(within(row).getByText('8')).toBeInTheDocument();
+    // The sheet's own numbers: 1 + 1 + 2 + 3.9, written to one place as 7.9.
+    expect(within(row).getByText('7.9')).toBeInTheDocument();
 
     const test = within(row).getByLabelText(/Test$/);
     await userEvent.clear(test);
     await userEvent.type(test, '4.6');
 
-    // ລວມ answers under the fingers of whoever is typing — 8.6 lands on 9.
-    expect(await within(row).findByText('9')).toBeInTheDocument();
+    // ລວມ answers under the fingers of whoever is typing.
+    expect(await within(row).findByText('8.6')).toBeInTheDocument();
   });
 
-  it('writes ລວມ as a whole mark, rounding a half up', async () => {
+  it('writes ລວມ to one decimal place, rounding a half up', async () => {
     renderWithProviders(<MonthGridForm />);
     await chooseSheet();
 
@@ -193,15 +200,33 @@ describe('monthly marks — the entry form', () => {
     // the whole of it: a cell still reading 5.5 would pass a text match for 5.
     const total = () => row.children[row.children.length - 2]?.textContent;
 
-    // 1 + 1 + 2 + 1.5 = 5.5 — the office's own example, which goes up to 6.
+    // ກວດກາ takes two places now. 1 + 1 + 2 + 1.45 = 5.45 — the office's own
+    // example, which goes up to 5.5.
     await userEvent.clear(test);
-    await userEvent.type(test, '1.5');
-    await waitFor(() => expect(total()).toBe('6'));
+    await userEvent.type(test, '1.45');
+    await waitFor(() => expect(total()).toBe('5.5'));
 
-    // 5.4 goes the other way, to 5.
+    // 4.44 goes the other way: 1 + 1 + 2 + 0.44 is written 4.4.
     await userEvent.clear(test);
-    await userEvent.type(test, '1.4');
-    await waitFor(() => expect(total()).toBe('5'));
+    await userEvent.type(test, '0.44');
+    await waitFor(() => expect(total()).toBe('4.4'));
+
+    // A whole total still shows its place, so a column of them lines up.
+    await userEvent.clear(test);
+    await userEvent.type(test, '2');
+    await waitFor(() => expect(total()).toBe('6.0'));
+  });
+
+  it('takes a mark to two decimal places and no further', async () => {
+    renderWithProviders(<MonthGridForm />);
+    await chooseSheet();
+
+    const row = (await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/)).closest('tr') as HTMLElement;
+    const test = within(row).getByLabelText(/Test$/);
+    await userEvent.clear(test);
+    await userEvent.type(test, '5.456');
+
+    expect(test).toHaveValue(5.45);
   });
 
   it('opens on a month the term actually collects', async () => {
@@ -264,7 +289,7 @@ describe('monthly marks — the entry form', () => {
     expect(within(row).getByLabelText(/Notebook$/)).toHaveValue(1);
     expect(within(row).getByLabelText(/Activity$/)).toHaveValue(2);
     expect(within(row).getByLabelText(/Test$/)).toHaveValue(6);
-    expect(within(row).getByText('10')).toBeInTheDocument();
+    expect(within(row).getByText('10.0')).toBeInTheDocument();
 
     // And it says so, because nothing of this is on the server yet.
     expect(screen.getByText(/start on full marks/i)).toBeInTheDocument();
@@ -425,7 +450,7 @@ describe('monthly marks — the entry form', () => {
     expect(within(row).getByLabelText(/Attendance$/)).toHaveValue(1);
     expect(within(row).getByLabelText(/Activity$/)).toHaveValue(3);
     expect(within(row).getByLabelText(/Test$/)).toHaveValue(6);
-    expect(within(row).getByText('10')).toBeInTheDocument();
+    expect(within(row).getByText('10.0')).toBeInTheDocument();
   });
 
   it('leaves the dropped column unwritten rather than sending a zero for it', async () => {
@@ -496,6 +521,50 @@ describe('monthly marks — the term sheet', () => {
     // 4.10 is under 5 and is shown as such; the term mark it feeds is not.
     expect(within(row).getByText('4.10')).toHaveClass('text-danger');
     expect(within(row).getByText('5.04')).not.toHaveClass('text-danger');
+  });
+
+  it('reads a subject out of 9 against its own pass line, 4.5', async () => {
+    stubReads({
+      '/monthly-marks/semester': canOnlyRead({
+        ...semesterSheet([
+          sheetRow({
+            studentId: 'stu-3',
+            studentNameLo: 'ສີວິໄຊ ພັນຍຸລາດ',
+            threeMonth: 4.6,
+            examScore: 4.4,
+            semesterMark: 4.5,
+            isPassing: true,
+          }),
+        ]),
+        // ພາສາລາວ since 20 Oct 2026: ກວດກາ out of 5, the month and exam out of 9.
+        subject: { ...subject, fullMark: 9 },
+        columnMax: { ...COLUMN_MAX, test: 5 },
+      }),
+    });
+    renderWithProviders(<SemesterSheet />);
+    await chooseSheet();
+
+    const row = (await screen.findByText(/ສີວິໄຊ/)).closest('tr') as HTMLElement;
+    // Out of 10 a 4.6 and a 4.5 would both be fails; out of 9 they pass.
+    expect(within(row).getByText('4.60')).not.toHaveClass('text-danger');
+    expect(within(row).getByText('4.50')).not.toHaveClass('text-danger');
+    expect(within(row).getByText('4.40')).toHaveClass('text-danger');
+    expect(screen.getByRole('columnheader', { name: /Exam/ })).toHaveTextContent('/9');
+  });
+
+  it('keeps the exam of a subject out of 9 to 9', async () => {
+    stubReads({
+      '/monthly-marks/semester': {
+        ...semesterSheet(),
+        subject: { ...subject, fullMark: 9 },
+        columnMax: { ...COLUMN_MAX, test: 5 },
+      },
+    });
+    renderWithProviders(<SemesterSheet />);
+    await chooseSheet();
+
+    const row = (await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/)).closest('tr') as HTMLElement;
+    expect(within(row).getByLabelText(/Exam$/)).toHaveAttribute('max', '9');
   });
 
   it('keeps a student who has left on the sheet', async () => {
@@ -603,6 +672,8 @@ const upperClass = {
   isActive: true,
 };
 
+const NINE_POINT = new Set(['ພາສາລາວ-ວັນນະຄະດີ', 'ສຶກສາພົນລະເມືອງ', 'ພູມສາດ', 'ປະຫວັດສາດ']);
+
 const M4_SUBJECTS = [
   'ພາສາລາວ-ວັນນະຄະດີ',
   'ຄະນິດສາດ',
@@ -612,7 +683,14 @@ const M4_SUBJECTS = [
   'ຊີວະສາດ',
   'ພູມສາດ',
   'ປະຫວັດສາດ',
-].map((nameLo, index) => ({ id: `m4-${index}`, code: `S${index}`, nameLo, nameEn: null }));
+].map((nameLo, index) => ({
+  id: `m4-${index}`,
+  code: `S${index}`,
+  nameLo,
+  nameEn: null,
+  // ພາສາລາວ and the three social subjects are out of 9, their ກວດກາ out of 5.
+  ...(NINE_POINT.has(nameLo) ? { fullMark: 9, testMax: 5 } : { fullMark: 10, testMax: 6 }),
+}));
 
 describe('monthly marks — the class summary for a month', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -721,8 +799,8 @@ describe('monthly marks — the class summary for a month', () => {
         studentNickname: 'ໄມ້ຟ້າ',
         rollNumber: 1,
         isEnrolled: true,
-        scores: [8, 7, 8, 7, 6.5, 7, 8, 8],
-        total: 59.5,
+        scores: [8, 7, 8, 7, 6.45, 7, 8, 8],
+        total: 59.45,
         average: 7.44,
         isComplete: true,
         subjectsRecorded: 8,
@@ -742,10 +820,11 @@ describe('monthly marks — the class summary for a month', () => {
     }
 
     const row = (await screen.findByText(/ຈຸທາມາດ/)).closest('tr') as HTMLElement;
-    // The subject marks print whole, and ລວມ adds those: the 6.5 goes up to 7,
-    // so the row comes to 60 rather than the 59.50 its decimals made. ສະເລ່ຍ is
-    // untouched — it is what ເກຣດ and ລຳດັບ are decided on.
-    expect(within(row).getByText('60')).toBeInTheDocument();
+    // The subject marks print to one place, and ລວມ adds those: the 6.45 goes up
+    // to 6.5, so the row comes to 59.5 rather than the 59.45 its hundredths made.
+    // ສະເລ່ຍ is untouched — it is what ເກຣດ and ລຳດັບ are decided on.
+    expect(within(row).getByText('6.5')).toBeInTheDocument();
+    expect(within(row).getByText('59.5')).toBeInTheDocument();
     expect(within(row).getByText('7.44')).toBeInTheDocument();
     // 7.44 out of 10 — the school's B runs 7–8.4.
     expect(within(row).getByText('B')).toBeInTheDocument();
@@ -948,15 +1027,15 @@ describe('monthly marks — the class summary for a month', () => {
   });
 
   /**
-   * ລວມ is a whole mark on the office's sheet, and the row has to add up.
+   * ລວມ is written to one place on the office's sheet, and the row has to add up.
    *
    * Two rules meet on this row and neither may be read off the other: the marks
-   * and their ລວມ print whole, while ສະເລ່ຍ stays the exact figure ເກຣດ, ລຳດັບ
+   * and their ລວມ print to one decimal place, while ສະເລ່ຍ stays the exact figure ເກຣດ, ລຳດັບ
    * and ຜ່ານ/ຕົກ are decided on. So ລວມ adds the *printed* marks rather than
-   * rounding their exact sum — a row showing 8 + 7 + … that came to something
+   * rounding their exact sum — a row showing 8.0 + 7.0 + … that came to something
    * else would be the first thing the office queried.
    */
-  it('writes the month as whole marks, and adds up the marks it prints', async () => {
+  it('writes the month to one place, and adds up the marks it prints', async () => {
     stubMonth([
       {
         studentId: 'stu-1',
@@ -965,8 +1044,8 @@ describe('monthly marks — the class summary for a month', () => {
         studentNickname: 'ໄມ້ຟ້າ',
         rollNumber: 1,
         isEnrolled: true,
-        scores: [8, 7, 8, 7, 6.5, 7, 8, 4],
-        total: 55.5,
+        scores: [8, 7, 8, 7, 6.45, 7.45, 8, 4],
+        total: 55.9,
         average: 6.94,
         isComplete: true,
         subjectsRecorded: 8,
@@ -985,12 +1064,13 @@ describe('monthly marks — the class summary for a month', () => {
 
     // The eight subject columns run E to L, ລວມ is M and ສະເລ່ຍ is N.
     expect(worksheet.getCell('E7').value).toBe(8);
-    // Half a mark goes up, which is the whole change: 6.5 is written 7.
-    expect(worksheet.getCell('I7').value).toBe(7);
-    expect(worksheet.getCell('I7').numFmt).toBe('0');
-    // 8 + 7 + 8 + 7 + 7 + 7 + 8 + 4, not the 55.50 the decimals came to.
+    // Half a tenth goes up: 6.45 is written 6.5, 7.45 is written 7.5.
+    expect(worksheet.getCell('I7').value).toBe(6.5);
+    expect(worksheet.getCell('I7').numFmt).toBe('0.0');
+    expect(worksheet.getCell('J7').value).toBe(7.5);
+    // 8 + 7 + 8 + 7 + 6.5 + 7.5 + 8 + 4, not the 55.9 the hundredths came to.
     expect(worksheet.getCell('M7').value).toBe(56);
-    expect(worksheet.getCell('M7').numFmt).toBe('0');
+    expect(worksheet.getCell('M7').numFmt).toBe('0.0');
     // ສະເລ່ຍ untouched, to two places.
     expect(worksheet.getCell('N7').value).toBe(6.94);
     expect(worksheet.getCell('N7').numFmt).toBe('0.00');
@@ -1100,13 +1180,16 @@ describe('monthly marks — the class summary for a month', () => {
     expect(worksheet.getCell('M3').value).toBe('Overall grade');
 
     // ກວດກາ above ລວມ, the letter under each, and an unmarked subject left blank.
-    expect(worksheet.getCell('A4').value).toBe('Test mark (out of 6)');
+    expect(worksheet.getCell('A4').value).toBe('Test mark (out of 5–6)');
     expect(worksheet.getCell('B4').value).toBe(2.3);
     expect(worksheet.getCell('B4').font).toMatchObject({ name: 'Times New Roman' });
-    expect(worksheet.getCell('A5').value).toBe('Month total (out of 10)');
-    // ລວມ is written whole — 6.3 down to 6 — while ກວດກາ above it keeps its places.
-    expect(worksheet.getCell('B5').value).toBe(6);
-    expect(worksheet.getCell('B5').numFmt).toBe('0');
+    expect(worksheet.getCell('A5').value).toBe('Month total (out of 9–10)');
+    // ລວມ is written to one place — 6.32 down to 6.3 — while ກວດກາ above it keeps
+    // its two.
+    expect(worksheet.getCell('B5').value).toBe(6.3);
+    expect(worksheet.getCell('D5').value).toBe(6.3);
+    expect(worksheet.getCell('B5').numFmt).toBe('0.0');
+    expect(worksheet.getCell('D4').value).toBe(2.32);
     expect(worksheet.getCell('A6').value).toBe('Grade per subject');
     expect(worksheet.getCell('B6').value).toBe('C');
     expect(worksheet.getCell('F6').value).toBe('D');
@@ -1118,8 +1201,9 @@ describe('monthly marks — the class summary for a month', () => {
 
     // The month's figures, merged down the three rows: ລວມ, then how far short
     // of a full month the child is instead of a count, ສະເລ່ຍ, and no letter yet.
-    // 6 + 7 + 6 + 7 + 5, the whole marks on the row above.
+    // 6.3 + 6.8 + 6.3 + 6.8 + 4.8, the marks on the row above — not 31.02.
     expect(worksheet.getCell('J4').value).toBe(31);
+    expect(worksheet.getCell('J4').numFmt).toBe('0.0');
     expect(worksheet.getCell('J4').isMerged).toBe(true);
     expect(worksheet.getCell('K4').value).toBe('5/8 marked');
     expect(worksheet.getCell('L4').value).toBe(3.88);
@@ -1335,6 +1419,7 @@ const M1_SUBJECTS = ['ພາສາລາວ', 'ຄະນິດສາດ', 'ທ�
   code: `S${index}`,
   nameLo,
   nameEn: null,
+  ...(nameLo === 'ພາສາລາວ' ? { fullMark: 9, testMax: 5 } : { fullMark: 10, testMax: 6 }),
 }));
 
 /** One month of the card: the marks across, then what the school reads out. */
@@ -1471,13 +1556,14 @@ describe("monthly marks — one student's card", () => {
     const test = screen.getByRole('row', { name: /Test mark/ });
     expect(within(test).getByText('4.90')).toBeInTheDocument();
     const total = screen.getByRole('row', { name: /Month total/ });
-    // 7.9, 8, 7, 8 written whole: three 8s and a 7.
-    expect(within(total).getAllByText('8')).toHaveLength(3);
-    expect(within(total).getByText('7')).toBeInTheDocument();
+    // 7.9, 8, 7, 8 written to one place, the whole ones included.
+    expect(within(total).getByText('7.9')).toBeInTheDocument();
+    expect(within(total).getAllByText('8.0')).toHaveLength(2);
+    expect(within(total).getByText('7.0')).toBeInTheDocument();
     // ລວມ · ຈຳນວນວິຊາ · ສະເລ່ຍ · ເກຣດ stand beside the first row. No ລຳດັບ:
     // the office asked for it to go (16 Sep 2026) — it is not read out here.
-    // ລວມ adds the whole marks — 8 + 8 + 7 + 8 — not the 30.90 of their decimals.
-    expect(within(test).getByText('31')).toBeInTheDocument();
+    // ລວມ adds the printed marks — 7.9 + 8.0 + 7.0 + 8.0.
+    expect(within(test).getByText('30.9')).toBeInTheDocument();
     expect(within(test).getByText('4')).toBeInTheDocument();
     expect(within(test).getByText('7.73')).toBeInTheDocument();
     expect(screen.queryByText('3/42')).not.toBeInTheDocument();
@@ -1588,14 +1674,14 @@ describe("monthly marks — one student's card", () => {
     const items = screen.getAllByRole('listitem');
     expect(items).toHaveLength(4);
     const maths = items.find((item) => within(item).queryByText('ຄະນິດສາດ')) as HTMLElement;
-    expect(within(maths).getByText('8')).toBeInTheDocument();
+    expect(within(maths).getByText('8.0')).toBeInTheDocument();
     expect(within(maths).getByText('B')).toBeInTheDocument();
     // ກວດກາ sits under the subject, out of its own maximum.
     expect(within(maths).getByText('5.00')).toBeInTheDocument();
     expect(within(maths).getByText('/6')).toBeInTheDocument();
     // The month's own figures — ສະເລ່ຍ, ລວມ — read once, above the list.
     expect(screen.getByText('7.73')).toBeInTheDocument();
-    expect(screen.getByText('31')).toBeInTheDocument();
+    expect(screen.getByText('30.9')).toBeInTheDocument();
     expect(screen.getByText('95/100')).toBeInTheDocument();
     expect(screen.getByText('18/20')).toBeInTheDocument();
   });

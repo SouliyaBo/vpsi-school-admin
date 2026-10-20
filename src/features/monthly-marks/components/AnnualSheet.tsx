@@ -109,11 +109,11 @@ export function AnnualSheet() {
                       </TableCell>
                       {data.semesters.map((semester, index) => (
                         <TableCell key={semester.id} className="text-center">
-                          <Mark value={row.semesterMarks[index] ?? null} />
+                          <Mark value={row.semesterMarks[index] ?? null} fullMark={data.subject.fullMark} />
                         </TableCell>
                       ))}
                       <TableCell className="text-center font-semibold">
-                        <Mark value={row.annual} />
+                        <Mark value={row.annual} fullMark={data.subject.fullMark} />
                       </TableCell>
                       <TableCell className="text-center">
                         {row.isPassing === null ? (

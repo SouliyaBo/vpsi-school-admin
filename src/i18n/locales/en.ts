@@ -603,8 +603,8 @@ export const en: typeof lo = {
       '{{students}} students · {{passed}} passed · {{failed}} failed · {{incomplete}} incomplete · average {{average}}',
     annualSummary: '{{students}} students · {{passed}} passed · {{failed}} failed',
     sheetNote:
-      'A month is out of 10 (attendance 1 · notebook 1 · activity 2 · test 6). Three months is their mean; the term is (three months + exam) ÷ 2 plus any bonus, capped at 10. Nothing is rounded before it is averaged.',
-    annualNote: 'The year is the mean of the two terms; 5 is the pass mark.',
+      'A month is out of 10 (attendance 1 · notebook 1 · activity 2 · test 6) — out of 9 for Lao, history, civics and geography, whose test is out of 5 and whose exam is out of 9 too. Three months is their mean; the term is (three months + exam) ÷ 2 plus any bonus, capped at the full mark. A 9-point subject passes at 4.5. Nothing is rounded before it is averaged.',
+    annualNote: 'The year is the mean of the two terms; 5 is the pass mark (4.5 for a subject out of 9).',
 
     // ── Monthly class summary ──────────────────────────────────────────────
     monthTab: 'Monthly summary',
@@ -675,8 +675,8 @@ export const en: typeof lo = {
     parentReportFileName: 'Parent report {{month}} ({{monthNumber}})',
     parentReportTitle: 'Monthly results — {{month}} ({{monthNumber}}), school year {{year}}',
     parentReportCorner: 'Marks / Subject',
-    parentReportTestRow: 'Test mark (out of 6)',
-    parentReportTotalRow: 'Month total (out of 10)',
+    parentReportTestRow: 'Test mark (out of 5–6)',
+    parentReportTotalRow: 'Month total (out of 9–10)',
     parentReportSubjectGradeRow: 'Grade per subject',
     parentReportRemarkRow: "Homeroom teacher's remarks per subject",
     parentReportRegisterCorner: 'Conduct and attendance',
@@ -699,11 +699,11 @@ export const en: typeof lo = {
       '{{months}} is still short of the {{total}} subjects, so the average is not final and no grade is given yet.',
     studentWholeTerm: 'Whole term',
     studentTermTitle: '{{semester}} results, school year {{year}}',
-    studentMonthRow: '{{month}} (out of 10)',
+    studentMonthRow: '{{month}} (out of 9–10)',
     studentThreeMonthRow: '3-month average',
-    studentExamRow: 'Exam (out of 10)',
+    studentExamRow: 'Exam (out of 9–10)',
     studentBonusRow: 'Bonus',
-    studentTermRow: 'Term mark (out of 10)',
+    studentTermRow: 'Term mark (out of 9–10)',
     studentTermIncompleteNote:
       'Some subjects have no term mark yet ({{recorded}}/{{total}} recorded), so the average is not final and no grade is given yet.',
   },
@@ -1450,7 +1450,7 @@ export const en: typeof lo = {
     columnMax: "Set this subject's own monthly maximums",
     columnMaxHint:
       'The usual columns are ຂື້ນຫ້ອງ 1 · ປື້ມ 1 · ກິດຈະກຳ 2 · ກວດກາ 6. Turn this on for a subject marked differently — ສັງຄົມ at ມ.1–ມ.3, and ພູມສາດ, ສຶກສາພົນລະເມືອງ and ປະຫວັດສາດ at ມ.5 and ມ.6, keep no notebook mark (1 · 0 · 3 · 6).',
-    columnMaxTotalHint: 'The four must total 10. A column set to 0 is dropped from the entry form.',
+    columnMaxTotalHint: 'The four add up to what the subject is out of — 10, or 9 (test 5) — and may not exceed 10. A column set to 0 is dropped from the entry form.',
     title: 'Subjects',
     groupHint: 'Left blank, this subject’s plans fall into the “unassigned” group',
     noGroup: 'No department',
@@ -1619,6 +1619,8 @@ export const en: typeof lo = {
     pushDescription:
       'Every keyed sheet’s points go into the ກວດກາ column (out of {{max}}) of the chosen month for {{subject}} — under the same rules as entering the month by hand',
     pushMonth: 'Month',
+    pushSubject: 'Send to subject',
+    pushSubjectPlaceholder: 'Choose a subject',
     pushOverride: 'Reason (if that month is already submitted)',
     push: 'Send marks',
     pushed: 'Sent to the monthly sheet: {{saved}} pupils',
@@ -1672,6 +1674,7 @@ export const en: typeof lo = {
     scanDelete: 'Delete photo',
     scanOnlyFlagged: 'Only questions to check',
     pushNoSubject: 'This paper has no subject — set one on upload or by editing the paper first',
+    pushChooseSubject: '{{subject}} is marked as several subjects — choose which one the marks go to',
     pushTooMany:
       'A total of {{total}} exceeds the ກວດກາ column ({{max}}) — set a total of at most {{max}} first',
   },
@@ -2401,7 +2404,7 @@ export const en: typeof lo = {
     invalidDate: 'Enter a valid date',
     endBeforeStart: 'End date must be after the start date',
     integer: 'Must be a whole number',
-    columnMaxTotal: 'The four columns must total {{total}}',
+    columnMaxTotal: 'The four columns must total more than 0 and no more than {{total}}',
   },
   errors: {
     title: 'Something went wrong',

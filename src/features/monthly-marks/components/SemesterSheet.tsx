@@ -18,16 +18,14 @@ import { ErrorState } from '@/components/common/ErrorState';
 import { StudentName } from '@/components/common/StudentName';
 import { classroomHeading } from '@/features/classrooms/api';
 import {
-  displayTotal,
+  formatTotal,
+  isBelowPass,
   useSaveTermMarks,
   useSemesterSheet,
   type SemesterSheet as SemesterSheetData,
   type SheetRow,
 } from '../api';
 import { MarkInput, SheetPickers, type SheetTargetState } from './SheetPickers';
-
-/** ຜ່ານ at half marks, as the API scores it. */
-const PASSING_MARK = 5;
 
 interface TermDraft {
   examScore: number | null;
@@ -148,7 +146,12 @@ export function SemesterSheet() {
                     <TableHead className="w-24 text-center">
                       {t('monthlyMark.threeMonth')}
                     </TableHead>
-                    <TableHead className="w-24 text-center">{t('monthlyMark.exam')}</TableHead>
+                    <TableHead className="w-24 text-center">
+                      {t('monthlyMark.exam')}
+                      <span className="ms-1 font-normal text-muted-foreground">
+                        /{data.subject.fullMark}
+                      </span>
+                    </TableHead>
                     <TableHead className="w-24 text-center">{t('monthlyMark.bonus')}</TableHead>
                     <TableHead className="w-24 text-center">{t('monthlyMark.termMark')}</TableHead>
                   </TableRow>
@@ -163,17 +166,17 @@ export function SemesterSheet() {
                       </TableCell>
                       {row.months.map((month) => (
                         <TableCell key={month.month} className="text-center tabular-nums">
-                          <Mark value={month.score} />
+                          <Mark value={month.score} fullMark={data.subject.fullMark} />
                         </TableCell>
                       ))}
                       <TableCell className="text-center tabular-nums">
-                        <Mark value={row.threeMonth} />
+                        <Mark value={row.threeMonth} fullMark={data.subject.fullMark} />
                       </TableCell>
                       <TableCell className="text-center">
                         {data.canEdit ? (
                           <MarkInput
                             value={draft[row.studentId]?.examScore ?? null}
-                            max={10}
+                            max={data.subject.fullMark}
                             disabled={!row.isEnrolled}
                             label={`${row.studentNameLo} · ${t('monthlyMark.exam')}`}
                             onChange={(next) =>
@@ -187,14 +190,14 @@ export function SemesterSheet() {
                             }
                           />
                         ) : (
-                          <Mark value={row.examScore} />
+                          <Mark value={row.examScore} fullMark={data.subject.fullMark} />
                         )}
                       </TableCell>
                       <TableCell className="text-center">
                         {data.canEdit ? (
                           <MarkInput
                             value={draft[row.studentId]?.bonus ?? null}
-                            max={10}
+                            max={data.subject.fullMark}
                             disabled={!row.isEnrolled}
                             label={`${row.studentNameLo} · ${t('monthlyMark.bonus')}`}
                             onChange={(next) =>
@@ -212,7 +215,7 @@ export function SemesterSheet() {
                         )}
                       </TableCell>
                       <TableCell className="text-center font-semibold tabular-nums">
-                        <Mark value={row.semesterMark} />
+                        <Mark value={row.semesterMark} fullMark={data.subject.fullMark} />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -231,16 +234,27 @@ export function SemesterSheet() {
 /**
  * A mark out of 10 — dashed while unmarked, red below the pass line.
  *
- * `whole` writes it the way the office writes a month's ລວມ, rounded to a whole
- * mark. The red stays on the exact figure, so a 4.7 prints as a red 5 rather
+ * `rounded` writes it the way the office writes a month's ລວມ, to one decimal
+ * place. The red stays on the exact figure, so a 4.96 prints as a red 5.0 rather
  * than passing itself off as one: the pass line is drawn where the marks
  * actually fall, not where they round to.
+ *
+ * `fullMark` is what the mark is out of — 9 for ພາສາລາວ and the social subjects,
+ * whose pass line is 4.5; 10 (pass at 5) for everything else and for averages.
  */
-export function Mark({ value, whole = false }: { value: number | null; whole?: boolean }) {
+export function Mark({
+  value,
+  rounded = false,
+  fullMark,
+}: {
+  value: number | null;
+  rounded?: boolean;
+  fullMark?: number;
+}) {
   if (value === null) return <span className="text-muted-foreground">—</span>;
   return (
-    <span className={cn('tabular-nums', value < PASSING_MARK && 'font-medium text-danger')}>
-      {whole ? displayTotal(value) : value.toFixed(2)}
+    <span className={cn('tabular-nums', isBelowPass(value, fullMark) && 'font-medium text-danger')}>
+      {rounded ? formatTotal(value) : value.toFixed(2)}
     </span>
   );
 }

@@ -99,8 +99,11 @@ const schema = z.object({
     return;
   }
 
-  const total = columns.reduce<number>((sum, value) => sum + (value ?? 0), 0);
-  if (Math.round(total * 100) / 100 !== MARK_TOTAL) {
+  // The sum is what the subject is out of — 10, or 9 for ພາສາລາວ and the social
+  // subjects — so anything above nothing and up to 10 is a scheme.
+  const sum = columns.reduce<number>((total, value) => total + (value ?? 0), 0);
+  const total = Math.round(sum * 100) / 100;
+  if (total <= 0 || total > MARK_TOTAL) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['maxTest'],
@@ -109,7 +112,7 @@ const schema = z.object({
   }
 });
 
-/** Every part of the monthly sheet is out of 10 — see the API's `MARK_MAX`. */
+/** The most a month can be out of — see the API's `MARK_MAX` and `fullMarkOf`. */
 const MARK_TOTAL = 10;
 
 /** The four form fields that make up an override, in the sheet's own order. */

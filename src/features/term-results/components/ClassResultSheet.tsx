@@ -33,9 +33,6 @@ import {
   type TermResult,
 } from '../api';
 
-/** ຜ່ານ at half marks — the same line the monthly sheet is read against. */
-const PASSING_MARK = 5;
-
 /**
  * ໃບຄະແນນລວມ — one class, one term, every subject.
  *
@@ -281,7 +278,9 @@ function ResultRow({
             ) : (
               <span
                 className={cn(
-                  mark < PASSING_MARK && 'font-medium text-danger',
+                  // The API's verdict, not a line drawn here: a subject out of 9
+                  // passes at 4.5.
+                  result?.isPassed === false && 'font-medium text-danger',
                   // A subject still missing a month reads as a figure that is
                   // going to move, not as a result.
                   result?.isIncomplete && 'italic text-muted-foreground',

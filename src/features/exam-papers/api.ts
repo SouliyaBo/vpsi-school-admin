@@ -90,6 +90,16 @@ export interface ResponsesView {
   /** Where the points can go: the ກວດກາ column of one of this term's months. */
   monthly: {
     subject: { id: string; nameLo: string } | null;
+    /**
+     * The subjects the points can be sent to — the paper's own, or, where it is
+     * split (ສັງຄົມ → ພູມສາດ, ປະຫວັດສາດ …), the ones it splits into.
+     */
+    markedSubjects: {
+      id: string;
+      nameLo: string;
+      /** What its ກວດກາ is out of — 5 for ພາສາລາວ and the social subjects, 6 else. */
+      testMax: number;
+    }[];
     semester: { id: string; nameLo: string; number: number } | null;
     months: number[];
     testMax: number;
@@ -208,7 +218,7 @@ export const examPapersApi = {
   deleteScan: (id: string, scanId: string) => del<void>(`/exam-papers/${id}/scans/${scanId}`),
   pushToMonthlyMarks: (
     id: string,
-    body: { classroomId?: string; month: number; overrideReason?: string },
+    body: { classroomId?: string; subjectId?: string; month: number; overrideReason?: string },
   ) =>
     post<{ saved: number; skipped: number; errors: { studentId: string; reason: string }[] }>(
       `/exam-papers/${id}/push-to-monthly-marks`,
@@ -403,7 +413,7 @@ export function usePushToMonthlyMarks() {
       body,
     }: {
       id: string;
-      body: { classroomId?: string; month: number; overrideReason?: string };
+      body: { classroomId?: string; subjectId?: string; month: number; overrideReason?: string };
     }) => examPapersApi.pushToMonthlyMarks(id, body),
     // The monthly sheet moved; whatever of it is on screen is stale.
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['monthly-marks'] }),

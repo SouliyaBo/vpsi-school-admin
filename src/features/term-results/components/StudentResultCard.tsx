@@ -255,7 +255,8 @@ function ResultCard({ row }: { row: TermResult }) {
                     ) : (
                       <span
                         className={cn(
-                          mark < PASSING_MARK && 'text-danger',
+                          // The API's verdict — 4.5 passes a subject out of 9.
+                          !subject.isPassed && 'text-danger',
                           // A subject still short of a month reads as a figure
                           // that is going to move, not as a result.
                           subject.isIncomplete && 'italic font-normal text-muted-foreground',

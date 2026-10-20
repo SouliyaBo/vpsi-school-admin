@@ -111,6 +111,7 @@ const RESPONSES = {
   totalPoints: 6,
   monthly: {
     subject: { id: 'sub-1', nameLo: 'ພູມສາດ' },
+    markedSubjects: [{ id: 'sub-1', nameLo: 'ພູມສາດ', testMax: 6 }],
     semester: { id: 'sem-1', nameLo: 'ພາກຮຽນ 1', number: 1 },
     months: [9, 10, 11],
     testMax: 6,
@@ -433,6 +434,36 @@ describe('sending marks to the monthly sheet', () => {
     expect(post.mock.calls[0][0]).toBe('/exam-papers/paper-1/push-to-monthly-marks');
     expect(post.mock.calls[0][1]).toEqual({ classroomId: 'room-1', month: 9 });
     expect(await screen.findByText('Sent to the monthly sheet: 1 pupils')).toBeInTheDocument();
+  });
+
+  it('asks which subject a paper for a split ສາຍວິຊາ sends its points to', async () => {
+    // A ສັງຄົມ paper: written as one, marked as the three it splits into.
+    vi.spyOn(apiClient, 'get').mockImplementation(async (url: string) => {
+      if (url === '/exam-papers/paper-1/responses') {
+        return {
+          ...RESPONSES,
+          monthly: {
+            ...RESPONSES.monthly,
+            subject: { id: 'social', nameLo: 'ສັງຄົມ' },
+            markedSubjects: [
+              { id: 'civ', nameLo: 'ສຶກສາພົນລະເມືອງ', testMax: 5 },
+              { id: 'geo', nameLo: 'ພູມສາດ', testMax: 5 },
+              { id: 'hist', nameLo: 'ປະຫວັດສາດ', testMax: 5 },
+            ],
+          },
+        } as never;
+      }
+      return paginated([]) as never;
+    });
+    renderWithProviders(<ResultsPanel paper={DRAWN as never} />);
+
+    expect(
+      await screen.findByText(
+        'ສັງຄົມ is marked as several subjects — choose which one the marks go to',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Send to subject')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send marks' })).toBeDisabled();
   });
 
   it('says why a send cannot happen before the button is pressed', async () => {

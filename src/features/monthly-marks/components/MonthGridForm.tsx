@@ -29,7 +29,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { ErrorState } from '@/components/common/ErrorState';
 import { StudentName } from '@/components/common/StudentName';
 import {
-  displayTotal,
+  formatTotal,
   localTotal,
   MARK_COLUMNS,
   useLockMonth,
@@ -56,8 +56,8 @@ const EMPTY: MonthCells = { attendance: null, notebook: null, activity: null, te
  * ລວມ is the one figure computed on this side, because it has to answer under
  * the fingers of whoever is typing. Everything above it — ສະເລ່ຍ, 3 ເດືອນ,
  * ພາກຮຽນ — is the API's, so no two screens can disagree about the term mark.
- * It is shown as a whole mark, the way the office writes a month's total, but
- * only here on the screen: the exact figure is what is saved and what every
+ * It is shown to one decimal place, the way the office writes a month's total,
+ * but only here on the screen: the exact figure is what is saved and what every
  * average above is built from.
  *
  * An unmarked row opens on ຄະແນນເຕັມ rather than on four blanks, because that is
@@ -412,7 +412,7 @@ export function MonthGridForm() {
               <TableBody>
                 {(data?.rows ?? []).map((row) => {
                   const cells = draft[row.studentId] ?? EMPTY;
-                  const total = displayTotal(localTotal(cells));
+                  const total = formatTotal(localTotal(cells));
                   return (
                     <TableRow key={row.studentId} className={cn(!row.isEnrolled && 'opacity-60')}>
                       <TableCell className="tabular-nums">{row.rollNumber ?? '—'}</TableCell>

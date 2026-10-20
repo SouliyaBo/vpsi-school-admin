@@ -53,6 +53,8 @@ export interface SubjectHeader {
   nameEn: string | null;
   /** ຟີຊິກ / ເຄມີ / ຊີວະ — empty for a subject marked as a whole. */
   strands: string[];
+  /** What the subject is out of — a month, its exam, its term: 10, or 9. */
+  fullMark: number;
 }
 
 export interface ClassroomHeader {
@@ -155,6 +157,10 @@ export interface MonthSubjectHeader {
   code: string;
   nameLo: string;
   nameEn: string | null;
+  /** What the subject is out of: 10, or 9 for ພາສາລາວ and the social subjects. */
+  fullMark: number;
+  /** What ກວດກາ is out of: 6, or 5 for those same subjects. */
+  testMax: number;
 }
 
 /** ຈັດປະເພດ — ເກັ່ງ / ກາງ / ອ່ອນ, banded by the API on the office's own cuts. */
@@ -453,30 +459,66 @@ export function localTotal(cells: MonthCells): number | null {
   return Math.round(written.reduce((sum, column) => sum + (cells[column] ?? 0), 0) * 100) / 100;
 }
 
+/** What a month, an exam and a term are out of, unless the subject says 9. */
+export const MARK_MAX = 10;
+
 /**
- * ລວມ as the sheet is read out — a whole mark, not the arithmetic one.
+ * ຜ່ານ for a mark out of `fullMark` — half of it: 5 of 10, 4.5 of 9.
  *
- * The office writes a month's total as a whole number: 5.5 goes up to 6, 5.4
- * down to 5. This rounds on the way to the screen only. `localTotal` and every
- * figure the API derives from it — ສະເລ່ຍ, 3 ເດືອນ, ພາກຮຽນ, ໝົດປີ — keep their
- * decimals, because rounding on the way *in* is what once cost a student the
- * pass mark; the note at the top of the API's `monthly-grading.ts` has the case.
+ * The office's ruling for the 9-point subjects (20 Oct 2026): their pass and
+ * grade are a share of 9. An average across subjects is judged on 10.
+ */
+export function passingMarkFor(fullMark: number = MARK_MAX): number {
+  return fullMark / 2;
+}
+
+/** Whether a mark is under its subject's pass line — what the sheets shade red. */
+export function isBelowPass(mark: number | null, fullMark: number = MARK_MAX): boolean {
+  return mark !== null && mark < passingMarkFor(fullMark);
+}
+
+/**
+ * A mark in whole tenths, half up: 9.45 → 95, 4.44 → 44.
+ *
+ * Marks are typed to the hundredth, so the figure is first settled to its
+ * hundredths and only then halved into tenths — in plain floating point 9.45 is
+ * 9.4499999…, and rounding that directly would take the half down.
+ */
+function toTenths(mark: number): number {
+  return Math.round(Math.round(mark * 100) / 10);
+}
+
+/**
+ * ລວມ as the sheet is read out — one decimal place, not the arithmetic figure.
+ *
+ * The office writes a month's total to one place, half up: 9.45 goes up to 9.5,
+ * 4.44 down to 4.4 (their ruling of 20 Oct 2026; before that it was a whole
+ * mark). This rounds on the way to the screen only. The cells keep the two
+ * places they were typed with, and `localTotal` and every figure the API derives
+ * from it — ສະເລ່ຍ, 3 ເດືອນ, ພາກຮຽນ, ໝົດປີ — keep their decimals, because
+ * rounding on the way *in* is what once cost a student the pass mark; the note at
+ * the top of the API's `monthly-grading.ts` has the case.
  */
 export function displayTotal(total: number | null): number | null {
-  return total === null ? null : Math.round(total);
+  return total === null ? null : toTenths(total) / 10;
+}
+
+/** `displayTotal` as text, so a 9 still reads 9.0 beside a 9.5. */
+export function formatTotal(total: number | null): string | null {
+  return displayTotal(total)?.toFixed(1) ?? null;
 }
 
 /**
  * ລວມ across a month's subjects, as the sheet adds it up.
  *
- * The subject columns print as whole marks, so this adds the whole marks rather
- * than rounding their exact sum: a row printing 10 + 9 + 9 + 9 has to come to
- * 37, not the 36.00 its decimals made. ສະເລ່ຍ stays the API's, worked out from
- * the exact figures — which is why it is not always this divided by the number
- * of subjects, and why ເກຣດ, ລຳດັບ and ຜ່ານ/ຕົກ do not move.
+ * The subject columns print to one place, so this adds the printed marks rather
+ * than rounding their exact sum: a row printing 9.5 + 9.5 + 8.5 + 8.5 has to
+ * come to 36.0, not the 35.90 its hundredths made. ສະເລ່ຍ stays the API's,
+ * worked out from the exact figures — which is why it is not always this divided
+ * by the number of subjects, and why ເກຣດ, ລຳດັບ and ຜ່ານ/ຕົກ do not move.
  */
 export function displaySubjectTotal(scores: (number | null)[]): number | null {
   const written = scores.filter((score): score is number => score !== null);
   if (written.length === 0) return null;
-  return written.reduce((sum, score) => sum + Math.round(score), 0);
+  return written.reduce((sum, score) => sum + toTenths(score), 0) / 10;
 }
