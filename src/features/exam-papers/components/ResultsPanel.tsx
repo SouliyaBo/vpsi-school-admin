@@ -1,10 +1,19 @@
-import { BarChart3, ClipboardList, Save, Send, Trash2 } from 'lucide-react';
+import {
+  BarChart3,
+  ClipboardList,
+  FileSpreadsheet,
+  Loader2,
+  Save,
+  Send,
+  Trash2,
+} from 'lucide-react';
 import { notify } from '@/lib/toast';
 import { useMonthName } from '@/features/monthly-marks/components/SheetPickers';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useClassroomOptions } from '@/features/classrooms/api';
-import { cn, refId, refObject } from '@/lib/utils';
+import { saveBlob } from '@/lib/save-blob';
+import { cn, formatDate, refId, refObject } from '@/lib/utils';
 import type { Classroom, ExamPaper } from '@/types/entities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,9 +36,12 @@ import {
 } from '@/components/ui/table';
 import { EntitySelect } from '@/components/common/EntitySelect';
 import { ErrorState } from '@/components/common/ErrorState';
+import { buildResultsWorkbook, resultsFileName } from '../lib/results-workbook';
+import { flattenScript } from '../lib/script';
 import { stripUnderline } from '../lib/underline';
 import { unversify } from '../lib/verse';
 import { ScanPanel } from './ScanPanel';
+import { SubjectPartsCard } from './SubjectPartsCard';
 import {
   answersToString,
   OPTION_LETTERS,
@@ -54,9 +66,11 @@ import {
 interface Props {
   paper: ExamPaper;
   readOnly?: boolean;
+  /** Switches to the ກວດຄຳຖາມ tab — offered where the paper's ພາກ need setting. */
+  onReviewQuestions?: () => void;
 }
 
-export function ResultsPanel({ paper, readOnly = false }: Props) {
+export function ResultsPanel({ paper, readOnly = false, onReviewQuestions }: Props) {
   const { t } = useTranslation();
   const update = useUpdateExamPaper();
   const [classroomId, setClassroomId] = useState<string | undefined>(
@@ -130,6 +144,16 @@ export function ResultsPanel({ paper, readOnly = false }: Props) {
         </Card>
       </div>
 
+      {responses.data && responses.data.monthly.markedSubjects.length > 1 && (
+        <SubjectPartsCard
+          key={paper.updatedAt}
+          paper={paper}
+          view={responses.data}
+          readOnly={readOnly}
+          onReviewQuestions={onReviewQuestions}
+        />
+      )}
+
       {hasSets && responses.data && (
         <ScanPanel paper={paper} view={responses.data} readOnly={readOnly} />
       )}
@@ -145,19 +169,22 @@ export function ResultsPanel({ paper, readOnly = false }: Props) {
           <CardDescription>{t('examPaper.entryDescription')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="max-w-sm space-y-2">
-            <Label>{t('examPaper.classroom')}</Label>
-            <EntitySelect
-              label={t('examPaper.classroom')}
-              value={classroomId ?? null}
-              onChange={setClassroomId}
-              useOptions={useAnyClassroomOptions}
-              selectedLabel={
-                classroomId === refId(paper.classroomId)
-                  ? refObject<Classroom>(paper.classroomId)?.name
-                  : undefined
-              }
-            />
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-full max-w-sm space-y-2">
+              <Label>{t('examPaper.classroom')}</Label>
+              <EntitySelect
+                label={t('examPaper.classroom')}
+                value={classroomId ?? null}
+                onChange={setClassroomId}
+                useOptions={useAnyClassroomOptions}
+                selectedLabel={
+                  classroomId === refId(paper.classroomId)
+                    ? refObject<Classroom>(paper.classroomId)?.name
+                    : undefined
+                }
+              />
+            </div>
+            {hasSets && responses.data && <ExportButton paper={paper} view={responses.data} />}
           </div>
 
           {!hasSets && <p className="text-sm text-muted-foreground">{t('examPaper.noSets')}</p>}
@@ -198,6 +225,95 @@ export function ResultsPanel({ paper, readOnly = false }: Props) {
 }
 
 /**
+ * ດາວໂຫຼດ Excel — the class's marks with room for the ອັດຕະໄນ half, for a test
+ * that is not all multiple choice and is added up before it is recorded.
+ */
+function ExportButton({ paper, view }: { paper: ExamPaper; view: ResponsesView }) {
+  const { t } = useTranslation();
+  const [busy, setBusy] = useState(false);
+
+  async function exportResults() {
+    setBusy(true);
+    try {
+      const total = view.totalPoints;
+      const parts = view.subjectParts ?? [];
+      const objective = (outOf: number | null) =>
+        outOf !== null
+          ? t('examPaper.exportObjectiveOf', { total: outOf })
+          : t('examPaper.exportObjective');
+      const blob = await buildResultsWorkbook(
+        view.rows.map((row) => ({
+          rollNumber: row.rollNumber,
+          studentCode: row.studentCode,
+          studentNameLo: row.studentNameLo,
+          setLabel: row.response?.setLabel ?? null,
+          correctCount: row.response?.correctCount ?? null,
+          points:
+            parts.length > 0
+              ? parts.map(
+                  (part) =>
+                    row.response?.subjects?.find((score) => score.subjectId === part.subjectId)
+                      ?.points ?? null,
+                )
+              : [row.response?.points ?? null],
+        })),
+        {
+          schoolName:
+            (import.meta.env.VITE_SCHOOL_NAME_LO as string | undefined) ??
+            (import.meta.env.VITE_SCHOOL_NAME_EN as string | undefined) ??
+            '',
+          title: t('examPaper.exportTitle', { title: paper.title }),
+          details: [
+            view.monthly.subject?.nameLo,
+            t('examPaper.exportClassroom', { name: view.classroom.name }),
+            view.monthly.semester?.nameLo,
+            // Split, each subject's columns say what that part is out of.
+            parts.length === 0 && total !== null && t('examPaper.exportOutOf', { total }),
+          ]
+            .filter(Boolean)
+            .join(' · '),
+          sheetName: t('examPaper.exportSheet'),
+          rowNumber: t('examPaper.exportRowNumber'),
+          studentCode: t('examPaper.exportStudentCode'),
+          studentName: t('examPaper.exportStudentName'),
+          set: t('examPaper.exportSet'),
+          correct: t('examPaper.exportCorrect', { count: view.questionCount }),
+          groups:
+            parts.length > 0
+              ? parts.map((part) => ({ name: part.nameLo, objective: objective(part.points) }))
+              : [{ name: null, objective: objective(total) }],
+          subjective: t('examPaper.exportSubjective'),
+          total: t('examPaper.exportTotal'),
+          notMarked: t('examPaper.exportNotMarked'),
+          marked: t('examPaper.exportMarked', {
+            marked: view.summary.marked,
+            students: view.summary.students,
+          }),
+          signatureDate: t('examPaper.exportSignatureDate'),
+          teacher: t('examPaper.exportTeacher'),
+          printedOn: t('examPaper.exportPrintedOn', { date: formatDate(new Date()) }),
+        },
+      );
+      saveBlob(blob, resultsFileName(paper.title, view.classroom.name));
+    } catch (error) {
+      notify.error(error, t('examPaper.exportFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-1">
+      <Button type="button" variant="outline" onClick={exportResults} disabled={busy}>
+        {busy ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />}
+        {busy ? t('examPaper.exporting') : t('examPaper.exportExcel')}
+      </Button>
+      <p className="text-xs text-muted-foreground">{t('examPaper.exportHint')}</p>
+    </div>
+  );
+}
+
+/**
  * ສົ່ງເຂົ້າຄະແນນປະຈຳເດືອນ — the points into the ກວດກາ column of one month.
  *
  * The month is the one thing asked, because it is the one thing the paper
@@ -232,16 +348,22 @@ function PushCard({
     ? monthly.markedSubjects.find((subject) => subject.id === markedSubjectId)
     : monthly.markedSubjects[0];
   const testMax = target?.testMax ?? monthly.testMax;
+  // Split by ພາກ: the subject gets its own part's points, out of the part's total.
+  const parts = view.subjectParts ?? [];
+  const part = target && parts.find((candidate) => candidate.subjectId === target.id);
+  const outOf = parts.length > 0 ? (part?.points ?? null) : view.totalPoints;
 
   const blocker = !monthly.subject
     ? t('examPaper.pushNoSubject')
     : isSplit && !markedSubjectId
       ? t('examPaper.pushChooseSubject', { subject: monthly.subject.nameLo })
-      : (view.totalPoints ?? 0) > testMax
-        ? t('examPaper.pushTooMany', { total: view.totalPoints, max: testMax })
-        : view.summary.marked === 0
-          ? t('examPaper.pushNothingKeyed')
-          : null;
+      : parts.length > 0 && !part
+        ? t('examPaper.pushNotInParts', { subject: target?.nameLo ?? '' })
+        : (outOf ?? 0) > testMax
+          ? t('examPaper.pushTooMany', { total: outOf, max: testMax })
+          : view.summary.marked === 0
+            ? t('examPaper.pushNothingKeyed')
+            : null;
 
   return (
     <Card>
@@ -337,6 +459,15 @@ function PushCard({
             </Button>
           )}
         </div>
+        {part && !blocker && (
+          <p className="text-xs text-muted-foreground">
+            {t('examPaper.pushPartOnly', {
+              subject: part.nameLo,
+              count: part.questions,
+              total: part.points ?? '—',
+            })}
+          </p>
+        )}
         {blocker && <p className="text-xs text-amber-700 dark:text-amber-300">{blocker}</p>}
       </CardContent>
     </Card>
@@ -423,7 +554,22 @@ function SheetRow({
         )}
       </TableCell>
       <TableCell className="text-end tabular-nums">
-        {stored?.points !== null && stored?.points !== undefined ? stored.points : '—'}
+        {stored?.subjects && stored.subjects.length > 0 ? (
+          <span className="block space-y-0.5 text-xs">
+            {stored.subjects.map((score) => (
+              <span key={score.subjectId} className="block whitespace-nowrap">
+                <span className="text-muted-foreground">
+                  {view.subjectParts?.find((part) => part.subjectId === score.subjectId)?.nameLo}
+                </span>{' '}
+                {score.points ?? '—'}
+              </span>
+            ))}
+          </span>
+        ) : stored?.points !== null && stored?.points !== undefined ? (
+          stored.points
+        ) : (
+          '—'
+        )}
       </TableCell>
       <TableCell className="text-end">
         {!readOnly && (
@@ -489,7 +635,7 @@ function Summary({ view }: { view: ResponsesView }) {
             <li key={question.original} className="flex gap-2">
               <span className="w-8 shrink-0 tabular-nums">{question.original}.</span>
               <span className="min-w-0 flex-1 truncate">
-                {stripUnderline(unversify(question.text))}
+                {flattenScript(stripUnderline(unversify(question.text)))}
               </span>
               <span className="shrink-0 tabular-nums text-muted-foreground">
                 {t('examPaper.correctOf', { correct: question.correct, marked: summary.marked })}

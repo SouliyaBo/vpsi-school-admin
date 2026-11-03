@@ -8,6 +8,7 @@ import {
   FileSignature,
   FileText,
   Languages,
+  MailCheck,
   Pencil,
   School,
   Syringe,
@@ -22,8 +23,11 @@ import { StudyCertificateDialog } from '@/features/certificates/components/Study
 import { StudySuspensionDialog } from '@/features/certificates/components/StudySuspensionDialog';
 import { StudentMonthlyMarks } from '@/features/monthly-marks/components/StudentMonthlyMarks';
 import { StudentVaccinations } from '@/features/vaccinations/components/StudentVaccinations';
-import { useCan } from '@/features/auth/hooks';
+import { StudentGuardianReports } from '@/features/guardian-reports/components/StudentGuardianReports';
+import { useCan, useSeesEveryStudent } from '@/features/auth/hooks';
 import { EnglishClassDialog } from '@/features/enrollments/components/EnglishClassDialog';
+import { guardians } from '@/features/guardians/api';
+import { GuardianFormDialog } from '@/features/guardians/components/GuardianFormDialog';
 import { EnrollDialog } from '@/features/enrollments/components/EnrollDialog';
 import {
   EnrollmentMoveDialog,
@@ -96,6 +100,7 @@ export function StudentDetailPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const can = useCan();
+  const seesEveryStudent = useSeesEveryStudent();
 
   /**
    * The open tab.
@@ -109,6 +114,11 @@ export function StudentDetailPage() {
   const [suspensionOpen, setSuspensionOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [guardiansOpen, setGuardiansOpen] = useState(false);
+  // The guardian whose own details are open for editing. The link on the student
+  // carries only a name and phone, so the full record is fetched for the form.
+  // The id outlives the open flag so the form does not blank out while it closes.
+  const [editingGuardianId, setEditingGuardianId] = useState<string | null>(null);
+  const [guardianFormOpen, setGuardianFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [move, setMove] = useState<EnrollmentMove | null>(null);
@@ -120,6 +130,7 @@ export function StudentDetailPage() {
   // full path and the populated node carries only ancestor ids.
   const locationIndex = useLocationIndex();
   const remove = students.useDelete();
+  const editingGuardian = guardians.useDetail(editingGuardianId ?? undefined);
   const uploadPhoto = useUploadStudentPhoto(id);
   // Placement lives in `enrollments`, so the class a student sits in — and every
   // class they have sat in — comes from its own endpoint. Skipped entirely for a
@@ -128,6 +139,8 @@ export function StudentDetailPage() {
   const canReadVaccinations = can('vaccinations');
   // ຄະແນນປະຈຳເດືອນ is filed under `scores`, like the mark sheets themselves.
   const canReadScores = can('scores');
+  // ລາຍງານຜູ້ປົກຄອງ — the homeroom teacher sends; the office reads and revokes.
+  const canReadGuardianReports = can('guardian-reports');
   const history = useEnrollmentHistory(canReadEnrollments ? id : undefined);
 
   // Both summaries are per-semester; without an active semester there is nothing
@@ -158,6 +171,12 @@ export function StudentDetailPage() {
   // the full path — the node's own name would not say which.
   const birthPlace = locationPath(locationIndex, refId(student.birthLocationId), i18n.language);
   const currentPlacement = history.data?.find((enrollment) => enrollment.status === 'active');
+  // A homeroom teacher sees only their own students, so the current placement is
+  // in their room and its English room is theirs to fill in; older placements and
+  // every move (transfer, ໂຈະ, ອອກ) stay with the office, as the API insists.
+  const movesStudents = can('enrollments', 'update') && seesEveryStudent;
+  const editsEnglishClass = (enrollment: Enrollment) =>
+    can('enrollments', 'update') && (seesEveryStudent || enrollment.id === currentPlacement?.id);
 
   return (
     <div className="space-y-4">
@@ -196,7 +215,7 @@ export function StudentDetailPage() {
                 placement would not. Offered here as well as on the class roster
                 because the office usually has one child in front of them, not a
                 class. */}
-            {currentPlacement && can('enrollments', 'update') && (
+            {currentPlacement && movesStudents && (
               <Button
                 variant="outline"
                 onClick={() => setMove({ enrollment: currentPlacement, status: 'transferred' })}
@@ -331,6 +350,12 @@ export function StudentDetailPage() {
               <CheckSquare />
               {t('student.attendanceSummary')}
             </TabsTrigger>
+            {canReadGuardianReports && (
+              <TabsTrigger value="guardianReports" className={tabClass}>
+                <MailCheck />
+                {t('guardianReport.tab')}
+              </TabsTrigger>
+            )}
             {canReadVaccinations && (
               <TabsTrigger value="vaccination" className={tabClass}>
                 <Syringe />
@@ -435,6 +460,7 @@ export function StudentDetailPage() {
                       <TableHead>{t('person.phone')}</TableHead>
                       <TableHead>{t('student.isPrimary')}</TableHead>
                       <TableHead>{t('student.canViewRecords')}</TableHead>
+                      {can('guardians', 'update') && <TableHead className="w-12" />}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -469,6 +495,23 @@ export function StudentDetailPage() {
                             {link.canViewRecords ? t('common.yes') : t('common.no')}
                           </Badge>
                         </TableCell>
+                        {can('guardians', 'update') && (
+                          <TableCell className="text-end">
+                            {refId(link.guardianId) && (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={t('guardian.edit')}
+                                onClick={() => {
+                                  setEditingGuardianId(refId(link.guardianId) ?? null);
+                                  setGuardianFormOpen(true);
+                                }}
+                              >
+                                <Pencil />
+                              </Button>
+                            )}
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -592,14 +635,14 @@ export function StudentDetailPage() {
                               {
                                 label: t('enrollment.englishClassEdit'),
                                 icon: Languages,
-                                hidden: !can('enrollments', 'update'),
+                                hidden: !editsEnglishClass(enrollment),
                                 onSelect: () => setEnglishClassTarget(enrollment),
                               },
                               ...ALLOWED_TRANSITIONS[enrollment.status].map((status) => ({
                                 label: t(STATUS_LABEL_KEYS[status]),
                                 icon: STATUS_ICONS[status],
                                 destructive: status === 'dropped',
-                                hidden: !can('enrollments', 'update'),
+                                hidden: !movesStudents,
                                 onSelect: () => setMove({ enrollment, status }),
                               })),
                             ]}
@@ -758,6 +801,20 @@ export function StudentDetailPage() {
           </Card>
         </TabsContent>
 
+        {canReadGuardianReports && (
+          <TabsContent value="guardianReports">
+            <Card>
+              <CardContent className="pt-5">
+                <StudentGuardianReports
+                  student={student}
+                  semester={activeSemester.data}
+                  enabled={tab === 'guardianReports'}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
         {canReadVaccinations && (
           <TabsContent value="vaccination">
             <Card>
@@ -817,6 +874,14 @@ export function StudentDetailPage() {
         open={guardiansOpen}
         onOpenChange={setGuardiansOpen}
         student={student}
+        onSaved={() => void detail.refetch()}
+      />
+
+      <GuardianFormDialog
+        open={guardianFormOpen && editingGuardian.data !== undefined}
+        onOpenChange={setGuardianFormOpen}
+        guardian={editingGuardian.data ?? null}
+        // The phone shown in this tab is the copy on the student, refreshed by the API.
         onSaved={() => void detail.refetch()}
       />
 

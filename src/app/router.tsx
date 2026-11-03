@@ -6,6 +6,8 @@ import { ChangePasswordPage } from '@/features/auth/pages/ChangePasswordPage';
 import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { ResetPasswordPage } from '@/features/auth/pages/ResetPasswordPage';
+// Eager, like the sign-in screens: it renders outside AppLayout's Suspense.
+import { GuardianReportPublicPage } from '@/features/guardian-reports/pages/GuardianReportPublicPage';
 import type { PermissionAction, PermissionResource } from '@/types/enums';
 import { NotFoundPage } from './NotFoundPage';
 import { PlaceholderPage } from './PlaceholderPage';
@@ -125,6 +127,7 @@ const TeachingAssignmentsPage = lazyPage(
   'TeachingAssignmentsPage',
 );
 const LibraryPage = lazyPage(() => import('@/features/library/pages/LibraryPage'), 'LibraryPage');
+const ReportsPage = lazyPage(() => import('@/features/reports/pages/ReportsPage'), 'ReportsPage');
 const VaccinationsPage = lazyPage(
   () => import('@/features/vaccinations/pages/VaccinationsPage'),
   'VaccinationsPage',
@@ -161,6 +164,10 @@ const placeholderRoutes: RouteObject[] = NAV_ITEMS.filter((item) => item.comingS
 );
 
 export const router = createBrowserRouter([
+  // ລາຍງານຫາຜູ້ປົກຄອງ — opened by a family from a chat message. Outside both
+  // guards: the guardian has no account, and a teacher who is signed in must
+  // still be able to open a link to check what the family sees.
+  { path: '/r', element: <GuardianReportPublicPage /> },
   {
     element: <RequireAnonymous />,
     children: [
@@ -203,6 +210,7 @@ export const router = createBrowserRouter([
           },
           { path: 'scores', element: guarded(<MonthlyMarksPage />, 'scores') },
           { path: 'term-results', element: guarded(<TermResultsPage />, 'term-results') },
+          { path: 'reports', element: guarded(<ReportsPage />, 'reports') },
           { path: 'locations', element: guarded(<LocationsPage />, 'locations') },
 
           { path: 'calendar', element: guarded(<CalendarPage />, 'calendar') },

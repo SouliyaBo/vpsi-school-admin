@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
@@ -9,6 +10,7 @@ import { useClassroomOptions } from '@/features/classrooms/api';
 import { useGradeLevelOptions } from '@/features/grade-levels/api';
 import { useActiveSchoolYear } from '@/features/school-years/api';
 import { useCrudDialogs } from '@/hooks/use-crud-dialogs';
+import { fetchEveryPage } from '@/lib/crud';
 import { stripEmpty } from '@/lib/payload';
 import { cn, formatDate, refId, toDateInput } from '@/lib/utils';
 import { endAfterStart, endAfterStartIssue, optionalText, requiredDate, requiredText } from '@/lib/zod-helpers';
@@ -33,10 +35,10 @@ import {
 } from '@/components/common/fields';
 import { FormDialog } from '@/components/common/FormDialog';
 import { PageHeader } from '@/components/common/PageHeader';
-import { calendarEvents, useSchoolDays, type CalendarEventInput } from '../api';
+import { calendarApi, calendarEvents, useSchoolDays, type CalendarEventInput } from '../api';
 import { DayDrawer } from '../components/DayDrawer';
 import { MonthGrid } from '../components/MonthGrid';
-import { DAY_EFFECT_TONE, eventStyle, LEGEND_TYPES } from '../legend';
+import { DAY_EFFECT_TONE, eventStyle, isClassScoped, LEGEND_TYPES } from '../legend';
 
 /**
  * ປະຕິທິນໂຮງຮຽນ — the school year as the office publishes it.
@@ -147,17 +149,45 @@ export function CalendarPage() {
   }, [view, cursor, activeYear.data]);
 
   const days = useSchoolDays(range.from, range.to);
-  const list = calendarEvents.useList({
-    from: range.from,
-    to: range.to,
-    limit: 200,
-    sortBy: 'startDate',
-    sortOrder: 'asc',
+  // Every event in the range, page by page: the API caps a page at 100, and the
+  // `limit: 200` this once asked for was refused outright — leaving the list,
+  // the day drawer and the class-only events empty (the office, 22 Oct 2026).
+  // Keyed under the CRUD hooks' scope so a save still refreshes it.
+  const listParams = { from: range.from, to: range.to, sortBy: 'startDate', sortOrder: 'asc' as const };
+  const list = useQuery({
+    queryKey: calendarEvents.keys.list(listParams),
+    queryFn: () => fetchEveryPage(calendarApi.list, listParams),
+    placeholderData: (previous) => previous,
   });
 
   // A stable fallback: `?? new Map()` is a new object each render, which would
   // make the summary below recount on every one of them.
   const dayMap = days.data ?? EMPTY_DAYS;
+
+  /**
+   * The class-only events by day, for the grid to name.
+   *
+   * The school's classification leaves them out, which is right for the colour
+   * of the day — ມ.1 off is not the school shut — but left the cell blank, so an
+   * event saved for some classes looked as if the save had done nothing (the
+   * office, 22 Oct 2026). Walked within the range on screen only.
+   */
+  const scopedByDay = useMemo(() => {
+    const byDay = new Map<string, CalendarEvent[]>();
+    for (const event of list.data ?? []) {
+      if (!isClassScoped(event)) continue;
+      const start = event.startDate.slice(0, 10) > range.from ? event.startDate.slice(0, 10) : range.from;
+      const end = event.endDate.slice(0, 10) < range.to ? event.endDate.slice(0, 10) : range.to;
+      for (
+        let day = new Date(`${start}T00:00:00Z`);
+        key(day) <= end;
+        day = new Date(day.getTime() + 86_400_000)
+      ) {
+        byDay.set(key(day), [...(byDay.get(key(day)) ?? []), event]);
+      }
+    }
+    return byDay;
+  }, [list.data, range.from, range.to]);
 
   const create = calendarEvents.useCreate();
   const update = calendarEvents.useUpdate();
@@ -174,6 +204,12 @@ export function CalendarPage() {
    */
   const watchedGrades = form.watch('appliesToGradeLevelIds');
   const watchedRooms = form.watch('appliesToClassroomIds');
+  const watchedEffect = form.watch('dayEffect');
+  // A class-only event that leaves the day as a normal one changes nothing for
+  // anybody — the scope only decides who is off, and nobody is.
+  const scopeHasNoEffect =
+    ((watchedGrades?.length ?? 0) > 0 || (watchedRooms?.length ?? 0) > 0) &&
+    watchedEffect === 'open';
   const scopeSummary = useMemo(() => {
     const grades = watchedGrades?.length ?? 0;
     const rooms = watchedRooms?.length ?? 0;
@@ -233,7 +269,7 @@ export function CalendarPage() {
    */
   const selectedEvents = useMemo(() => {
     if (!selectedDate) return [];
-    const records = list.data?.data ?? [];
+    const records = list.data ?? [];
     const covering = records.filter(
       (event) =>
         event.startDate.slice(0, 10) <= selectedDate && event.endDate.slice(0, 10) >= selectedDate,
@@ -389,6 +425,7 @@ export function CalendarPage() {
                   key={key(month)}
                   month={month}
                   days={dayMap}
+                  scoped={scopedByDay}
                   compact
                   today={today}
                   selected={selectedDate}
@@ -400,6 +437,7 @@ export function CalendarPage() {
             <MonthGrid
               month={cursor}
               days={dayMap}
+              scoped={scopedByDay}
               today={today}
               selected={selectedDate}
               onSelect={setSelectedDate}
@@ -413,11 +451,11 @@ export function CalendarPage() {
         <CardContent className="p-0">
           {list.isLoading ? (
             <Skeleton className="m-4 h-40" />
-          ) : !list.data?.data.length ? (
+          ) : !list.data?.length ? (
             <EmptyState title={t('calendar.empty')} description={t('calendar.emptyHint')} />
           ) : (
             <ul className="divide-y divide-border">
-              {list.data.data.map((event) => (
+              {list.data.map((event) => (
                 <li key={event.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
                   <span className={cn('size-3 shrink-0 rounded-sm', eventStyle(event.type).swatch)} />
                   <span className="w-40 shrink-0 tabular-nums text-muted-foreground">
@@ -540,6 +578,11 @@ export function CalendarPage() {
             />
             {scopeSummary && (
               <p className="text-sm text-muted-foreground sm:col-span-2">{scopeSummary}</p>
+            )}
+            {scopeHasNoEffect && (
+              <p className="text-sm text-amber-700 dark:text-amber-300 sm:col-span-2">
+                {t('calendar.appliesToNoEffect')}
+              </p>
             )}
           </FieldSection>
         </Form>

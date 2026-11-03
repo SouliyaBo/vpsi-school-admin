@@ -41,6 +41,7 @@ import {
   type SaveMarksResult,
 } from '../api';
 import { MarkInput, SheetPickers, type SheetTargetState } from './SheetPickers';
+import { UnsavedDialog } from './StudentEntryForm';
 
 const EMPTY: MonthCells = { attendance: null, notebook: null, activity: null, test: null };
 
@@ -90,6 +91,8 @@ export function MonthGridForm() {
   const [remarks, setRemarks] = useState<Record<string, string>>({});
   const [outcome, setOutcome] = useState<SaveMarksResult | null>(null);
   const [reopening, setReopening] = useState(false);
+  /** A move held back while unsaved marks are on screen. */
+  const [pending, setPending] = useState<(() => void) | null>(null);
 
   const grid = useMonthGrid({ ...target, month });
   const save = useSaveMonthGrid();
@@ -224,6 +227,16 @@ export function MonthGridForm() {
     });
   }
 
+  /**
+   * Another class, subject, month or strand redraws the sheet from what is
+   * saved, so a move with marks still unsaved waits for a yes — it used to drop
+   * them without a word.
+   */
+  function guarded(move: () => void) {
+    if (dirty.length > 0) setPending(() => move);
+    else move();
+  }
+
   async function handleSave() {
     if (!data || dirty.length === 0) return;
     const result = await save.mutateAsync({
@@ -248,13 +261,16 @@ export function MonthGridForm() {
     <div className="space-y-3">
       <Card className="print:hidden">
         <CardContent className="space-y-3 pt-5">
-          <SheetPickers value={target} onChange={setTarget} />
+          <SheetPickers value={target} onChange={(value) => guarded(() => setTarget(value))} />
 
           {data && (
             <div className="flex flex-wrap items-end gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="grid-month">{t('monthlyMark.month')}</Label>
-                <Select value={String(month)} onValueChange={(value) => setMonth(Number(value))}>
+                <Select
+                  value={String(month)}
+                  onValueChange={(value) => guarded(() => setMonth(Number(value)))}
+                >
                   <SelectTrigger id="grid-month" className="w-36">
                     <SelectValue placeholder={t('monthlyMark.month')} />
                   </SelectTrigger>
@@ -271,7 +287,10 @@ export function MonthGridForm() {
               {strands.length > 0 && (
                 <div className="space-y-1.5">
                   <Label htmlFor="grid-strand">{t('monthlyMark.strand')}</Label>
-                  <Select value={activeStrand} onValueChange={setStrand}>
+                  <Select
+                    value={activeStrand}
+                    onValueChange={(value) => guarded(() => setStrand(value))}
+                  >
                     <SelectTrigger id="grid-strand" className="w-40">
                       <SelectValue placeholder={t('monthlyMark.strand')} />
                     </SelectTrigger>
@@ -473,6 +492,8 @@ export function MonthGridForm() {
       {data && !data.canEdit && (
         <p className="text-xs text-muted-foreground">{t('monthlyMark.readOnly')}</p>
       )}
+
+      <UnsavedDialog pending={pending} onClose={() => setPending(null)} />
 
       <ConfirmDialog
         open={reopening}

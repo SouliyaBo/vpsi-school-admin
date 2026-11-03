@@ -9,6 +9,7 @@ import { errorMessage } from '@/lib/error-message';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { AuthLayout } from '../components/AuthLayout';
 import { loginSchema, type LoginValues } from '../schemas';
 import { useAuthStore } from '../store';
@@ -96,7 +97,7 @@ export function LoginPage() {
               <FormItem>
                 <FormLabel required>{t('auth.password')}</FormLabel>
                 <FormControl>
-                  <Input {...field} type="password" autoComplete="current-password" />
+                  <PasswordInput {...field} autoComplete="current-password" />
                 </FormControl>
                 <FormMessage />
               </FormItem>

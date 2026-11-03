@@ -323,6 +323,42 @@ describe('the review', () => {
     await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
     expect((patch.mock.calls[0][1] as { boldQuestions: boolean }).boldQuestions).toBe(false);
   });
+
+  it('sets one ພາກ for a run of questions at once, and a blank name takes it off', async () => {
+    const patch = vi.spyOn(apiClient, 'patch').mockImplementation(async () => PAPER as never);
+    renderWithProviders(<QuestionEditor paper={PAPER as never} />);
+
+    // Defaults to the whole paper: questions 1 to 2.
+    expect(screen.getByLabelText('Questions')).toHaveValue(1);
+    expect(screen.getByLabelText('to')).toHaveValue(2);
+    await userEvent.type(screen.getByLabelText('in part'), 'ຟີຊິກ');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    const sections = screen.getAllByLabelText('Part');
+    expect(sections.map((box) => (box as HTMLInputElement).value)).toEqual(['ຟີຊິກ', 'ຟີຊິກ']);
+
+    // Then question 2 alone back to no ພາກ.
+    await userEvent.clear(screen.getByLabelText('Questions'));
+    await userEvent.type(screen.getByLabelText('Questions'), '2');
+    await userEvent.clear(screen.getByLabelText('in part'));
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(sections.map((box) => (box as HTMLInputElement).value)).toEqual(['ຟີຊິກ', '']);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save questions' }));
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    const body = patch.mock.calls[0][1] as { questions: { section: string | null }[] };
+    expect(body.questions.map((q) => q.section)).toEqual(['ຟີຊິກ', null]);
+  });
+
+  it('refuses a range outside the paper', async () => {
+    renderWithProviders(<QuestionEditor paper={PAPER as never} />);
+    await userEvent.clear(screen.getByLabelText('to'));
+    await userEvent.type(screen.getByLabelText('to'), '5');
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled();
+    expect(
+      screen.getByText('Use question numbers 1 to 2, the first no later than the last'),
+    ).toBeInTheDocument();
+  });
 });
 
 describe('the sets', () => {
@@ -444,6 +480,49 @@ describe('the results', () => {
     expect(screen.getByText('1/1 correct')).toBeInTheDocument();
     expect(screen.queryByText('ປະເທດລາວມີຊາຍແດນຮ່ວມກັບຈັກປະເທດ?')).not.toBeInTheDocument();
   });
+
+  it('downloads the class as a workbook with an empty written column and a total that adds the two', async () => {
+    const save = vi.spyOn(saveBlobModule, 'saveBlob').mockImplementation(() => {});
+    renderWithProviders(<ResultsPanel paper={DRAWN as never} />);
+
+    await screen.findByLabelText('Answers ນາງ ຄຳ');
+    await userEvent.click(screen.getByRole('button', { name: 'Download Excel' }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(save.mock.calls[0][1]).toBe('ບົດສອບ ພູມສາດ ມ.4 ມ.4／ກ.xlsx');
+
+    const blob = save.mock.calls[0][0];
+    const bytes = await new Promise<Uint8Array>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(blob);
+    });
+    const { default: ExcelJS } = await import('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(bytes.buffer as ArrayBuffer);
+    const sheet = workbook.worksheets[0];
+
+    expect(sheet.getCell('A3').value).toBe('ພູມສາດ · Class ມ.4/ກ · ພາກຮຽນ 1 · Out of 6');
+    expect(sheet.getRow(5).values).toEqual([
+      undefined,
+      'No.',
+      'Code',
+      'Full name',
+      'Set',
+      'Correct (/2)',
+      'Multiple choice (/6)',
+      'Written',
+      'Total',
+    ]);
+    // The marked pupil: set, correct count and points; the written half is left to type.
+    expect(sheet.getRow(6).values).toEqual(expect.arrayContaining([1, '0801', 'ນາງ ຄຳ', 'A', 6]));
+    expect(sheet.getCell('G6').value).toBeNull();
+    expect(sheet.getCell('H6').formula).toBe('IF(COUNT(F6:G6)=0,"",SUM(F6:G6))');
+    // Unmarked: said so, and no points to add.
+    expect(sheet.getCell('E7').value).toBe('Not marked');
+    expect(sheet.getCell('F7').value).toBeNull();
+    expect(sheet.getCell('H7').formula).toBe('IF(COUNT(F7:G7)=0,"",SUM(F7:G7))');
+  });
 });
 
 describe('sending marks to the monthly sheet', () => {
@@ -513,6 +592,197 @@ describe('sending marks to the monthly sheet', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send marks' })).toBeDisabled();
+  });
+});
+
+describe('marks split by subject', () => {
+  // A ທຳມະຊາດ paper: one ພາກ for ຟີຊິກ, one for ເຄມີ, marked as three subjects.
+  const NATURE = {
+    ...DRAWN,
+    title: 'ບົດສອບ ທຳມະຊາດ ມ.2',
+    subjectId: { id: 'nature', code: 'NAT', nameLo: 'ທຳມະຊາດ' },
+    totalPoints: 6,
+    questions: [
+      { ...DRAWN.questions[0], section: 'ພາກ I ຟີຊິກ' },
+      { ...DRAWN.questions[1], section: 'ພາກ II ເຄມີ', correctIndex: 0 },
+    ],
+  };
+  const MONTHLY = {
+    ...RESPONSES.monthly,
+    subject: { id: 'nature', nameLo: 'ທຳມະຊາດ' },
+    markedSubjects: [
+      { id: 'phys', nameLo: 'ຟີຊິກສາດ', testMax: 6 },
+      { id: 'chem', nameLo: 'ເຄມີສາດ', testMax: 6 },
+      { id: 'bio', nameLo: 'ຊີວະສາດ', testMax: 6 },
+    ],
+  };
+  const SPLIT = {
+    ...RESPONSES,
+    monthly: MONTHLY,
+    subjectParts: [
+      { subjectId: 'phys', nameLo: 'ຟີຊິກສາດ', testMax: 6, points: 3, questions: 1 },
+      { subjectId: 'chem', nameLo: 'ເຄມີສາດ', testMax: 6, points: 6, questions: 1 },
+    ],
+    unassigned: 0,
+    rows: [
+      {
+        ...RESPONSES.rows[0],
+        response: {
+          ...RESPONSES.rows[0].response,
+          subjects: [
+            { subjectId: 'phys', correctCount: 1, totalQuestions: 1, points: 3 },
+            { subjectId: 'chem', correctCount: 0, totalQuestions: 1, points: 0 },
+          ],
+        },
+      },
+      RESPONSES.rows[1],
+    ],
+  };
+  const SAVED = {
+    ...NATURE,
+    subjectParts: [
+      { subjectId: 'phys', sections: ['ພາກ I ຟີຊິກ'], points: 3 },
+      { subjectId: 'chem', sections: ['ພາກ II ເຄມີ'], points: null },
+    ],
+  };
+
+  function stub(view: unknown) {
+    vi.spyOn(apiClient, 'get').mockImplementation(async (url: string) => {
+      if (url === '/exam-papers/paper-1/responses') return view as never;
+      if (url === '/exam-papers/paper-1/scans') return [] as never;
+      return paginated([]) as never;
+    });
+  }
+
+  beforeEach(() => {
+    permits = () => true;
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('reads each ພາກ heading for its subject, and saves the split with each part’s total', async () => {
+    stub({ ...RESPONSES, monthly: MONTHLY });
+    const patch = vi.spyOn(apiClient, 'patch').mockImplementation(async () => NATURE as never);
+    renderWithProviders(<ResultsPanel paper={NATURE as never} />);
+
+    expect(await screen.findByLabelText('Subject of part ພາກ I ຟີຊິກ')).toHaveTextContent(
+      'ຟີຊິກສາດ',
+    );
+    expect(screen.getByLabelText('Subject of part ພາກ II ເຄມີ')).toHaveTextContent('ເຄມີສາດ');
+
+    await userEvent.type(screen.getByLabelText('ເຄມີສາດ'), '2');
+    await userEvent.click(screen.getByRole('button', { name: 'Save split' }));
+
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(patch.mock.calls[0][0]).toBe('/exam-papers/paper-1');
+    expect(patch.mock.calls[0][1]).toEqual({
+      subjectParts: [
+        { subjectId: 'phys', sections: ['ພາກ I ຟີຊິກ'], points: null },
+        { subjectId: 'chem', sections: ['ພາກ II ເຄມີ'], points: 2 },
+      ],
+    });
+  });
+
+  it('says when the paper is not divided by subject yet, and opens the review tab', async () => {
+    stub({ ...RESPONSES, monthly: MONTHLY });
+    const review = vi.fn();
+    const undivided = {
+      ...NATURE,
+      questions: [
+        { ...NATURE.questions[0], section: null },
+        { ...NATURE.questions[1], section: 'ພາກປະລະໄນ (ຂໍ້ລະ 1 ຄະແນນ)' },
+      ],
+    };
+    renderWithProviders(<ResultsPanel paper={undivided as never} onReviewQuestions={review} />);
+
+    expect(
+      await screen.findByText('This paper’s parts are not divided by subject yet'),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Go to Review questions' }));
+    expect(review).toHaveBeenCalledTimes(1);
+  });
+
+  it('says nothing of that once the parts name their subjects', async () => {
+    stub({ ...RESPONSES, monthly: MONTHLY });
+    renderWithProviders(<ResultsPanel paper={NATURE as never} onReviewQuestions={vi.fn()} />);
+    await screen.findByLabelText('Subject of part ພາກ I ຟີຊິກ');
+    expect(
+      screen.queryByText('This paper’s parts are not divided by subject yet'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('warns of a ພາກ left uncounted', async () => {
+    stub({ ...RESPONSES, monthly: MONTHLY });
+    renderWithProviders(<ResultsPanel paper={NATURE as never} />);
+
+    await userEvent.click(await screen.findByLabelText('Subject of part ພາກ II ເຄມີ'));
+    await userEvent.click(screen.getByRole('option', { name: 'Not counted' }));
+    expect(
+      screen.getByText('1 questions belong to no subject — they will not be counted'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows each pupil’s points per subject, and exports a group of columns per subject', async () => {
+    stub(SPLIT);
+    const save = vi.spyOn(saveBlobModule, 'saveBlob').mockImplementation(() => {});
+    renderWithProviders(<ResultsPanel paper={SAVED as never} />);
+
+    const rows = await screen.findAllByRole('row');
+    const kham = rows.find((row) => within(row).queryByText('ນາງ ຄຳ'));
+    expect(kham).toHaveTextContent('ຟີຊິກສາດ 3');
+    expect(kham).toHaveTextContent('ເຄມີສາດ 0');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Download Excel' }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    const bytes = await new Promise<Uint8Array>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(save.mock.calls[0][0]);
+    });
+    const { default: ExcelJS } = await import('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(bytes.buffer as ArrayBuffer);
+    const sheet = workbook.worksheets[0];
+
+    // Each subject's name over its three columns, the three named underneath.
+    expect(sheet.getCell('F5').value).toBe('ຟີຊິກສາດ');
+    expect(sheet.getCell('I5').value).toBe('ເຄມີສາດ');
+    expect(sheet.getCell('F5').isMerged && sheet.getCell('H5').isMerged).toBe(true);
+    expect(sheet.getRow(6).values).toEqual(
+      expect.arrayContaining(['Multiple choice (/3)', 'Written', 'Total', 'Multiple choice (/6)']),
+    );
+    // ຄຳ: ຟີຊິກ 3, ເຄມີ 0, each with its own total.
+    expect(sheet.getCell('F7').value).toBe(3);
+    expect(sheet.getCell('I7').value).toBe(0);
+    expect(sheet.getCell('H7').formula).toBe('IF(COUNT(F7:G7)=0,"",SUM(F7:G7))');
+    expect(sheet.getCell('K7').formula).toBe('IF(COUNT(I7:J7)=0,"",SUM(I7:J7))');
+    expect(sheet.getCell('E8').value).toBe('Not marked');
+  });
+
+  it('sends one subject at a time, and stops a subject no ພາກ is given to', async () => {
+    stub(SPLIT);
+    const post = vi
+      .spyOn(apiClient, 'post')
+      .mockImplementation(async () => ({ saved: 1, skipped: 0, errors: [] }) as never);
+    renderWithProviders(<ResultsPanel paper={SAVED as never} />);
+
+    await userEvent.click(await screen.findByLabelText('Send to subject'));
+    await userEvent.click(screen.getByRole('option', { name: 'ຊີວະສາດ' }));
+    expect(
+      screen.getByText(
+        'No part is given to ຊີວະສາດ yet — choose its part under Split marks by subject first',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send marks' })).toBeDisabled();
+
+    await userEvent.click(screen.getByLabelText('Send to subject'));
+    await userEvent.click(screen.getByRole('option', { name: 'ຟີຊິກສາດ' }));
+    expect(
+      screen.getByText('Only the ຟີຊິກສາດ part is sent (1 questions, out of 3)'),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Send marks' }));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post.mock.calls[0][1]).toEqual({ classroomId: 'room-1', subjectId: 'phys', month: 9 });
   });
 });
 
@@ -728,5 +998,60 @@ describe('ຂີດກ້ອງ in the question', () => {
       <QuestionEditor paper={sheet(SENTENCE.replace('ພວມ', '[u]ພວມ[/u]')) as never} />,
     );
     expect(screen.getByText('ພວມ').closest('u')).not.toBeNull();
+  });
+});
+
+describe('ຕົວຍົກ and ຕົວຫ້ອຍ', () => {
+  beforeEach(() => {
+    permits = () => true;
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  const sheet = {
+    ...PAPER,
+    questions: [
+      {
+        ...PAPER.questions[0],
+        text: 'ຄວາມໄວຂອງແສງແມ່ນ 3 × 108 m/s. H2O ມີຈັກອາຕອມ?',
+        options: [{ text: '3 × 108 m/s', images: [] }, ...PAPER.questions[0].options.slice(1)],
+      },
+      PAPER.questions[1],
+    ],
+  };
+
+  it('raises a figure in the question, lowers one, and shows them so', async () => {
+    renderWithProviders(<QuestionEditor paper={sheet as never} />);
+    const stem = screen.getAllByRole('textbox', { name: 'Question' })[0] as HTMLTextAreaElement;
+
+    stem.focus();
+    const eight = stem.value.indexOf('108') + 2;
+    stem.setSelectionRange(eight, eight + 1);
+    await userEvent.click(screen.getAllByRole('button', { name: 'Superscript' })[0]);
+    expect(stem.value).toContain('3 × 10[sup]8[/sup] m/s');
+
+    stem.focus();
+    const two = stem.value.indexOf('H2O') + 1;
+    stem.setSelectionRange(two, two + 1);
+    await userEvent.click(screen.getAllByRole('button', { name: 'Subscript' })[0]);
+    expect(stem.value).toContain('H[sub]2[/sub]O');
+
+    expect(screen.getAllByText('8').some((el) => el.closest('sup'))).toBe(true);
+    expect(screen.getAllByText('2').some((el) => el.closest('sub'))).toBe(true);
+
+    // Pressed again on the same figure, it comes off.
+    stem.focus();
+    const raised = stem.value.indexOf('[sup]8') + 5;
+    stem.setSelectionRange(raised, raised + 1);
+    await userEvent.click(screen.getAllByRole('button', { name: 'Superscript' })[0]);
+    expect(stem.value).toContain('3 × 108 m/s');
+  });
+
+  it('works in the option the teacher last selected in', async () => {
+    renderWithProviders(<QuestionEditor paper={sheet as never} />);
+    const option = screen.getAllByRole('textbox', { name: 'Option A' })[0] as HTMLInputElement;
+    option.focus();
+    option.setSelectionRange(6, 7);
+    await userEvent.click(screen.getAllByRole('button', { name: 'Superscript' })[0]);
+    expect(option.value).toBe('3 × 10[sup]8[/sup] m/s');
   });
 });

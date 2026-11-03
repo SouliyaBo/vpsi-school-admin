@@ -46,6 +46,15 @@ const student = {
   ],
 };
 
+/** The father's own record, behind the `g1` link above. */
+const fatherOnFile = {
+  id: 'g1',
+  firstNameLo: 'ບຸນມີ',
+  lastNameLo: 'ວົງສາ',
+  phone: '02055512345',
+  occupation: 'ຊາວນາ',
+};
+
 /** The student's current placement, as `/enrollments/student/:id` returns it. */
 const enrollment = {
   id: '507f1f77bcf86cd799439031',
@@ -105,6 +114,7 @@ beforeEach(() => {
   vi.spyOn(apiClient, 'get').mockImplementation(async (url: string) => {
     // Ahead of the `/students/` catch-all below, which would otherwise swallow it.
     if (url.endsWith('/siblings')) return [sibling] as never;
+    if (url === '/guardians/g1') return fatherOnFile as never;
     if (url.includes('/students/')) return student as never;
     // Returns a bare array, not a paginated envelope.
     if (url.includes('/enrollments/student/')) return enrollments as never;
@@ -125,8 +135,44 @@ it('renders the detail page and every tab, including the guardians editor', asyn
 
   await userEvent.click(screen.getByRole('tab', { name: /guardians/i }));
   const panel = screen.getByRole('tabpanel');
-  await userEvent.click(within(panel).getByRole('button', { name: /edit/i }));
+  // The list editor; each row also has its own "Edit guardian".
+  await userEvent.click(within(panel).getByRole('button', { name: /^edit$/i }));
   expect(await screen.findByRole('dialog')).toBeInTheDocument();
+});
+
+/**
+ * The homeroom teacher corrects a parent's phone without leaving the child's
+ * page — the list editor above only links and unlinks guardians, so the
+ * guardian's own details need their own form.
+ */
+it("corrects a guardian's phone from the guardians tab", async () => {
+  const patch = vi
+    .spyOn(apiClient, 'patch')
+    .mockResolvedValue({ ...fatherOnFile, phone: '02055599999' });
+
+  renderWithProviders(<StudentDetailPage />);
+  await screen.findAllByText('S-0001');
+  await userEvent.click(screen.getByRole('tab', { name: /guardians/i }));
+  await userEvent.click(
+    within(screen.getByRole('tabpanel')).getByRole('button', { name: /edit guardian/i }),
+  );
+
+  const dialog = await screen.findByRole('dialog');
+  const phone = within(dialog).getByLabelText(/^phone/i);
+  expect(phone).toHaveValue('02055512345');
+  // The rest of the record is there too, not only the copy the link carries.
+  expect(within(dialog).getByLabelText(/occupation/i)).toHaveValue('ຊາວນາ');
+
+  await userEvent.clear(phone);
+  await userEvent.type(phone, '02055599999');
+  await userEvent.click(within(dialog).getByRole('button', { name: /save/i }));
+
+  await waitFor(() =>
+    expect(patch).toHaveBeenCalledWith(
+      '/guardians/g1',
+      expect.objectContaining({ phone: '02055599999', occupation: 'ຊາວນາ' }),
+    ),
+  );
 });
 
 it('lists siblings under the guardians tab, with the link that makes them siblings', async () => {

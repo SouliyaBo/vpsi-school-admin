@@ -54,16 +54,29 @@ export function stripUnderline(text: string): string {
   return text.replace(RUN, '$1');
 }
 
-/**
- * ຂີດກ້ອງ pressed with `text[from, to)` selected: the underline taken off
- * whatever run the selection touches, or — touching none — put on the
- * selection, its edge spaces left out.
- */
+/** ຂີດກ້ອງ pressed with `text[from, to)` selected — see `toggleRun`. */
 export function toggleUnderline(text: string, from: number, to: number): string {
-  const runs = [...text.matchAll(RUN)].map((match) => ({
+  return toggleRun(text, from, to, RUN, UNDERLINE_OPEN, UNDERLINE_CLOSE);
+}
+
+/**
+ * A marker button pressed with `text[from, to)` selected: the marker taken off
+ * whatever run of `pattern` the selection touches, or — touching none — put on
+ * the selection, its edge spaces left out. `pattern`'s last group is the run's
+ * inner text. Shared by ຂີດກ້ອງ, ຕົວຍົກ and ຕົວຫ້ອຍ.
+ */
+export function toggleRun(
+  text: string,
+  from: number,
+  to: number,
+  pattern: RegExp,
+  open: string,
+  close: string,
+): string {
+  const runs = [...text.matchAll(new RegExp(pattern.source, 'g'))].map((match) => ({
     start: match.index ?? 0,
     end: (match.index ?? 0) + match[0].length,
-    inner: match[1],
+    inner: match[match.length - 1],
   }));
   const touched = runs.filter((run) => run.start < Math.max(to, from + 1) && run.end > from);
   if (touched.length > 0) {
@@ -80,5 +93,5 @@ export function toggleUnderline(text: string, from: number, to: number): string 
   const word = selected.trim();
   if (!word) return text;
   const start = from + lead;
-  return `${text.slice(0, start)}${UNDERLINE_OPEN}${word}${UNDERLINE_CLOSE}${text.slice(start + word.length)}`;
+  return `${text.slice(0, start)}${open}${word}${close}${text.slice(start + word.length)}`;
 }

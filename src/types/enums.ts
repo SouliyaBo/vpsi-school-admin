@@ -359,6 +359,8 @@ export const PERMISSION_RESOURCES = [
   'conduct-scores',
   'behavior-logs',
   'homeroom-reviews',
+  // ລາຍງານຫາຜູ້ປົກຄອງ — sent by the homeroom teacher, overseen by the office.
+  'guardian-reports',
   'attendances',
   // ການມອບໝາຍສອນແທນ — the key to the two per-lesson logs rather than one of them:
   // who may hand it out is a narrower question than who may use it.

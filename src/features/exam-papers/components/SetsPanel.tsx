@@ -137,9 +137,7 @@ export function SetsPanel({ paper, readOnly = false }: Props) {
                 <>
                   {' '}
                   · {t('examPaper.drawStamp')}{' '}
-                  <span className="font-mono font-semibold text-foreground">
-                    {paper.drawStamp}
-                  </span>
+                  <span className="font-mono font-semibold text-foreground">{paper.drawStamp}</span>
                 </>
               )}
               <br />

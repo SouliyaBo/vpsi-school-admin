@@ -1,5 +1,6 @@
 import { LayoutGrid, UserRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useRequestedTab } from '@/lib/use-requested-tab';
 import { useActiveSchoolYear } from '@/features/school-years/api';
 import { localizedName } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +25,7 @@ import { StudentResultCard } from '../components/StudentResultCard';
 export function TermResultsPage() {
   const { t, i18n } = useTranslation();
   const activeYear = useActiveSchoolYear();
+  const initialTab = useRequestedTab(['class', 'student'], 'class');
 
   return (
     <div className="space-y-4">
@@ -39,7 +41,7 @@ export function TermResultsPage() {
         className="print:hidden"
       />
 
-      <Tabs defaultValue="class">
+      <Tabs defaultValue={initialTab}>
         <TabsList className="print:hidden">
           <TabsTrigger value="class">
             <LayoutGrid />

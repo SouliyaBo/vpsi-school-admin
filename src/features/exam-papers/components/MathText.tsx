@@ -2,13 +2,15 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
+import { splitScript } from '../lib/script';
 import { splitUnderline } from '../lib/underline';
 
 /**
  * Question text with its `$…$` formulas drawn, as the printer will draw
  * them. A formula KaTeX cannot read is shown as it was typed, in red, so the
  * teacher sees what to fix; the printer prints that one as typed too.
- * Words inside `[u]…[/u]` are underlined, as printed.
+ * Words inside `[u]…[/u]` are underlined and `[sup]`/`[sub]` raised or lowered, as
+ * printed.
  */
 
 const MATH = /\$\$([^$]+?)\$\$|\$([^$\n]+?)\$/g;
@@ -51,20 +53,40 @@ function parts(text: string): Part[] {
 
 export function MathText({ text, className }: { text: string; className?: string }) {
   const pieces = useMemo(
-    () => splitUnderline(text).map((piece) => ({ ...piece, parts: parts(piece.text) })),
+    () =>
+      splitUnderline(text).map((piece) => ({
+        underline: piece.underline,
+        runs: splitScript(piece.text).map((run) => ({
+          script: run.script,
+          parts: parts(run.text),
+        })),
+      })),
     [text],
   );
   return (
     <span className={cn('whitespace-pre-wrap', className)}>
-      {pieces.map((piece, index) =>
-        piece.underline ? (
+      {pieces.map((piece, index) => {
+        const runs = piece.runs.map((run, r) =>
+          run.script === 'sup' ? (
+            <sup key={r}>
+              <Parts parts={run.parts} />
+            </sup>
+          ) : run.script === 'sub' ? (
+            <sub key={r}>
+              <Parts parts={run.parts} />
+            </sub>
+          ) : (
+            <Parts key={r} parts={run.parts} />
+          ),
+        );
+        return piece.underline ? (
           <u key={index} className="underline-offset-4">
-            <Parts parts={piece.parts} />
+            {runs}
           </u>
         ) : (
-          <Parts key={index} parts={piece.parts} />
-        ),
-      )}
+          <span key={index}>{runs}</span>
+        );
+      })}
     </span>
   );
 }

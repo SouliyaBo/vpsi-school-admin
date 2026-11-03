@@ -551,4 +551,53 @@ describe('placement — the English-programme room', () => {
       expect(patch).toHaveBeenCalledWith(`/enrollments/${enrollment.id}`, { englishClass: '' }),
     );
   });
+
+  describe('as a homeroom teacher', () => {
+    const teacherId = '507f1f77bcf86cd799439099';
+
+    function rosterOf(room: typeof classroom & { homeroomTeacherId: string }) {
+      vi.spyOn(apiClient, 'get').mockImplementation(async (url: string) => {
+        if (url === '/school-years/active') return activeYear as never;
+        if (url === '/classrooms') return paginated([room]) as never;
+        if (url === `/classrooms/${room.id}`) return room as never;
+        if (url === `/enrollments/classroom/${room.id}/roster`) return [enrollment] as never;
+        return paginated([]) as never;
+      });
+    }
+
+    beforeEach(() => {
+      currentUser = { username: 't-2627-002', permissions: [], personId: teacherId };
+      seesEveryStudent = false;
+    });
+    afterEach(() => {
+      currentUser = { username: 'admin', permissions: [] };
+      seesEveryStudent = true;
+    });
+
+    it('offers the English room of their own class, and no move', async () => {
+      rosterOf({ ...classroom, homeroomTeacherId: teacherId });
+      renderWithProviders(<ClassRoster />);
+
+      await userEvent.click(await screen.findByRole('combobox', { name: /select a classroom/i }));
+      await userEvent.click(await screen.findByRole('button', { name: /m4 A/ }));
+      await screen.findByText('EP-A');
+
+      await userEvent.click(screen.getByRole('button', { name: /actions/i }));
+      // Transfer, ໂຈະ and ອອກ are the office's; the API refuses them too.
+      const items = await screen.findAllByRole('menuitem');
+      expect(items).toHaveLength(1);
+      expect(items[0]).toHaveTextContent(/edit english class/i);
+    });
+
+    it('offers nothing on a class that is not theirs', async () => {
+      rosterOf({ ...classroom, homeroomTeacherId: '507f1f77bcf86cd799439098' });
+      renderWithProviders(<ClassRoster />);
+
+      await userEvent.click(await screen.findByRole('combobox', { name: /select a classroom/i }));
+      await userEvent.click(await screen.findByRole('button', { name: /m4 A/ }));
+      await screen.findByText('EP-A');
+
+      expect(screen.queryByRole('button', { name: /actions/i })).not.toBeInTheDocument();
+    });
+  });
 });

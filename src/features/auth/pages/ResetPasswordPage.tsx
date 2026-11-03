@@ -7,6 +7,7 @@ import { notify } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { authApi } from '../api';
 import { AuthLayout } from '../components/AuthLayout';
 import { resetPasswordSchema, type ResetPasswordValues } from '../schemas';
@@ -67,7 +68,7 @@ export function ResetPasswordPage() {
               <FormItem>
                 <FormLabel required>{t('auth.newPassword')}</FormLabel>
                 <FormControl>
-                  <Input {...field} type="password" autoComplete="new-password" />
+                  <PasswordInput {...field} autoComplete="new-password" />
                 </FormControl>
                 <FormDescription>{t('auth.passwordRule')}</FormDescription>
                 <FormMessage />
@@ -82,7 +83,7 @@ export function ResetPasswordPage() {
               <FormItem>
                 <FormLabel required>{t('auth.confirmPassword')}</FormLabel>
                 <FormControl>
-                  <Input {...field} type="password" autoComplete="new-password" />
+                  <PasswordInput {...field} autoComplete="new-password" />
                 </FormControl>
                 <FormMessage />
               </FormItem>

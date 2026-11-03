@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post } from '@/lib/api-client';
 import { cleanParams } from '@/lib/utils';
 import type { Grade } from '@/types/enums';
@@ -361,6 +361,28 @@ export function useMonthGrid(target: Partial<SheetTarget> & { month: number }) {
   });
 }
 
+/**
+ * The month of every subject a class is marked in — the by-student form.
+ *
+ * One read per subject, on the same keys `useMonthGrid` uses, so moving between
+ * the two forms reads nothing twice and a save in either refreshes both.
+ */
+export function useMonthGrids(
+  subjectIds: string[],
+  target: { classroomId?: string; semesterId?: string; month: number },
+) {
+  return useQueries({
+    queries: subjectIds.map((subjectId) => {
+      const sheet = { subjectId, ...target };
+      return {
+        queryKey: ['monthly-marks', 'month', sheet],
+        queryFn: () => monthlyMarksApi.monthGrid(sheet as SheetTarget & { month: number }),
+        enabled: ready(sheet),
+      };
+    }),
+  });
+}
+
 export function useSemesterSheet(target: Partial<SheetTarget>) {
   return useQuery({
     queryKey: ['monthly-marks', 'semester', target],
@@ -426,6 +448,47 @@ function useMarkMutation<TInput, TResult>(
 
 export function useSaveMonthGrid() {
   return useMarkMutation((body: SaveMonthGridInput) => monthlyMarksApi.saveMonth(body));
+}
+
+/** What saving one student's subjects came to — rows saved, and the subjects that refused. */
+export interface SaveStudentMonthResult {
+  saved: number;
+  skipped: number;
+  /** Subject ids whose save failed outright or skipped the row. */
+  failedSubjectIds: string[];
+}
+
+/**
+ * One student across several subjects: a save per subject, since a mark sheet is
+ * a subject's, then one refresh for all of them.
+ *
+ * Settled rather than all-or-nothing — the subjects are separate sheets on the
+ * API too, so one locked or refused subject must not throw away the others.
+ */
+export function useSaveStudentMonth() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (sheets: SaveMonthGridInput[]): Promise<SaveStudentMonthResult> => {
+      const results = await Promise.allSettled(
+        sheets.map((sheet) => monthlyMarksApi.saveMonth(sheet)),
+      );
+      const outcome: SaveStudentMonthResult = { saved: 0, skipped: 0, failedSubjectIds: [] };
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          outcome.saved += result.value.saved;
+          outcome.skipped += result.value.skipped;
+          if (result.value.errors.length > 0)
+            outcome.failedSubjectIds.push(sheets[index]!.subjectId);
+        } else {
+          outcome.skipped += sheets[index]!.entries.length;
+          outcome.failedSubjectIds.push(sheets[index]!.subjectId);
+        }
+      });
+      return outcome;
+    },
+    meta: { silentError: true },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['monthly-marks'] }),
+  });
 }
 
 export function useSaveTermMarks() {

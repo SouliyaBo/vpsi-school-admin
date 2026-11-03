@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { notify } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { authApi } from '../api';
 import { AuthLayout } from '../components/AuthLayout';
 import { changePasswordSchema, type ChangePasswordValues } from '../schemas';
@@ -63,7 +63,7 @@ export function ChangePasswordPage() {
               <FormItem>
                 <FormLabel required>{t('auth.currentPassword')}</FormLabel>
                 <FormControl>
-                  <Input {...field} type="password" autoComplete="current-password" autoFocus />
+                  <PasswordInput {...field} autoComplete="current-password" autoFocus />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -77,7 +77,7 @@ export function ChangePasswordPage() {
               <FormItem>
                 <FormLabel required>{t('auth.newPassword')}</FormLabel>
                 <FormControl>
-                  <Input {...field} type="password" autoComplete="new-password" />
+                  <PasswordInput {...field} autoComplete="new-password" />
                 </FormControl>
                 <FormDescription>{t('auth.passwordRule')}</FormDescription>
                 <FormMessage />
@@ -92,7 +92,7 @@ export function ChangePasswordPage() {
               <FormItem>
                 <FormLabel required>{t('auth.confirmPassword')}</FormLabel>
                 <FormControl>
-                  <Input {...field} type="password" autoComplete="new-password" />
+                  <PasswordInput {...field} autoComplete="new-password" />
                 </FormControl>
                 <FormMessage />
               </FormItem>

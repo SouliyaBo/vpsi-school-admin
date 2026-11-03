@@ -215,6 +215,11 @@ export interface SelectOption {
   value: string;
   label: string;
   disabled?: boolean;
+  /**
+   * A heading to file the option under. Options sharing one must be adjacent —
+   * a heading is drawn wherever the group changes, not collected.
+   */
+  group?: string;
 }
 
 export function SelectField<T extends FieldValues>({

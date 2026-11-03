@@ -2,12 +2,12 @@ import { Languages, Users } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { useCan } from '@/features/auth/hooks';
+import { useCan, useCurrentUser, useSeesEveryStudent } from '@/features/auth/hooks';
 import { classroomLabel, classrooms, useClassroomOptions } from '@/features/classrooms/api';
 import { useActiveSchoolYear } from '@/features/school-years/api';
 import { formatDate, refId } from '@/lib/utils';
 import type { EnrollmentStatus } from '@/types/enums';
-import type { Enrollment } from '@/types/entities';
+import type { Enrollment, Teacher } from '@/types/entities';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -50,6 +50,16 @@ export function ClassRoster() {
 
   const roster = useClassRoster(classroomId);
   const classroom = classrooms.useDetail(classroomId);
+
+  // A homeroom teacher may fill in the English rooms of their own class; a move
+  // (transfer, ໂຈະ, ອອກ) stays with the office. The API holds both lines.
+  const user = useCurrentUser();
+  const seesEveryStudent = useSeesEveryStudent();
+  const isOwnRoom =
+    !!user?.personId &&
+    refId<Teacher>(classroom.data?.homeroomTeacherId) === user.personId;
+  const editsEnglishClass = can('enrollments', 'update') && (seesEveryStudent || isOwnRoom);
+  const movesStudents = can('enrollments', 'update') && seesEveryStudent;
 
   const useClassroomsForYear = (search: string) =>
     useClassroomOptions(search, activeYear.data?.id);
@@ -150,14 +160,14 @@ export function ClassRoster() {
                             {
                               label: t('enrollment.englishClassEdit'),
                               icon: Languages,
-                              hidden: !can('enrollments', 'update'),
+                              hidden: !editsEnglishClass,
                               onSelect: () => setEnglishClassTarget(enrollment),
                             },
                             ...ALLOWED_TRANSITIONS[enrollment.status].map((status) => ({
                               label: t(STATUS_LABEL_KEYS[status]),
                               icon: STATUS_ICONS[status],
                               destructive: status === 'dropped',
-                              hidden: !can('enrollments', 'update'),
+                              hidden: !movesStudents,
                               onSelect: () => openMove(enrollment, status),
                             })),
                           ]}

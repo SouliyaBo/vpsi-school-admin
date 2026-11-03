@@ -1,5 +1,5 @@
 import { Check, ChevronsUpDown, Loader2, Search, X } from 'lucide-react';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Control, FieldPath, FieldValues } from 'react-hook-form';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
@@ -153,25 +153,32 @@ export function EntitySelect({
             </p>
           )}
 
-          {options?.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              disabled={option.disabled}
-              onClick={() => {
-                onChange(option.value);
-                setOpen(false);
-                setSearch('');
-              }}
-              className={cn(
-                'flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-start text-sm',
-                'hover:bg-accent disabled:pointer-events-none disabled:opacity-50',
-                option.value === value && 'bg-accent',
+          {options?.map((option, index) => (
+            <Fragment key={option.value}>
+              {option.group && option.group !== options[index - 1]?.group && (
+                <p className="px-2 pb-1 pt-2 text-xs font-medium text-muted-foreground">
+                  {option.group}
+                </p>
               )}
-            >
-              <span className="truncate">{option.label}</span>
-              {option.value === value && <Check className="size-4 shrink-0" />}
-            </button>
+              <button
+                type="button"
+                disabled={option.disabled}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                  setSearch('');
+                }}
+                className={cn(
+                  'flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-start text-sm',
+                  'hover:bg-accent disabled:pointer-events-none disabled:opacity-50',
+                  option.group && 'ps-5',
+                  option.value === value && 'bg-accent',
+                )}
+              >
+                <span className="truncate">{option.label}</span>
+                {option.value === value && <Check className="size-4 shrink-0" />}
+              </button>
+            </Fragment>
           ))}
         </div>
       </PopoverContent>

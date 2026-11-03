@@ -1,5 +1,6 @@
-import { CalendarDays, CalendarRange, FileBarChart, PencilLine } from 'lucide-react';
+import { CalendarDays, CalendarRange, FileBarChart, PencilLine, UserPen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useRequestedTab } from '@/lib/use-requested-tab';
 import { useActiveSchoolYear } from '@/features/school-years/api';
 import { localizedName } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -9,12 +10,14 @@ import { AnnualSheet } from '../components/AnnualSheet';
 import { ClassMonthSheet } from '../components/ClassMonthSheet';
 import { MonthGridForm } from '../components/MonthGridForm';
 import { SemesterSheet } from '../components/SemesterSheet';
+import { StudentEntryForm } from '../components/StudentEntryForm';
 
 /**
  * ຄະແນນ — the school's mark sheet, in the three shapes it is actually used in.
  *
  * The form leads because it is the only tab that writes and the only one a
- * teacher opens every month. The term sheet is what the office reads and signs
+ * teacher opens every month. ໃສ່ຕາມນັກຮຽນ beside it writes the same cells, one
+ * child across every subject, for the office entering from a student's paper. The term sheet is what the office reads and signs
  * off, and the year is what gets handed on. All of them are the same rows:
  * nothing here is a second copy of a mark, so a cell corrected in the form moves
  * the term, the year and the class result with it.
@@ -30,6 +33,7 @@ import { SemesterSheet } from '../components/SemesterSheet';
 export function MonthlyMarksPage() {
   const { t, i18n } = useTranslation();
   const activeYear = useActiveSchoolYear();
+  const initialTab = useRequestedTab(['entry', 'student', 'month', 'semester', 'annual'], 'entry');
 
   return (
     <div className="space-y-4">
@@ -45,11 +49,15 @@ export function MonthlyMarksPage() {
         className="print:hidden"
       />
 
-      <Tabs defaultValue="entry">
+      <Tabs defaultValue={initialTab}>
         <TabsList className="print:hidden">
           <TabsTrigger value="entry">
             <PencilLine />
             {t('monthlyMark.entryTab')}
+          </TabsTrigger>
+          <TabsTrigger value="student">
+            <UserPen />
+            {t('monthlyMark.byStudent.tab')}
           </TabsTrigger>
           <TabsTrigger value="month">
             <CalendarDays />
@@ -67,6 +75,9 @@ export function MonthlyMarksPage() {
 
         <TabsContent value="entry">
           <MonthGridForm />
+        </TabsContent>
+        <TabsContent value="student">
+          <StudentEntryForm />
         </TabsContent>
         <TabsContent value="month">
           <ClassMonthSheet />

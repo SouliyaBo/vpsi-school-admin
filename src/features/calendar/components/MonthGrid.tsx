@@ -23,6 +23,12 @@ export interface MonthGridProps {
   today?: string;
   selected?: string | null;
   onSelect?: (date: string) => void;
+  /**
+   * The events that close only some classes, by day. The school's own
+   * classification leaves them out, so they never repaint the day; they are
+   * named in the cell, tagged, so an event saved for ມ.1 is not invisible.
+   */
+  scoped?: Map<string, { titleLo: string; titleEn?: string | null }[]>;
 }
 
 /** `yyyy-MM-dd` of a UTC-midnight date, the key the API returns days under. */
@@ -60,6 +66,7 @@ export function MonthGrid({
   today,
   selected,
   onSelect,
+  scoped,
 }: MonthGridProps) {
   const { t, i18n } = useTranslation();
   const cells = monthCells(month);
@@ -101,10 +108,17 @@ export function MonthGrid({
           const day = days.get(dateKey);
           const state = day?.state ?? 'teaching';
           const events = day?.events ?? [];
+          const scopedHere = scoped?.get(dateKey) ?? [];
+          const titleOf = (event: { titleLo: string; titleEn?: string | null }) =>
+            (i18n.language === 'lo' ? event.titleLo : event.titleEn) || event.titleLo;
+          // The school's own event first; a class-only one is named when it is all there is.
           const label = events[0]
-            ? (i18n.language === 'lo' ? events[0].titleLo : events[0].titleEn) ||
-              events[0].titleLo
-            : null;
+            ? titleOf(events[0])
+            : scopedHere[0]
+              ? titleOf(scopedHere[0])
+              : null;
+          const labelIsScoped = !events[0] && scopedHere.length > 0;
+          const others = events.length + scopedHere.length - 1;
 
           return (
             <button
@@ -133,10 +147,21 @@ export function MonthGrid({
                   {label}
                 </span>
               )}
-              {!compact && events.length > 1 && (
-                <span className="mt-0.5 block text-[10px] opacity-70">
-                  {t('calendar.moreEvents', { count: events.length - 1 })}
+              {!compact && labelIsScoped && (
+                <span className="mt-0.5 inline-block rounded bg-muted px-1 text-[10px] text-muted-foreground">
+                  {t('calendar.appliesToBadge')}
                 </span>
+              )}
+              {!compact && others > 0 && (
+                <span className="mt-0.5 block text-[10px] opacity-70">
+                  {t('calendar.moreEvents', { count: others })}
+                </span>
+              )}
+              {compact && scopedHere.length > 0 && (
+                <span
+                  aria-hidden
+                  className="absolute bottom-0.5 right-0.5 size-1 rounded-full bg-foreground/50"
+                />
               )}
             </button>
           );

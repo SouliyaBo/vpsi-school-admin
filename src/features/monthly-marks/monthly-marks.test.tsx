@@ -7,6 +7,7 @@ import { AnnualSheet } from './components/AnnualSheet';
 import { ClassMonthSheet } from './components/ClassMonthSheet';
 import { MonthGridForm } from './components/MonthGridForm';
 import { SemesterSheet } from './components/SemesterSheet';
+import { StudentEntryForm } from './components/StudentEntryForm';
 import { StudentMonthlyMarks } from './components/StudentMonthlyMarks';
 import { classMonthFileName } from './lib/class-month-workbook';
 
@@ -479,6 +480,248 @@ describe('monthly marks — the entry form', () => {
     expect(post.mock.calls[0]![1]).toMatchObject({
       entries: [{ studentId: 'stu-1', attendance: 1, notebook: null, activity: 3, test: 4.5 }],
     });
+  });
+});
+
+describe('monthly marks — the entry form, leaving unsaved marks', () => {
+  beforeEach(() => stubReads());
+  afterEach(() => vi.restoreAllMocks());
+
+  it('asks before another month throws away what was typed', async () => {
+    renderWithProviders(<MonthGridForm />);
+    await chooseSheet();
+
+    const row = (await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/)).closest('tr') as HTMLElement;
+    const test = within(row).getByLabelText(/Test$/);
+    await userEvent.clear(test);
+    await userEvent.type(test, '5');
+    await chooseMonth(/November/);
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/not saved yet/i)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: /cancel/i }));
+
+    // Still on the sheet, with the mark still typed.
+    expect(test).toHaveValue(5);
+  });
+});
+
+describe('monthly marks — one student across every subject', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const lao = { ...subject, sortOrder: 1, parentSubjectId: null };
+  /** The two ສາຍວິຊາ that are taught as one and marked as several. */
+  const social = { ...subject, id: 'sub-social', code: 'S-M1', nameLo: 'ສັງຄົມ', nameEn: 'Social' };
+  const nature = {
+    ...subject,
+    id: 'sub-nature',
+    code: 'N-M1',
+    nameLo: 'ທຳມະຊາດ',
+    nameEn: 'Nature',
+  };
+  const civics = {
+    ...subject,
+    id: 'sub-civ',
+    code: 'CIV-M1',
+    nameLo: 'ສຶກສາພົນລະເມືອງ',
+    nameEn: 'Civics',
+    sortOrder: 3,
+    fullMark: 9,
+    parentSubjectId: social.id,
+  };
+  const physics = {
+    ...subject,
+    id: 'sub-phys',
+    code: 'PHYS-M1',
+    nameLo: 'ຟີຊິກສາດ',
+    nameEn: 'Physics',
+    sortOrder: 4,
+    parentSubjectId: nature.id,
+  };
+  // Printed last on the sheet, after the whole of ທຳມະຊາດ — and still to be
+  // shown beside ສຶກສາພົນລະເມືອງ.
+  const geography = {
+    ...subject,
+    id: 'sub-geo',
+    code: 'GEO-M1',
+    nameLo: 'ພູມສາດ',
+    nameEn: 'Geography',
+    sortOrder: 7,
+    fullMark: 9,
+    parentSubjectId: social.id,
+  };
+  /** ສັງຄົມ at ມ.1: no ປື້ມ, ກວດກາ out of 5. */
+  const SOCIAL_MAX = { attendance: 1, notebook: 0, activity: 3, test: 5 };
+
+  /** ກດສະລາ, second on the roll and not yet marked in anything. */
+  const kodsala = (cells: Record<string, number | null> = {}) => ({
+    ...blankRow(cells),
+    studentId: 'stu-2',
+    studentCode: '763',
+    studentNameLo: 'ກດສະລາ ຄ້າຍເພັດ',
+    studentNickname: null,
+    rollNumber: 2,
+  });
+
+  const grids: Record<string, unknown> = {
+    [lao.id]: monthGrid({ subject: lao, rows: [gridRow(), kodsala()] }),
+    [civics.id]: monthGrid({
+      subject: civics,
+      columns: ['attendance', 'activity', 'test'],
+      columnMax: SOCIAL_MAX,
+      rows: [blankRow(), kodsala()],
+    }),
+    // Taught by someone else: on screen, but not to be written.
+    [geography.id]: monthGrid({
+      subject: geography,
+      columns: ['attendance', 'activity', 'test'],
+      columnMax: SOCIAL_MAX,
+      canEdit: false,
+      rows: [blankRow(), kodsala()],
+    }),
+    [physics.id]: monthGrid({
+      subject: physics,
+      columns: ['attendance', 'activity', 'test'],
+      columnMax: { attendance: 1, notebook: 0, activity: 3, test: 6 },
+      rows: [blankRow(), kodsala()],
+    }),
+  };
+
+  beforeEach(() => {
+    stubReads();
+    const fallback = vi.mocked(apiClient.get).getMockImplementation()!;
+    vi.mocked(apiClient.get).mockImplementation(async (url: string, config?: unknown) => {
+      if (url === '/subjects') {
+        const { role } = (config as { params?: { role?: string } } | undefined)?.params ?? {};
+        if (role === 'taught') return paginated([lao, social, nature]) as never;
+        // Out of order on purpose: the form orders them, not the API.
+        return paginated([geography, physics, lao, civics]) as never;
+      }
+      if (url === '/monthly-marks/month') {
+        const { subjectId } = (config as { params: { subjectId: string } }).params;
+        return grids[subjectId] as never;
+      }
+      return fallback(url, config as never);
+    });
+  });
+
+  async function chooseClass() {
+    await userEvent.click(await screen.findByRole('combobox', { name: /^class$/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /ມ\.1 ກ/ }));
+  }
+
+  it('puts every subject of the month on one screen, filed under its ສາຍ', async () => {
+    renderWithProviders(<StudentEntryForm />);
+    await chooseClass();
+    await screen.findByLabelText('Civics · Test');
+
+    // A heading row reads as its own text; a subject row by the name in its first cell.
+    const rows = screen
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => row.querySelector('td p')?.textContent ?? row.textContent);
+    expect(rows).toEqual(['Lao', 'Social', 'Civics', 'Geography', 'Nature', 'Physics']);
+
+    // The three ສັງຄົມ subjects keep no ປື້ມ, so they have no cell for it.
+    expect(screen.queryByLabelText('Civics · Notebook')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Lao · Notebook')).toHaveValue(1);
+  });
+
+  it('files the subject picker of the entry form under the same headings', async () => {
+    renderWithProviders(<MonthGridForm />);
+    await chooseClass();
+    await userEvent.click(await screen.findByRole('combobox', { name: /subject/i }));
+    await screen.findByRole('button', { name: /GEO-M1/ });
+
+    const list = screen.getByRole('button', { name: /LAO-M1/ }).parentElement as HTMLElement;
+    const entries = [...list.children].map((entry) => entry.textContent);
+    expect(entries).toEqual([
+      'LAO-M1 — Lao',
+      'Social',
+      'CIV-M1 — Civics',
+      'GEO-M1 — Geography',
+      'Nature',
+      'PHYS-M1 — Physics',
+    ]);
+
+    // Typing narrows the list and keeps the heading over what is left.
+    await userEvent.type(screen.getByPlaceholderText(/search/i), 'geo');
+    await waitFor(() =>
+      expect([...list.children].map((entry) => entry.textContent)).toEqual([
+        'Social',
+        'GEO-M1 — Geography',
+      ]),
+    );
+  });
+
+  it('does not open a blank subject on full marks', async () => {
+    renderWithProviders(<StudentEntryForm />);
+    await chooseClass();
+
+    // Saving here must not mark a subject its teacher has not got to yet.
+    expect(await screen.findByLabelText('Civics · Test')).toHaveValue(null);
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: /fill full marks/i }));
+    expect(screen.getByLabelText('Civics · Activity')).toHaveValue(3);
+    expect(screen.getByLabelText('Civics · Test')).toHaveValue(5);
+    // Nor a subject this account cannot write.
+    expect(screen.getByLabelText('Geography · Test')).toHaveValue(null);
+  });
+
+  it('leaves a subject taught by someone else read-only', async () => {
+    renderWithProviders(<StudentEntryForm />);
+    await chooseClass();
+
+    expect(await screen.findByLabelText('Geography · Test')).toBeDisabled();
+    expect(screen.getByLabelText('Civics · Test')).toBeEnabled();
+    expect(screen.getByText('Read only')).toBeInTheDocument();
+  });
+
+  it('saves only the subjects that changed, for this student alone, then moves to the next', async () => {
+    const post = vi
+      .spyOn(apiClient, 'post')
+      .mockResolvedValue({ saved: 1, skipped: 0, errors: [] });
+    renderWithProviders(<StudentEntryForm />);
+    await chooseClass();
+
+    await userEvent.type(await screen.findByLabelText('Civics · Test'), '4.5');
+    await userEvent.click(screen.getByRole('button', { name: /save and next/i }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post.mock.calls[0]![0]).toBe('/monthly-marks/month');
+    expect(post.mock.calls[0]![1]).toMatchObject({
+      subjectId: civics.id,
+      classroomId: classroom.id,
+      semesterId: semester.id,
+      entries: [
+        { studentId: 'stu-1', attendance: null, notebook: null, activity: null, test: 4.5 },
+      ],
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: /^student$/i }).textContent).toMatch(
+        /ກດສະລາ ຄ້າຍເພັດ/,
+      ),
+    );
+  });
+
+  it('asks before another student throws away what was typed', async () => {
+    renderWithProviders(<StudentEntryForm />);
+    await chooseClass();
+
+    await userEvent.type(await screen.findByLabelText('Civics · Test'), '4');
+    await userEvent.click(screen.getByRole('button', { name: /next student/i }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: /discard and go on/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: /^student$/i }).textContent).toMatch(
+        /ກດສະລາ ຄ້າຍເພັດ/,
+      ),
+    );
+    expect(screen.getByLabelText('Civics · Test')).toHaveValue(null);
   });
 });
 

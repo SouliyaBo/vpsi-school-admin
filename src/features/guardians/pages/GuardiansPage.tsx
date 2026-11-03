@@ -1,113 +1,46 @@
-import { zodResolver } from '@hookform/resolvers/zod';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Eye, Pencil, Plus, Trash2, Users } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { z } from 'zod';
 import { useCan } from '@/features/auth/hooks';
-import { VillagePickerField } from '@/features/locations/components/VillagePickerField';
+import { useClassroomOptions } from '@/features/classrooms/api';
+import { qualifyClassName } from '@/features/homeroom-reviews/api';
 import { useCrudDialogs } from '@/hooks/use-crud-dialogs';
 import { useTableQueryState } from '@/hooks/use-table-query-state';
-import { stripEmpty } from '@/lib/payload';
-import { formatDate, fullName, localizedName, refId, refObject, toDateInput } from '@/lib/utils';
-import {
-  optionalDate,
-  optionalEmail,
-  optionalId,
-  optionalPhone,
-  optionalText,
-  requiredPhone,
-  requiredText,
-} from '@/lib/zod-helpers';
-import { GENDERS } from '@/types/enums';
-import type { Guardian, Location } from '@/types/entities';
+import { formatDate, fullName, localizedName, refId, refObject } from '@/lib/utils';
+import { CURRENT_ROLL_STUDENT_STATUSES } from '@/types/enums';
+import type { Guardian, GuardianChild, Location } from '@/types/entities';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Form } from '@/components/ui/form';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { DataTable, type DataTableColumnMeta } from '@/components/common/DataTable';
 import { DetailDrawer, DetailRow, DetailSection } from '@/components/common/DetailDrawer';
 import { EmptyState } from '@/components/common/EmptyState';
-import { DateField, FieldSection, SelectField, TextField } from '@/components/common/fields';
-import { FormDialog } from '@/components/common/FormDialog';
 import { PageHeader } from '@/components/common/PageHeader';
 import { RowActions } from '@/components/common/RowActions';
 import { StatusBadge } from '@/components/common/StatusBadge';
-import { SearchInput, TableToolbar } from '@/components/common/TableToolbar';
-import { guardians, useGuardianChildren, type GuardianInput } from '../api';
-
-const schema = z.object({
-  firstNameLo: requiredText(80),
-  lastNameLo: requiredText(80),
-  gender: z.enum(GENDERS).optional(),
-  dateOfBirth: optionalDate(),
-  nationalId: optionalText(30),
-  // The API requires a phone: a guardian with no reachable number is useless as
-  // an emergency contact.
-  phone: requiredPhone(),
-  alternatePhone: optionalPhone(),
-  email: optionalEmail(),
-  occupation: optionalText(120),
-  workplace: optionalText(150),
-  villageId: optionalId(),
-  addressDetail: optionalText(300),
-});
-
-type FormValues = z.infer<typeof schema>;
-
-const EMPTY: FormValues = {
-  firstNameLo: '',
-  lastNameLo: '',
-  gender: undefined,
-  dateOfBirth: '',
-  nationalId: '',
-  phone: '',
-  alternatePhone: '',
-  email: '',
-  occupation: '',
-  workplace: '',
-  villageId: '',
-  addressDetail: '',
-};
+import { FilterSelect, SearchInput, TableToolbar } from '@/components/common/TableToolbar';
+import { guardians, useGuardianChildren } from '../api';
+import { GuardianFormDialog } from '../components/GuardianFormDialog';
 
 export function GuardiansPage() {
   const { t, i18n } = useTranslation();
   const can = useCan();
-  const table = useTableQueryState({ defaultSortBy: 'lastNameLo', defaultSortOrder: 'asc' });
+  // `classroomId` is resolved by the API through the children's enrollments.
+  const table = useTableQueryState({
+    defaultSortBy: 'lastNameLo',
+    defaultSortOrder: 'asc',
+    filterKeys: ['classroomId'],
+  });
+  const classroomOptions = useClassroomOptions();
   const dialogs = useCrudDialogs<Guardian>();
   const [detailId, setDetailId] = useState<string | null>(null);
 
   const list = guardians.useList(table.queryParams);
-  const create = guardians.useCreate();
-  const update = guardians.useUpdate();
   const remove = guardians.useDelete();
   const detail = guardians.useDetail(detailId ?? undefined);
   const children = useGuardianChildren(detailId ?? undefined);
-
-  const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: EMPTY });
-
-  useEffect(() => {
-    if (!dialogs.formOpen) return;
-    form.reset(
-      dialogs.record
-        ? {
-            firstNameLo: dialogs.record.firstNameLo,
-            lastNameLo: dialogs.record.lastNameLo,
-            gender: dialogs.record.gender ?? undefined,
-            dateOfBirth: toDateInput(dialogs.record.dateOfBirth),
-            nationalId: dialogs.record.nationalId ?? '',
-            phone: dialogs.record.phone,
-            alternatePhone: dialogs.record.alternatePhone ?? '',
-            email: dialogs.record.email ?? '',
-            occupation: dialogs.record.occupation ?? '',
-            workplace: dialogs.record.workplace ?? '',
-            villageId: refId(dialogs.record.villageId) ?? '',
-            addressDetail: dialogs.record.addressDetail ?? '',
-          }
-        : EMPTY,
-    );
-  }, [dialogs.formOpen, dialogs.record, form]);
 
   const columns = useMemo<ColumnDef<Guardian, unknown>[]>(
     () => [
@@ -130,6 +63,13 @@ export function GuardiansPage() {
             )}
           </div>
         ),
+      },
+      {
+        id: 'children',
+        header: t('guardian.childrenColumn'),
+        // Who the guardian is *for* is what staff look them up by, so it stays
+        // visible on a phone too.
+        cell: ({ row }) => <ChildrenCell children={row.original.children ?? []} />,
       },
       {
         accessorKey: 'occupation',
@@ -178,14 +118,6 @@ export function GuardiansPage() {
     [t, i18n.language, can, dialogs],
   );
 
-  function submit(values: FormValues) {
-    const body = stripEmpty(values) as GuardianInput;
-    const mutation = dialogs.record
-      ? update.mutateAsync({ id: dialogs.record.id, body })
-      : create.mutateAsync(body);
-    void mutation.then(dialogs.closeForm).catch(() => {});
-  }
-
   const current = detail.data;
   const village = refObject<Location>(current?.villageId);
 
@@ -219,62 +151,27 @@ export function GuardiansPage() {
         getRowId={(row) => row.id}
         toolbar={
           <TableToolbar hasActiveFilters={table.hasActiveFilters} onClearFilters={table.clearFilters}>
-            <SearchInput value={table.search ?? ''} onChange={table.setSearch} className="w-full sm:w-72" />
+            <SearchInput
+              value={table.search ?? ''}
+              onChange={table.setSearch}
+              placeholder={t('guardian.searchHint')}
+              className="w-full sm:w-80"
+            />
+            <FilterSelect
+              value={table.filters.classroomId}
+              onChange={(value) => table.setFilter('classroomId', value)}
+              options={classroomOptions.data ?? []}
+              placeholder={t('classroom.title')}
+            />
           </TableToolbar>
         }
       />
 
-      <FormDialog
+      <GuardianFormDialog
         open={dialogs.formOpen}
         onOpenChange={dialogs.setFormOpen}
-        title={dialogs.isEditing ? t('guardian.edit') : t('guardian.create')}
-        onSubmit={form.handleSubmit(submit)}
-        isSubmitting={create.isPending || update.isPending}
-        size="lg"
-      >
-        <Form {...form}>
-          <div className="space-y-5">
-            <FieldSection title={t('person.basicInfo')}>
-              <TextField control={form.control} name="firstNameLo" label={t('person.firstNameLo')} required />
-              <TextField control={form.control} name="lastNameLo" label={t('person.lastNameLo')} required />
-              <SelectField
-                control={form.control}
-                name="gender"
-                label={t('person.gender')}
-                clearable
-                options={GENDERS.map((gender) => ({ value: gender, label: t(`gender.${gender}`) }))}
-              />
-              <DateField control={form.control} name="dateOfBirth" label={t('person.dateOfBirth')} />
-              <TextField control={form.control} name="nationalId" label={t('person.nationalId')} />
-            </FieldSection>
-
-            <FieldSection title={t('person.contactInfo')}>
-              <TextField control={form.control} name="phone" label={t('person.phone')} type="tel" required />
-              <TextField
-                control={form.control}
-                name="alternatePhone"
-                label={t('guardian.alternatePhone')}
-                type="tel"
-              />
-              <TextField control={form.control} name="email" label={t('person.email')} type="email" />
-            </FieldSection>
-
-            <FieldSection title={t('person.workInfo')}>
-              <TextField control={form.control} name="occupation" label={t('guardian.occupation')} />
-              <TextField control={form.control} name="workplace" label={t('guardian.workplace')} />
-            </FieldSection>
-
-            <FieldSection title={t('person.addressInfo')}>
-              <VillagePickerField
-                control={form.control}
-                name="villageId"
-                label={t('person.village')}
-              />
-              <TextField control={form.control} name="addressDetail" label={t('person.addressDetail')} />
-            </FieldSection>
-          </div>
-        </Form>
-      </FormDialog>
+        guardian={dialogs.record}
+      />
 
       <DetailDrawer
         open={detailId !== null}
@@ -390,5 +287,50 @@ export function GuardiansPage() {
         }}
       />
     </div>
+  );
+}
+
+/**
+ * One line per child: name (nickname) · room · relationship.
+ *
+ * A child with no room this year is shown as unplaced while still on the roll,
+ * and by status once they have left — so a graduate's parent does not read as a
+ * current class contact.
+ */
+function ChildrenCell({ children }: { children: GuardianChild[] }) {
+  const { t } = useTranslation();
+  if (children.length === 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  return (
+    <ul className="space-y-1">
+      {children.map((child) => {
+        const onRoll = (CURRENT_ROLL_STUDENT_STATUSES as readonly string[]).includes(child.status);
+        return (
+          <li key={child.id} className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm">
+            <Link
+              to={`/students/${child.id}`}
+              className="font-medium hover:underline"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {child.firstNameLo} {child.lastNameLo}
+              {child.nickname && ` (${child.nickname})`}
+            </Link>
+            <span className="text-muted-foreground">·</span>
+            {child.classroomName ? (
+              <span>{qualifyClassName(child.classroomName, child.gradeLevelCode)}</span>
+            ) : onRoll ? (
+              <Badge variant="warning">{t('enrollment.noClassroom')}</Badge>
+            ) : (
+              <StatusBadge status={child.status} namespace="studentStatus" />
+            )}
+            <span className="text-xs text-muted-foreground">
+              {t(`relationship.${child.relationship}`)}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

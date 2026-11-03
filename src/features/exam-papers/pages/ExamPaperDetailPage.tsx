@@ -34,6 +34,8 @@ export function ExamPaperDetailPage() {
   const remove = useDeleteExamPaper();
   const openSource = useSourceUrl(id);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Unset until the teacher picks one, so a paper opens on the tab its state calls for.
+  const [tab, setTab] = useState<string | undefined>();
 
   if (paper.isLoading) {
     return (
@@ -99,7 +101,7 @@ export function ExamPaperDetailPage() {
         }
       />
 
-      <Tabs defaultValue={data.variants.length > 0 ? 'sets' : 'review'}>
+      <Tabs value={tab ?? (data.variants.length > 0 ? 'sets' : 'review')} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="review">
             <ListChecks />
@@ -121,7 +123,11 @@ export function ExamPaperDetailPage() {
           <SetsPanel paper={data} readOnly={readOnly} />
         </TabsContent>
         <TabsContent value="results">
-          <ResultsPanel paper={data} readOnly={readOnly} />
+          <ResultsPanel
+            paper={data}
+            readOnly={readOnly}
+            onReviewQuestions={() => setTab('review')}
+          />
         </TabsContent>
       </Tabs>
 

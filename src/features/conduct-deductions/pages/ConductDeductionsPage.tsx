@@ -1,5 +1,6 @@
 import { Gavel, ScrollText, ShieldCheck } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useRequestedTab } from '@/lib/use-requested-tab';
 import { useCan } from '@/features/auth/hooks';
 import { useActiveSchoolYear } from '@/features/school-years/api';
 import { localizedName } from '@/lib/utils';
@@ -29,6 +30,10 @@ export function ConductDeductionsPage() {
   const activeYear = useActiveSchoolYear();
 
   const mayRecord = can('conduct-scores', 'create');
+  const initialTab = useRequestedTab(
+    mayRecord ? ['record', 'standing', 'rules'] : ['standing', 'rules'],
+    mayRecord ? 'record' : 'standing',
+  );
 
   return (
     <div className="space-y-4">
@@ -42,7 +47,7 @@ export function ConductDeductionsPage() {
         }
       />
 
-      <Tabs defaultValue={mayRecord ? 'record' : 'standing'}>
+      <Tabs defaultValue={initialTab}>
         <TabsList>
           {mayRecord && (
             <TabsTrigger value="record">

@@ -2,7 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient, del, get, patch, post, put, upload } from '@/lib/api-client';
 import { createCrudApi, createCrudHooks, type ListParams } from '@/lib/crud';
 import { saveBlob } from '@/lib/save-blob';
-import type { ExamImage, ExamPaper, ExamPaperSummary, ExamQuestion } from '@/types/entities';
+import type {
+  ExamImage,
+  ExamPaper,
+  ExamPaperSummary,
+  ExamQuestion,
+  ExamSubjectPart,
+} from '@/types/entities';
 import type { ExamOptionLabelStyle } from '@/types/enums';
 
 /**
@@ -44,6 +50,7 @@ export interface UpdateExamPaperInput {
   optionLabelStyle?: ExamOptionLabelStyle;
   boldQuestions?: boolean;
   totalPoints?: number | null;
+  subjectParts?: ExamSubjectPart[];
   questions?: ExamQuestionInput[];
 }
 
@@ -81,8 +88,17 @@ export interface ExamResponseView {
   correctCount: number;
   totalQuestions: number;
   points: number | null;
+  /** The points per marked subject on a paper split by ພາກ; empty, or absent, otherwise. */
+  subjects?: ExamSubjectScore[];
   source: 'manual' | 'scan';
   updatedAt: string;
+}
+
+export interface ExamSubjectScore {
+  subjectId: string;
+  correctCount: number;
+  totalQuestions: number;
+  points: number | null;
 }
 
 export interface ResponsesView {
@@ -105,6 +121,20 @@ export interface ResponsesView {
     months: number[];
     testMax: number;
   };
+  /**
+   * ແຍກຄະແນນຕາມວິຊາ — the subjects the paper's ພາກ are given to, in order, each
+   * with what it is out of; empty (or absent, on an older API) when the paper
+   * is marked as a whole.
+   */
+  subjectParts?: {
+    subjectId: string;
+    nameLo: string;
+    testMax: number | null;
+    points: number | null;
+    questions: number;
+  }[];
+  /** Questions in no subject's part, when there are parts. */
+  unassigned?: number;
   questionCount: number;
   optionLabelStyle: ExamOptionLabelStyle;
   sets: string[];

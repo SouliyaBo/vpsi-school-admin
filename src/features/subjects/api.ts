@@ -4,6 +4,7 @@ import { createCrudApi, createCrudHooks, useLookupQuery } from '@/lib/crud';
 import { localizedName } from '@/lib/utils';
 import type { MonthlyColumnMax, Subject } from '@/types/entities';
 import type { SelectOption } from '@/components/common/fields';
+import { groupByStream, streamHeading } from './streams';
 
 export interface SubjectInput {
   code: string;
@@ -71,6 +72,38 @@ export function useSubjectOptions(search = '', gradeLevelId?: string, role?: Sub
       value: subject.id,
       label: subjectLabel(subject, i18n.language),
     })),
+  };
+}
+
+/**
+ * The subjects a grade is marked in, for a mark-sheet picker: filed under the
+ * ສາຍ they split from (see `groupByStream`) rather than in sheet order, so
+ * ພູມສາດ and ປະຫວັດສາດ sit with ສຶກສາພົນລະເມືອງ instead of after ທຳມະຊາດ.
+ *
+ * A grade has a dozen subjects at most, so the search runs over the whole list
+ * here rather than as a server query.
+ */
+export function useMarkedSubjectOptions(search = '', gradeLevelId?: string) {
+  const { i18n } = useTranslation();
+  const marked = useSubjectsByGrade(gradeLevelId, 'marked');
+  const taught = useSubjectsByGrade(gradeLevelId, 'taught');
+  const term = search.trim().toLowerCase();
+
+  return {
+    isLoading: marked.isLoading,
+    data: marked.data
+      ? groupByStream(marked.data.data, taught.data?.data).flatMap(({ parent, subjects }) =>
+          subjects
+            .map<SelectOption>((subject) => ({
+              value: subject.id,
+              label: subjectLabel(subject, i18n.language),
+              group: parent
+                ? streamHeading(localizedName(parent, i18n.language), i18n.language)
+                : undefined,
+            }))
+            .filter((option) => !term || option.label.toLowerCase().includes(term)),
+        )
+      : undefined,
   };
 }
 

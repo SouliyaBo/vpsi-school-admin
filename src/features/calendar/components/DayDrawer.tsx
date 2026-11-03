@@ -6,7 +6,7 @@ import type { CalendarEvent, SchoolDay } from '@/types/entities';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DetailDrawer } from '@/components/common/DetailDrawer';
-import { DAY_EFFECT_TONE, eventStyle } from '../legend';
+import { DAY_EFFECT_TONE, eventStyle, isClassScoped } from '../legend';
 
 /**
  * One day, read before it is touched.
@@ -164,13 +164,5 @@ export function DayDrawer({
         </div>
       )}
     </DetailDrawer>
-  );
-}
-
-/** Whether the event closes named classes rather than the whole school. */
-function isClassScoped(event: CalendarEvent): boolean {
-  return (
-    (event.appliesToGradeLevelIds?.length ?? 0) > 0 ||
-    (event.appliesToClassroomIds?.length ?? 0) > 0
   );
 }

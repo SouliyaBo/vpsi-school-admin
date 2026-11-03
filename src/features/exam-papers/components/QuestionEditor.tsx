@@ -5,6 +5,8 @@ import {
   Lock,
   Plus,
   Rows2,
+  Subscript,
+  Superscript,
   Save,
   Trash2,
   Underline,
@@ -32,6 +34,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { OPTION_LETTERS, useUpdateExamPaper, type ExamQuestionInput } from '../api';
+import { hasScript, toggleScript, type Script } from '../lib/script';
 import { hasUnderline, toggleUnderline } from '../lib/underline';
 import { hasVerse, unversify, versify } from '../lib/verse';
 import { hasMath, MathText } from './MathText';
@@ -120,6 +123,30 @@ export function QuestionEditor({ paper, readOnly = false }: Props) {
   const [dirty, setDirty] = useState(false);
   // Each question's text box, so ຈັດເປັນກອນ can read what the teacher selected.
   const textBoxes = useRef<Record<string, HTMLTextAreaElement | null>>({});
+  // The box of each question the teacher was last in — its text, or one of its
+  // options — which ຕົວຍົກ and ຕົວຫ້ອຍ act on.
+  const lastBox = useRef<
+    Record<string, { element: HTMLInputElement | HTMLTextAreaElement; option: number | null }>
+  >({});
+
+  function applyScript(index: number, question: ExamQuestion, script: Script) {
+    const box = lastBox.current[question.key] ?? {
+      element: textBoxes.current[question.key],
+      option: null,
+    };
+    const from = box.element?.selectionStart ?? 0;
+    const to = box.element?.selectionEnd ?? 0;
+    const value = box.option === null ? question.text : question.options[box.option].text;
+    const next = toggleScript(value, from, to, script);
+    if (next === value) {
+      notify.info(t('examPaper.scriptSelectFirst'));
+      return;
+    }
+    editQuestion(index, (q) => {
+      if (box.option === null) q.text = next;
+      else q.options[box.option].text = next;
+    });
+  }
 
   // A fresh read from the server (after save, or a reload) replaces an
   // unedited draft; an edited one is the teacher's and stays.
@@ -258,6 +285,19 @@ export function QuestionEditor({ paper, readOnly = false }: Props) {
         </CardContent>
       </Card>
 
+      {!readOnly && draft.questions.length > 1 && (
+        <SectionRange
+          count={draft.questions.length}
+          onApply={(from, to, section) =>
+            edit((next) => {
+              for (let index = from - 1; index < to; index += 1) {
+                next.questions[index].section = section || null;
+              }
+            })
+          }
+        />
+      )}
+
       <ol className="space-y-3">
         {draft.questions.map((question, index) => (
           <li key={question.key}>
@@ -289,6 +329,9 @@ export function QuestionEditor({ paper, readOnly = false }: Props) {
                         textBoxes.current[question.key] = element;
                       }}
                       aria-label={t('examPaper.questionText')}
+                      onFocus={(event) => {
+                        lastBox.current[question.key] = { element: event.target, option: null };
+                      }}
                       rows={hasVerse(question.text) ? 5 : 2}
                       value={question.text}
                       disabled={readOnly}
@@ -343,6 +386,24 @@ export function QuestionEditor({ paper, readOnly = false }: Props) {
                           <Underline />
                           {t('examPaper.underline')}
                         </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => applyScript(index, question, 'sup')}
+                        >
+                          <Superscript />
+                          {t('examPaper.superscript')}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => applyScript(index, question, 'sub')}
+                        >
+                          <Subscript />
+                          {t('examPaper.subscript')}
+                        </Button>
                         {hasVerse(question.text) && (
                           <Button
                             type="button"
@@ -363,7 +424,9 @@ export function QuestionEditor({ paper, readOnly = false }: Props) {
                         {t('examPaper.underlineHint')}
                       </p>
                     )}
-                    {hasVerse(question.text) || hasUnderline(question.text) ? (
+                    {hasVerse(question.text) ||
+                    hasUnderline(question.text) ||
+                    hasScript(question.text) ? (
                       <VerseText text={question.text} />
                     ) : (
                       hasMath(question.text) && (
@@ -451,6 +514,12 @@ export function QuestionEditor({ paper, readOnly = false }: Props) {
                           aria-label={`${t('examPaper.option')} ${letters[optionIndex]}`}
                           value={option.text}
                           disabled={readOnly}
+                          onFocus={(event) => {
+                            lastBox.current[question.key] = {
+                              element: event.target,
+                              option: optionIndex,
+                            };
+                          }}
                           onChange={(event) =>
                             editQuestion(
                               index,
@@ -458,7 +527,7 @@ export function QuestionEditor({ paper, readOnly = false }: Props) {
                             )
                           }
                         />
-                        {hasMath(option.text) && (
+                        {(hasMath(option.text) || hasScript(option.text)) && (
                           <MathText
                             text={option.text}
                             className="block rounded-md bg-muted/50 px-2 py-1 text-sm"
@@ -601,6 +670,100 @@ export function QuestionEditor({ paper, readOnly = false }: Props) {
 }
 
 /** Thumbnails of the pictures a stem or option carries, by their signed URLs. */
+/**
+ * ຕັ້ງພາກໃຫ້ຫຼາຍຂໍ້ພ້ອມກັນ — one ພາກ for a run of questions, "ຂໍ້ 1 ຫາ 10 ເປັນ
+ * ຟີຊິກ", rather than typing it into thirty boxes. What a ທຳມະຊາດ paper needs
+ * before its marks can be split by subject, when its Word file had no headings
+ * (the office, 22 Oct 2026). A blank name takes the ພາກ off. Changes the draft
+ * only; the teacher still saves.
+ */
+function SectionRange({
+  count,
+  onApply,
+}: {
+  count: number;
+  onApply: (from: number, to: number, section: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [from, setFrom] = useState('1');
+  const [to, setTo] = useState(String(count));
+  const [section, setSection] = useState('');
+  const first = Number(from);
+  const last = Number(to);
+  const valid =
+    Number.isInteger(first) &&
+    Number.isInteger(last) &&
+    first >= 1 &&
+    last <= count &&
+    first <= last;
+
+  return (
+    <Card>
+      <CardContent className="space-y-3 pt-6">
+        <div>
+          <p className="text-sm font-medium">{t('examPaper.rangeTitle')}</p>
+          <p className="text-xs text-muted-foreground">{t('examPaper.rangeHint')}</p>
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="range-from">{t('examPaper.rangeFrom')}</Label>
+            <Input
+              id="range-from"
+              type="number"
+              min={1}
+              max={count}
+              className="w-20"
+              value={from}
+              onChange={(event) => setFrom(event.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="range-to">{t('examPaper.rangeTo')}</Label>
+            <Input
+              id="range-to"
+              type="number"
+              min={1}
+              max={count}
+              className="w-20"
+              value={to}
+              onChange={(event) => setTo(event.target.value)}
+            />
+          </div>
+          <div className="min-w-48 flex-1 space-y-1">
+            <Label htmlFor="range-section">{t('examPaper.rangeSection')}</Label>
+            <Input
+              id="range-section"
+              placeholder={t('examPaper.rangeSectionPlaceholder')}
+              value={section}
+              onChange={(event) => setSection(event.target.value)}
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!valid}
+            onClick={() => {
+              onApply(first, last, section.trim());
+              notify.success(
+                section.trim()
+                  ? t('examPaper.rangeApplied', { from: first, to: last, section: section.trim() })
+                  : t('examPaper.rangeCleared', { from: first, to: last }),
+              );
+            }}
+          >
+            {t('examPaper.rangeApply')}
+          </Button>
+        </div>
+        {!valid && (
+          <p className="text-xs text-amber-700 dark:text-amber-300">
+            {t('examPaper.rangeInvalid', { count })}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function Pictures({
   images,
   readOnly,

@@ -52,10 +52,19 @@ const TONES: Record<string, Tone> = {
   pending: 'warning',
   rejected: 'danger',
   cancelled: 'secondary',
+  // guardian report links — `active` is shared
+  expired: 'secondary',
+  revoked: 'secondary',
+  locked: 'danger',
   // subjects
   core: 'default',
   elective: 'info',
   extracurricular: 'secondary',
+  // monthly standing (ລາຍງານ → ສະຫຼຸບຜົນການຮຽນ)
+  top: 'success',
+  middle: 'info',
+  below: 'danger',
+  incomplete: 'secondary',
   // locations
   province: 'default',
   district: 'info',

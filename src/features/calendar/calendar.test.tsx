@@ -116,10 +116,16 @@ const SCHOOL_DAYS: SchoolDay[] = [
 ];
 
 function mockApi() {
-  vi.spyOn(apiClient, 'get').mockImplementation(async (url: string) => {
+  vi.spyOn(apiClient, 'get').mockImplementation(async (url: string, config?: unknown) => {
     if (url === '/school-years/active') return activeYear as never;
     if (url === '/calendar/school-days') return SCHOOL_DAYS as never;
-    if (url === '/calendar') return paginated([holiday, examWeek, gradeClosure]) as never;
+    if (url === '/calendar') {
+      // As the API does: a page of more than 100 is a 400, which once left the
+      // whole event list — and every class-only day off — silently empty.
+      const limit = Number((config as { params?: { limit?: unknown } })?.params?.limit ?? 20);
+      if (limit > 100) throw new Error('limit must not be greater than 100');
+      return paginated([holiday, examWeek, gradeClosure]) as never;
+    }
     if (url === '/grade-levels') {
       return paginated([{ id: 'grade-m1', code: 'm1', nameLo: 'ມ.1', level: 1 }]) as never;
     }
@@ -277,6 +283,29 @@ describe('a day off for some classes only', () => {
 
     const row = within(drawer).getByText('ພັກວັນຄູແຫ່ງຊາດ').closest('li')!;
     expect(within(row).queryByText('Some classes only')).not.toBeInTheDocument();
+  });
+
+  it('names the class-only event in its day on the grid, without repainting the day', async () => {
+    renderWithProviders(<CalendarPage />);
+
+    // The school's day is `teaching` and carries no events; the cell still says what is on it.
+    const cell = await screen.findByLabelText('2026-10-05 — ມ.1 off');
+    expect(cell.className).toBe((await screen.findByLabelText(/^2026-10-06/)).className);
+  });
+
+  it('warns that choosing classes does nothing while the day stays a normal one', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CalendarPage />);
+
+    await user.click(await screen.findByRole('button', { name: 'Add event' }));
+    const form = await screen.findByRole('dialog');
+    await user.click(within(form).getByRole('checkbox', { name: /m1 — ມ\.1/ }));
+    // A holiday closes ມ.1: the scope matters, nothing to warn about.
+    expect(within(form).queryByText(/choosing classes changes nothing/)).not.toBeInTheDocument();
+
+    await user.click(within(form).getByRole('combobox', { name: /Effect on the school day/ }));
+    await user.click(await screen.findByRole('option', { name: 'Classes run' }));
+    expect(within(form).getByText(/choosing classes changes nothing/)).toBeInTheDocument();
   });
 
   it('sends the chosen classes with the event', async () => {

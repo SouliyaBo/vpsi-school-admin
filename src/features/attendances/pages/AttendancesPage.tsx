@@ -1,6 +1,7 @@
 import { BarChart3, CalendarCheck, ClipboardCheck, Clock, History } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCan } from '@/features/auth/hooks';
+import { useRequestedTab } from '@/lib/use-requested-tab';
 import { CoverageReport } from '@/features/coverage/CoverageReport';
 import { TimelinessReport } from '@/features/timeliness/TimelinessReport';
 import { useActiveSchoolYear } from '@/features/school-years/api';
@@ -34,6 +35,12 @@ export function AttendancesPage() {
   const can = useCan();
 
   const oversees = can('attendances', 'manage');
+  const initialTab = useRequestedTab(
+    oversees
+      ? ['rollcall', 'history', 'summary', 'coverage', 'timeliness']
+      : ['rollcall', 'history', 'summary'],
+    'rollcall',
+  );
 
   return (
     <div className="space-y-4">
@@ -50,7 +57,7 @@ export function AttendancesPage() {
         className="print:hidden"
       />
 
-      <Tabs defaultValue="rollcall">
+      <Tabs defaultValue={initialTab}>
         <TabsList className="print:hidden">
           <TabsTrigger value="rollcall">
             <ClipboardCheck />

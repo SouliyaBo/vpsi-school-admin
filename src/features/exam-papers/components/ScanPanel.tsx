@@ -259,7 +259,9 @@ function FilePreview({ file, onRemove }: { file: File; onRemove: () => void }) {
 function StaleDrawNote({ stamp, current }: { stamp: string; current: string }) {
   const { t } = useTranslation();
   return (
-    <p className="text-xs font-medium text-danger">{t('examPaper.staleDraw', { stamp, current })}</p>
+    <p className="text-xs font-medium text-danger">
+      {t('examPaper.staleDraw', { stamp, current })}
+    </p>
   );
 }
 

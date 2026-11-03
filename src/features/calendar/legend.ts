@@ -1,3 +1,4 @@
+import type { CalendarEvent } from '@/types/entities';
 import type { CalendarEventType, DayState, SchoolDayEffect } from '@/types/enums';
 
 /**
@@ -87,3 +88,13 @@ export const DAY_EFFECT_TONE: Record<SchoolDayEffect, 'success' | 'warning' | 'd
   no_classes: 'warning',
   closed: 'danger',
 };
+
+/** Whether the event closes named classes rather than the whole school. */
+export function isClassScoped(
+  event: Pick<CalendarEvent, 'appliesToGradeLevelIds' | 'appliesToClassroomIds'>,
+): boolean {
+  return (
+    (event.appliesToGradeLevelIds?.length ?? 0) > 0 ||
+    (event.appliesToClassroomIds?.length ?? 0) > 0
+  );
+}

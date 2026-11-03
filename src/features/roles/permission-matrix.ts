@@ -96,6 +96,7 @@ export const RESOURCE_GROUPS: ResourceGroup[] = [
       'conduct-scores',
       'behavior-logs',
       'homeroom-reviews',
+      'guardian-reports',
       'attendances',
       'lesson-substitutions',
       'term-results',

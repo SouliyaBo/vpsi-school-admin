@@ -280,6 +280,23 @@ export interface Guardian extends BaseDocument {
   workplace?: string | null;
   villageId?: Ref<Location>;
   addressDetail?: string | null;
+  /** On list rows only: the students linked to this guardian. */
+  children?: GuardianChild[];
+}
+
+/** A guardian's child as the guardians list carries it, room resolved for this year. */
+export interface GuardianChild {
+  id: string;
+  studentCode: string;
+  firstNameLo: string;
+  lastNameLo: string;
+  nickname: string | null;
+  status: StudentStatus;
+  relationship: GuardianRelationship;
+  /** `null` when the child has no active placement in the active school year. */
+  classroomId: string | null;
+  classroomName: string | null;
+  gradeLevelCode: string | null;
 }
 
 /**
@@ -827,6 +844,18 @@ export interface ExamPaperSummary extends BaseDocument {
   drawStamp?: string | null;
   /** What the paper is out of; every question is worth the same share. */
   totalPoints?: number | null;
+  /**
+   * ແຍກຄະແນນຕາມວິຊາ — which ພາກ is which marked subject (`''` for questions with
+   * no heading), and what that part is out of (`null` takes `totalPoints`).
+   * Empty, or absent on an older API, for a paper marked as a whole.
+   */
+  subjectParts?: ExamSubjectPart[];
+}
+
+export interface ExamSubjectPart {
+  subjectId: string;
+  sections: string[];
+  points: number | null;
 }
 
 export interface ExamPaper extends ExamPaperSummary {
@@ -979,6 +1008,107 @@ export interface Vaccination extends BaseDocument {
   provider?: string | null;
   consent: VaccinationConsent;
   notes?: string | null;
+}
+
+// ── ລາຍງານຫາຜູ້ປົກຄອງ ──────────────────────────────────────────────────────
+
+export type GuardianReportSection = 'monthlyMarks' | 'attendance' | 'conduct' | 'behavior';
+export type GuardianReportState = 'active' | 'expired' | 'revoked' | 'locked';
+
+export interface GuardianReportBehaviorEntry {
+  date: string;
+  subjectNameLo: string | null;
+  behavior: string | null;
+  action: string | null;
+  remark: string | null;
+}
+
+/**
+ * What a guardian sees — frozen when the teacher sends it. Thin on identity on
+ * purpose: a name, a room and a month, and none of the codes, phones or
+ * addresses the rest of the register holds.
+ */
+export interface GuardianReportContent {
+  student: { nameLo: string; nickname: string | null };
+  classroomName: string;
+  semester: { number: number; nameLo: string | null };
+  month: number;
+  window: { from: string; to: string };
+  /** The room's homeroom teacher, whoever sent it. */
+  teacherName: string;
+  /** The office sends for a room too; the footer then says so. */
+  sentBy: 'homeroom' | 'office';
+  monthlyMarks?: {
+    subjects: {
+      nameLo: string;
+      nameEn: string | null;
+      score: number | null;
+      /** ກວດກາ on its own. */
+      test: number | null;
+      grade: string | null;
+    }[];
+    total: number | null;
+    average: number | null;
+    grade: string | null;
+    isComplete: boolean;
+  };
+  attendance?: {
+    present: number;
+    absent: number;
+    late: number;
+    excused: number;
+    sick: number;
+    totalRecorded: number;
+    absentUnexcused: number;
+    absentExcused: number;
+    latesPerAbsence: number;
+    attendanceRate: number;
+  };
+  conduct?: {
+    baseScore: number;
+    remaining: number;
+    grade: string | null;
+    deductions: { date: string; ruleNameLo: string; points: number }[];
+  };
+  behavior?: GuardianReportBehaviorEntry[];
+}
+
+export interface GuardianReportSnapshot extends GuardianReportContent {
+  guardian: { nameLo: string; relationship: GuardianRelationship };
+  sections: GuardianReportSection[];
+  message: string | null;
+  generatedAt: string;
+}
+
+/** `GET /guardian-reports/draft` — every section filled, for the preview. */
+export interface GuardianReportDraft extends GuardianReportContent {
+  behavior?: (GuardianReportBehaviorEntry & { id: string })[];
+  guardians: {
+    id: string;
+    nameLo: string;
+    relationship: GuardianRelationship;
+    isPrimary: boolean;
+    canViewRecords: boolean;
+    hasPhone: boolean;
+  }[];
+}
+
+/** One sent report, as the teacher's list shows it. Never carries the token. */
+export interface GuardianReport {
+  id: string;
+  studentId: string;
+  guardianId: string;
+  month: number;
+  semesterId: string;
+  state: GuardianReportState;
+  expiresAt: string;
+  failedAttempts: number;
+  viewCount: number;
+  firstViewedAt: string | null;
+  lastViewedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string | null;
+  snapshot: GuardianReportSnapshot;
 }
 
 // ── System ─────────────────────────────────────────────────────────────────

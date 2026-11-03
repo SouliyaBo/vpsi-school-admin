@@ -146,7 +146,6 @@ export const NAV_GROUPS: NavGroup[] = [
         to: '/reports',
         icon: FileText,
         resource: 'reports',
-        comingSoon: true,
       },
       { labelKey: 'lessonPlans', to: '/lesson-plans', icon: BookMarked, resource: 'lesson-plans' },
       {

@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { classrooms, useClassroomOptions } from '@/features/classrooms/api';
 import { useActiveSchoolYear } from '@/features/school-years/api';
 import { useActiveSemester, useSemesterOptions } from '@/features/semesters/api';
-import { useSubjectOptions } from '@/features/subjects/api';
+import { useMarkedSubjectOptions } from '@/features/subjects/api';
 import { cn, refId } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -64,11 +64,12 @@ export function SheetPickers({
    * which at most eight can be marked for the class on screen — and choosing a
    * ມ.7 subject for a ມ.1 class produces a sheet that is wrong in a way nothing
    * on it says. `marked` drops the two ສາຍວິຊາ that are taught but not marked,
-   * which the API refuses a sheet for anyway.
+   * which the API refuses a sheet for anyway, and files the subjects they split
+   * into under them — ສາຍສັງຄົມ's three together, not scattered by sheet order.
    */
   const classroom = classrooms.useDetail(value.classroomId);
   const gradeLevelId = refId(classroom.data?.gradeLevelId) ?? undefined;
-  const useSubjectsForClass = (search: string) => useSubjectOptions(search, gradeLevelId, 'marked');
+  const useSubjectsForClass = (search: string) => useMarkedSubjectOptions(search, gradeLevelId);
 
   return (
     <div className={cn('grid gap-3 sm:grid-cols-2 lg:grid-cols-3', className)}>
