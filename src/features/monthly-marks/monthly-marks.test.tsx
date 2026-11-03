@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { Row } from 'exceljs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as apiClient from '@/lib/api-client';
 import { paginated, renderWithProviders } from '@/test/utils';
@@ -1845,6 +1846,163 @@ describe("monthly marks — one student's card", () => {
     expect(within(term).getAllByText('7.86')).toHaveLength(4);
     // The term's own standing figures.
     expect(within(september).getByText('31.44')).toBeInTheDocument();
+  });
+
+  /**
+   * ຜົນການຮຽນພາກຮຽນ as the office's own Excel sheet: the months, 3 ເດືອນ,
+   * ສອບເສັງ and ພາກຮຽນ down the side, each with its ລວມ / ສະເລ່ຍ / ເກຣດ, and the
+   * days missed and conduct points a month at a time beside them.
+   */
+  it('exports the whole term as the office’s sheet, a month of registers to a line', async () => {
+    const created = vi.fn((_blob: Blob) => 'blob:term');
+    vi.stubGlobal('URL', { ...URL, createObjectURL: created, revokeObjectURL: vi.fn() });
+    const filenames: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      filenames.push(this.download);
+    });
+
+    const rollFor: Record<string, number[]> = { '9': [0, 0], '10': [7, 2], '11': [2, 1] };
+    stubStudent({
+      summary: {
+        subjects: 4,
+        monthsRecorded: 3,
+        termTotal: 31.44,
+        termSubjectsRecorded: 4,
+        termAverage: 7.86,
+        termComplete: true,
+        termGrade: 'B',
+        threeMonth: {
+          total: 32.88,
+          subjectsRecorded: 4,
+          average: 8.22,
+          isComplete: true,
+          grade: 'B',
+        },
+        exam: { total: 30, subjectsRecorded: 4, average: 7.5, isComplete: true, grade: 'B' },
+        classSize: { students: 23, female: 9 },
+      },
+    });
+    const fallback = vi.mocked(apiClient.get).getMockImplementation()!;
+    vi.mocked(apiClient.get).mockImplementation(async (url: string, config?: unknown) => {
+      if (url === `/conduct-deductions/student/stu-1/school-year/${activeYear.id}`) {
+        return {
+          ...ledger,
+          deducted: 10,
+          remaining: 90,
+          entries: [
+            {
+              id: 'd1',
+              date: '2025-09-12',
+              ruleId: 'r',
+              ruleCode: 'R',
+              ruleNameLo: 'ມາຊ້າ',
+              points: 5,
+              note: null,
+            },
+            {
+              id: 'd2',
+              date: '2025-11-03',
+              ruleId: 'r',
+              ruleCode: 'R',
+              ruleNameLo: 'ມາຊ້າ',
+              points: 5,
+              note: null,
+            },
+          ],
+        } as never;
+      }
+      if (url === `/attendances/summary/student/stu-1/semester/${semester.id}`) {
+        const month = (config as { params?: { month?: string } } | undefined)?.params?.month;
+        if (month && rollFor[month]) {
+          const [total, unexcused] = rollFor[month];
+          return { ...roll, absentTotal: total, absentUnexcused: unexcused } as never;
+        }
+      }
+      return fallback(url, config as never);
+    });
+
+    renderWithProviders(
+      <StudentMonthlyMarks studentId="stu-1" studentName="ລັດມິດາ ວິຈິດວົງສາ" studentCode="594" />,
+    );
+    const user = userEvent.setup();
+    // Only the whole-term view has the sheet to export.
+    await screen.findByRole('tab', { name: 'Whole term' });
+    expect(screen.queryByRole('button', { name: /export excel/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Whole term' }));
+    await user.click(await screen.findByRole('button', { name: /export excel/i }));
+    await waitFor(() => expect(created).toHaveBeenCalled());
+
+    const bytes = await new Promise<Uint8Array>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(created.mock.calls[0][0]);
+    });
+    const { default: ExcelJS } = await import('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(bytes.buffer as ArrayBuffer);
+    const sheet = workbook.worksheets[0];
+
+    // One landscape page, as the office files it.
+    expect(sheet.pageSetup).toMatchObject({
+      orientation: 'landscape',
+      fitToWidth: 1,
+      fitToHeight: 1,
+    });
+
+    const rowOf = (label: string) => {
+      let found: Row | undefined;
+      sheet.eachRow((row) => {
+        if (row.getCell(1).value === label) found = row;
+      });
+      if (!found) throw new Error(`no row ${label}`);
+      // `values` is 1-based and starts with the label; the twelve figures
+      // after it, short of the merged ຄຳເຫັນ box.
+      return (found.values as unknown[]).slice(2, 14);
+    };
+    const bar = (sheet.getRow(3).values as unknown[]).filter(Boolean);
+    expect(bar).toEqual(
+      expect.arrayContaining(['Name: ລັດມິດາ ວິຈິດວົງສາ (Code: 594)', '23 students, 9 girls']),
+    );
+
+    // Marks · ລວມ · ຈຳນວນວິຊາ · ສະເລ່ຍ · ເກຣດ · ຂາດ · ບໍ່ມີເຫດຜົນ · ຖືກຕັດ · ເຫຼືອ
+    expect(rowOf('September')).toEqual([7.9, 7.9, 7.9, 7.9, 30.9, 4, 7.73, 'B', 0, 0, 5, 95]);
+    expect(rowOf('October')).toEqual([8.45, 8.45, 8.45, 8.45, 30.9, 4, 7.73, 'B', 7, 2, 0, 95]);
+    expect(rowOf('November')).toEqual([8.3, 8.3, 8.3, 8.3, 30.9, 4, 7.73, 'B', 2, 1, 5, 90]);
+    expect(rowOf('3-month average')).toEqual([
+      8.22,
+      8.22,
+      8.22,
+      8.22,
+      32.88,
+      4,
+      8.22,
+      'B',
+      9,
+      3,
+      10,
+      90,
+    ]);
+    // ສອບເສັງ is a day, not a stretch of the term: nothing missed, nothing lost.
+    expect(rowOf('Exam, Semester 1')).toEqual([7.5, 7.5, 7.5, 7.5, 30, 4, 7.5, 'B', 0, 0, 0, 90]);
+    expect(rowOf('Semester 1 mark')).toEqual([
+      7.86,
+      7.86,
+      7.86,
+      7.86,
+      31.44,
+      4,
+      7.86,
+      'B',
+      9,
+      3,
+      10,
+      90,
+    ]);
+
+    expect(filenames[0]).toMatch(/^Results Semester 1.*ລັດມິດາ ວິຈິດວົງສາ\.xlsx$/);
   });
 
   /**

@@ -744,6 +744,7 @@ export function StudentDetailPage() {
                 <StudentMonthlyMarks
                   studentId={id}
                   studentName={fullName(student, i18n.language)}
+                  studentCode={student.studentCode}
                   enabled={tab === 'monthlyMarks'}
                 />
               </CardContent>

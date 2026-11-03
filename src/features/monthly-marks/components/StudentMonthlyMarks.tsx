@@ -31,6 +31,7 @@ import {
   type StudentMonthlySheet,
   type StudentMonthSummary,
 } from '../api';
+import { StudentTermExportButton } from './StudentTermExportButton';
 
 /** The picker's whole-term choice, beside the term's months. */
 const TERM_VIEW = 'term';
@@ -56,11 +57,14 @@ const TERM_VIEW = 'term';
 export function StudentMonthlyMarks({
   studentId,
   studentName,
+  studentCode,
   enabled = true,
 }: {
   studentId: string | undefined;
   /** Heads the block, as the letter names the child. */
   studentName?: string;
+  /** ລ.ຕ beside the name on the term sheet's export. */
+  studentCode?: string;
   /** The tab is not open yet, so the class's marks are not worth reading. */
   enabled?: boolean;
 }) {
@@ -154,6 +158,22 @@ export function StudentMonthlyMarks({
             </div>
           </Tabs>
         )}
+
+        {view === TERM_VIEW &&
+          studentId &&
+          data?.classroom &&
+          data.subjects.length > 0 &&
+          data.summary.monthsRecorded > 0 && (
+            <div className="ml-auto">
+              <StudentTermExportButton
+                data={data}
+                studentId={studentId}
+                studentName={studentName}
+                studentCode={studentCode}
+                schoolYear={activeYear.data}
+              />
+            </div>
+          )}
       </div>
 
       {sheet.isLoading ? (

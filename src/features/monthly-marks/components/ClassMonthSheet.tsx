@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useActiveSchoolYear } from '@/features/school-years/api';
 import { saveBlob } from '@/lib/save-blob';
 import { notify } from '@/lib/toast';
-import { cn, formatDate, localizedName } from '@/lib/utils';
+import { cn, localizedName } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -29,11 +29,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { ErrorState } from '@/components/common/ErrorState';
 import { StudentName } from '@/components/common/StudentName';
 import { classroomHeading } from '@/features/classrooms/api';
-import {
-  displaySubjectTotal,
-  useClassMonth,
-  type ClassMonthSheet as ClassMonthData,
-} from '../api';
+import { displaySubjectTotal, useClassMonth, type ClassMonthSheet as ClassMonthData } from '../api';
 import { buildClassMonthWorkbook, classMonthFileName } from '../lib/class-month-workbook';
 import {
   ParentReportBatchButton,
@@ -335,13 +331,6 @@ function ExportButton({
           percent: t('monthlyMark.percentRow'),
           director: t('monthlyMark.director'),
           signatureDate: t('monthlyMark.signatureDate'),
-          note: t('monthlyMark.monthSheetNote', { count: sheet.subjects.length }),
-          registerNote: t('monthlyMark.registerNote', {
-            strongFrom: sheet.bands.strongFrom,
-            weakBelow: sheet.bands.weakBelow,
-          }),
-          gradeScale: t('monthlyMark.gradeScaleNote'),
-          printedOn: t('monthlyMark.printedOn', { date: formatDate(new Date()) }),
         },
         registers,
       );

@@ -296,7 +296,23 @@ export interface StudentMonthlySheet {
     termGrade?: Grade | null;
     /** False for a student who has left the room the marks were earned in. */
     onRoster?: boolean;
+    /** ລວມ / ສະເລ່ຍ / ເກຣດ of the 3 ເດືອນ line. Absent from an older API; `null` before placement. */
+    threeMonth?: TermLineStanding | null;
+    /** The same for ສອບເສັງ. */
+    exam?: TermLineStanding | null;
+    /** ລວມ … ຄົນ, ຍິງ … ຄົນ — the room as it stands. Absent from an older API. */
+    classSize?: { students: number; female: number } | null;
   };
+}
+
+/** One line of the term block, worked out on the API as a month's line is. */
+export interface TermLineStanding {
+  total: number | null;
+  subjectsRecorded: number;
+  average: number | null;
+  isComplete: boolean;
+  /** Withheld until every subject has a figure on the line. */
+  grade: Grade | null;
 }
 
 export interface SaveMarksResult {

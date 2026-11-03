@@ -108,13 +108,10 @@ export interface ClassMonthLabels {
   count: string;
   percent: string;
 
-  // The foot: the notes, the scale, and the two lines somebody signs.
-  note: string;
-  registerNote: string;
-  gradeScale: string;
+  // The foot: the two lines somebody signs. The notes the screen carries under
+  // the table are not printed — the sheet has to fit on one page.
   director: string;
   signatureDate: string;
-  printedOn: string;
 }
 
 /**
@@ -181,12 +178,11 @@ export async function buildClassMonthWorkbook(
     views: [{ state: 'frozen', xSplit: 4, ySplit: 6 }],
     pageSetup: {
       orientation: 'landscape',
+      // One A4 page, whatever the class size: the office files it as one sheet,
+      // and a second page carried only the signatures over.
       fitToPage: true,
       fitToWidth: 1,
-      fitToHeight: 0,
-      // The column headings repeat on every printed page; a second page of
-      // nameless numbers is not a sheet anyone can check.
-      printTitlesRow: '5:6',
+      fitToHeight: 1,
       margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
     },
   });
@@ -521,8 +517,8 @@ export async function buildClassMonthWorkbook(
   //
   // Both names are signed by hand once the sheet is off the printer, so the
   // block is a place to sign rather than two labels: the date over it, then
-  // three rows of clear room and a line to sign on. The labels used to sit
-  // straight on top of the notes, leaving the office nowhere to put a pen.
+  // three rows of clear room and a line to sign on. Kept as short as still
+  // takes a signature, since every point of height shrinks the one-page print.
   worksheet.addRow([]);
   const signatureColumn = Math.max(5, lastColumn - 4);
   /** The left-hand column of each block; each one runs three columns wide. */
@@ -534,7 +530,6 @@ export async function buildClassMonthWorkbook(
   dateLine.getCell(signatureColumn).font = laoFont();
   dateLine.getCell(signatureColumn).alignment = { horizontal: 'center' };
 
-  worksheet.addRow([]);
   const signatures = worksheet.addRow([]);
   signatures.getCell(2).value = labels.director;
   signatures.getCell(signatureColumn).value = labels.homeroomTeacher;
@@ -546,7 +541,7 @@ export async function buildClassMonthWorkbook(
   }
 
   // The room itself — three rows of it, closed by the line the name goes on.
-  for (let index = 0; index < 3; index += 1) worksheet.addRow([]).height = 24;
+  for (let index = 0; index < 3; index += 1) worksheet.addRow([]).height = 20;
   const signatureRule = worksheet.addRow([]);
   signatureRule.height = 8;
   for (const column of signatureBlocks) {
@@ -556,15 +551,6 @@ export async function buildClassMonthWorkbook(
     for (let span = column; span <= column + 2; span += 1) {
       signatureRule.getCell(span).border = { bottom: { style: 'dotted' } };
     }
-  }
-
-  // ── The notes the screen carries under the table ─────────────────────────
-  worksheet.addRow([]);
-  for (const note of [labels.note, labels.registerNote, labels.gradeScale, labels.printedOn]) {
-    const row = worksheet.addRow([note]);
-    worksheet.mergeCells(row.number, 1, row.number, lastColumn);
-    row.getCell(1).font = laoFont({ size: 9, color: { argb: 'FF6B7280' } });
-    row.getCell(1).alignment = { horizontal: 'left' };
   }
 
   const buffer = await workbook.xlsx.writeBuffer();
