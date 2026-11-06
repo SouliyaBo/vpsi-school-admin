@@ -18,6 +18,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { ErrorState } from '@/components/common/ErrorState';
 import { StudentName } from '@/components/common/StudentName';
 import { useAnnualSheet } from '../api';
+import { ClassYearSheet } from './ClassYearSheet';
 import { Mark, SheetHeading } from './SemesterSheet';
 import { SheetPickers, type SheetTargetState } from './SheetPickers';
 
@@ -32,8 +33,10 @@ import { SheetPickers, type SheetTargetState } from './SheetPickers';
 export function AnnualSheet() {
   const { t } = useTranslation();
   const [target, setTarget] = useState<SheetTargetState>({});
+  // One subject's year, or the room's year across every subject.
+  const [mode, setMode] = useState<'subject' | 'all'>('subject');
 
-  const sheet = useAnnualSheet(target);
+  const sheet = useAnnualSheet(mode === 'subject' ? target : {});
   const data = sheet.data;
 
   const passed = (data?.rows ?? []).filter((row) => row.isPassing === true).length;
@@ -46,7 +49,25 @@ export function AnnualSheet() {
           {/* The year is the two terms together, so there is no term to pick. */}
           <SheetPickers value={target} onChange={setTarget} showSemester={false} />
 
-          {data && (
+          <div className="flex gap-2" role="group" aria-label={t('monthlyMark.annual')}>
+            {(['subject', 'all'] as const).map((option) => (
+              <Button
+                key={option}
+                size="sm"
+                variant={mode === option ? 'default' : 'outline'}
+                aria-pressed={mode === option}
+                onClick={() => setMode(option)}
+              >
+                {t(
+                  option === 'subject'
+                    ? 'monthlyMark.classYear.modeSubject'
+                    : 'monthlyMark.classYear.modeAll',
+                )}
+              </Button>
+            ))}
+          </div>
+
+          {mode === 'subject' && data && (
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm text-muted-foreground">
                 {t('monthlyMark.annualSummary', {
@@ -71,7 +92,9 @@ export function AnnualSheet() {
 
       <Card className="print-sheet">
         <CardContent className="space-y-3 pt-5">
-          {!target.subjectId || !target.classroomId ? (
+          {mode === 'all' ? (
+            <ClassYearSheet classroomId={target.classroomId} subjectId={target.subjectId} />
+          ) : !target.subjectId || !target.classroomId ? (
             <EmptyState icon={Table2} title={t('monthlyMark.pickSheet')} />
           ) : sheet.isLoading ? (
             <div className="space-y-2">
@@ -109,7 +132,10 @@ export function AnnualSheet() {
                       </TableCell>
                       {data.semesters.map((semester, index) => (
                         <TableCell key={semester.id} className="text-center">
-                          <Mark value={row.semesterMarks[index] ?? null} fullMark={data.subject.fullMark} />
+                          <Mark
+                            value={row.semesterMarks[index] ?? null}
+                            fullMark={data.subject.fullMark}
+                          />
                         </TableCell>
                       ))}
                       <TableCell className="text-center font-semibold">

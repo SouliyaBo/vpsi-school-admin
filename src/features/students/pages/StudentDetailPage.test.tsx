@@ -218,7 +218,11 @@ it('transfers a placed student to another class from their own page', async () =
 
   await userEvent.click(within(dialog).getByRole('combobox', { name: /transfer to/i }));
   // The picker renders its options as buttons in a popover, not as `option`s.
-  await userEvent.click(await screen.findByRole('button', { name: /m1 B/ }));
+  const destination = await screen.findByRole('button', { name: /m1 B/ });
+  // The room they sit in is no destination: a move into it opened a second row
+  // for the same child at the foot of the roll.
+  expect(screen.queryByRole('button', { name: /m1 A/ })).not.toBeInTheDocument();
+  await userEvent.click(destination);
   await userEvent.click(within(dialog).getByRole('button', { name: /^transfer$/i }));
 
   await waitFor(() => expect(patch).toHaveBeenCalled());

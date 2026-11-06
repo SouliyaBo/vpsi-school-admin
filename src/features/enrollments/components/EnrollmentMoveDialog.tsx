@@ -7,10 +7,11 @@ import { z } from 'zod';
 import { useClassroomOptions } from '@/features/classrooms/api';
 import { useActiveSchoolYear } from '@/features/school-years/api';
 import { stripEmpty } from '@/lib/payload';
+import { refId } from '@/lib/utils';
 import { optionalId, optionalText } from '@/lib/zod-helpers';
 import { vmsg } from '@/lib/form-message';
 import type { EnrollmentStatus } from '@/types/enums';
-import type { Enrollment } from '@/types/entities';
+import type { Classroom, Enrollment } from '@/types/entities';
 import { Form } from '@/components/ui/form';
 import { EntitySelectField } from '@/components/common/EntitySelect';
 import { FieldSection, TextareaField } from '@/components/common/fields';
@@ -89,8 +90,14 @@ export function EnrollmentMoveDialog({ move, onClose, fromLabel }: Props) {
     if (move) form.reset({ transferredToClassroomId: '', reason: '' });
   }, [move, form]);
 
-  const useClassroomsForYear = (search: string) =>
-    useClassroomOptions(search, activeYear.data?.id);
+  // The room the child already sits in is no destination: the API refuses it,
+  // and before it did, picking it closed the row and opened a second one at the
+  // foot of the same roll.
+  const currentRoomId = move ? refId<Classroom>(move.enrollment.classroomId) : undefined;
+  const useClassroomsForYear = (search: string) => {
+    const options = useClassroomOptions(search, activeYear.data?.id);
+    return { ...options, data: options.data?.filter((option) => option.value !== currentRoomId) };
+  };
 
   function submit(values: StatusFormValues) {
     if (!move) return;

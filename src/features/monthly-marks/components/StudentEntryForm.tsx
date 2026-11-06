@@ -41,6 +41,7 @@ import {
   type MonthGrid,
   type SaveStudentMonthResult,
 } from '../api';
+import { markingMonth, monthInTerm } from '../lib/default-month';
 import { MarkInput, SheetPickers, type SheetTargetState } from './SheetPickers';
 
 const EMPTY: MonthCells = { attendance: null, notebook: null, activity: null, test: null };
@@ -77,9 +78,9 @@ export function StudentEntryForm() {
   const { t, i18n } = useTranslation();
 
   const [target, setTarget] = useState<SheetTargetState>({});
-  // Starts on the current calendar month; corrected below once the API says
-  // which months this term actually collects.
-  const [month, setMonth] = useState(() => new Date().getMonth() + 1);
+  // Starts on the month being marked — the one behind until the 5th — and is
+  // corrected below once the API says which months this term actually collects.
+  const [month, setMonth] = useState(() => markingMonth());
   const [studentId, setStudentId] = useState<string>();
   const [draft, setDraft] = useState<Record<string, MonthCells>>({});
   const [remarks, setRemarks] = useState<Record<string, string>>({});
@@ -122,10 +123,10 @@ export function StudentEntryForm() {
   const first = grids.find((query) => query.data)?.data;
   const roster = first?.rows ?? [];
 
-  // A term that does not collect the current month lands on its last month.
+  // A term that does not collect the month lands on its nearest month.
   useEffect(() => {
     if (first && !first.months.includes(month) && first.months.length > 0) {
-      setMonth(first.months[first.months.length - 1]);
+      setMonth(monthInTerm(month, first.months));
     }
   }, [first, month]);
 

@@ -151,6 +151,46 @@ export interface AnnualSheet {
   rows: AnnualRow[];
 }
 
+/** ຄະແນນຖືກຕັດ and ວັນຂາດ over one stretch; `null` where nothing was recorded. */
+export interface YearRegisters {
+  deducted: number | null;
+  absences: number | null;
+}
+
+export interface YearTermLine extends YearRegisters {
+  /** The months the term collects, a mark per subject in `subjects` order. */
+  months: (YearRegisters & { month: number; scores: (number | null)[] })[];
+  /** ສອບເສັງ, per subject. */
+  exam: (number | null)[];
+  /** ພາກຮຽນ, per subject — `null` until the months and the exam are both in. */
+  marks: (number | null)[];
+}
+
+export interface ClassYearRow extends YearRegisters {
+  studentId: string;
+  studentCode: string;
+  rollNumber: number | null;
+  isEnrolled: boolean;
+  gender: string | null;
+  firstNameLo: string | null;
+  lastNameLo: string | null;
+  nickname: string | null;
+  /** In term order, matching `semesters`. */
+  terms: YearTermLine[];
+  /** ໝົດປີ per subject: the two terms' mean. */
+  annual: (number | null)[];
+}
+
+/** `GET /monthly-marks/class-year` — ໝົດປີ ທັງຫ້ອງ, one room's year. */
+export interface ClassYearSheet {
+  classroom: ClassroomHeader;
+  schoolYear: { id: string; code: string | null; nameLo: string | null } | null;
+  subjects: { id: string; code: string; nameLo: string; nameEn: string | null; fullMark: number }[];
+  semesters: (SemesterHeader & { months: number[] })[];
+  classSize: { students: number; female: number };
+  rows: ClassYearRow[];
+}
+
 /** One column of the monthly summary — a subject the grade is marked in. */
 export interface MonthSubjectHeader {
   id: string;
@@ -350,6 +390,9 @@ export const monthlyMarksApi = {
   annualSheet: (target: Record<string, unknown>) =>
     get<AnnualSheet>('/monthly-marks/annual', { params: cleanParams(target) }),
 
+  classYear: (classroomId: string) =>
+    get<ClassYearSheet>('/monthly-marks/class-year', { params: { classroomId } }),
+
   classMonth: (target: Record<string, unknown>) =>
     get<ClassMonthSheet>('/monthly-marks/class-month', { params: cleanParams(target) }),
 
@@ -416,6 +459,14 @@ export function useAnnualSheet(target: {
     queryKey: ['monthly-marks', 'annual', target],
     queryFn: () => monthlyMarksApi.annualSheet(target),
     enabled: Boolean(target.subjectId && target.classroomId),
+  });
+}
+
+export function useClassYear(classroomId: string | undefined) {
+  return useQuery({
+    queryKey: ['monthly-marks', 'class-year', classroomId],
+    queryFn: () => monthlyMarksApi.classYear(classroomId as string),
+    enabled: Boolean(classroomId),
   });
 }
 

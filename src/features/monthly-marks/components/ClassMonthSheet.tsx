@@ -37,6 +37,7 @@ import {
   useRemarkStore,
 } from './ParentReportButtons';
 import { loadRegisters } from '../lib/load-registers';
+import { markingMonth, monthInTerm } from '../lib/default-month';
 import { Mark } from './SemesterSheet';
 import { SheetPickers, type SheetTargetState } from './SheetPickers';
 
@@ -61,7 +62,8 @@ import { SheetPickers, type SheetTargetState } from './SheetPickers';
 export function ClassMonthSheet() {
   const { t, i18n } = useTranslation();
   const [target, setTarget] = useState<SheetTargetState>({});
-  const [month, setMonth] = useState(() => new Date().getMonth() + 1);
+  // The month being marked — the one behind until the 5th.
+  const [month, setMonth] = useState(() => markingMonth());
   const activeYear = useActiveSchoolYear();
 
   const sheet = useClassMonth({
@@ -73,11 +75,11 @@ export function ClassMonthSheet() {
   const { remarks, setRemark } = useRemarkStore(data);
   const schoolYear = activeYear.data?.code ?? localizedName(activeYear.data, i18n.language);
 
-  // A term that does not collect the current month — the school breaks for exams
-  // in ທັນວາ and ມັງກອນ — lands on its last month rather than on an empty table.
+  // A term that does not collect the month — the school breaks for exams in
+  // ທັນວາ and ມັງກອນ — lands on its nearest month rather than on an empty table.
   useEffect(() => {
     if (data && data.months.length > 0 && !data.months.includes(month)) {
-      setMonth(data.months[data.months.length - 1]);
+      setMonth(monthInTerm(month, data.months));
     }
   }, [data, month]);
 

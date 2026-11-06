@@ -243,6 +243,44 @@ describe('monthly marks — the entry form', () => {
     expect(month.textContent).toMatch(/September|October|November/);
   });
 
+  /**
+   * Teachers finish the month behind them in its first days. A page that turned
+   * over on the 1st had them typing ຕຸລາ's marks into ພະຈິກ.
+   */
+  describe('on the first days of a month', () => {
+    afterEach(() => vi.useRealTimers());
+
+    const opensOn = async (date: string) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(`${date}T08:00:00`));
+      renderWithProviders(<MonthGridForm />);
+      await chooseSheet();
+      await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/);
+      const reads = vi
+        .mocked(apiClient.get)
+        .mock.calls.filter(([url]) => url === '/monthly-marks/month') as [
+        string,
+        { params: { month: string } },
+      ][];
+      return {
+        shown: screen.getByRole('combobox', { name: /^month$/i }).textContent,
+        asked: reads[reads.length - 1]?.[1].params.month,
+      };
+    };
+
+    it('stays on the month behind until the 5th', async () => {
+      const opened = await opensOn('2026-11-04');
+      expect(opened.shown).toMatch(/October/);
+      expect(opened.asked).toBe('10');
+    });
+
+    it('turns to the new month on the 5th', async () => {
+      const opened = await opensOn('2026-11-05');
+      expect(opened.shown).toMatch(/November/);
+      expect(opened.asked).toBe('11');
+    });
+  });
+
   it('sends only the rows that changed, with every column of them', async () => {
     const post = vi
       .spyOn(apiClient, 'post')
@@ -485,8 +523,17 @@ describe('monthly marks — the entry form', () => {
 });
 
 describe('monthly marks — the entry form, leaving unsaved marks', () => {
-  beforeEach(() => stubReads());
-  afterEach(() => vi.restoreAllMocks());
+  beforeEach(() => {
+    stubReads();
+    // On a day the form opens on October, so picking November is a move. Left to
+    // the clock, the test failed on every day the form already opened on November.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-12T08:00:00'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
 
   it('asks before another month throws away what was typed', async () => {
     renderWithProviders(<MonthGridForm />);
@@ -896,6 +943,157 @@ describe('monthly marks — the year', () => {
     // (8.62 + 8.38) / 2 — the figure the school hands on.
     expect(within(row).getByText('8.50')).toBeInTheDocument();
     expect(within(row).getByText(/passed/i)).toBeInTheDocument();
+  });
+
+  /**
+   * ໝົດປີ ທັງຫ້ອງ — the room's year across every subject, laid out as the office's
+   * sheet: each month and exam, then ພາກ I, ພາກ II and ໝົດປີ, the registers beside.
+   */
+  describe('every subject at once', () => {
+    const maths = {
+      id: 'sub-maths',
+      code: 'M-M1',
+      nameLo: 'ຄະນິດສາດ',
+      nameEn: 'Maths',
+      fullMark: 10,
+    };
+    const lao = {
+      id: subject.id,
+      code: subject.code,
+      nameLo: subject.nameLo,
+      nameEn: null,
+      fullMark: 9,
+    };
+    const month = (
+      month: number,
+      scores: (number | null)[],
+      deducted: number | null,
+      absences: number | null,
+    ) => ({
+      month,
+      scores,
+      deducted,
+      absences,
+    });
+    const year = {
+      classroom,
+      schoolYear: { id: activeYear.id, code: '2026-2027', nameLo: '2026-2027' },
+      subjects: [lao, maths],
+      semesters: [
+        { ...semester, months: [9, 10, 11] },
+        { id: 'sem-2', number: 2, nameLo: 'ພາກຮຽນ II', nameEn: 'Semester 2', months: [2, 3, 4] },
+      ],
+      classSize: { students: 1, female: 1 },
+      rows: [
+        {
+          studentId: 'stu-1',
+          studentCode: '762',
+          rollNumber: 1,
+          isEnrolled: true,
+          gender: 'female',
+          firstNameLo: 'ເກວະລິນ',
+          lastNameLo: 'ອຸ່ນມີໄຊ',
+          nickname: 'ເກວະລິນ',
+          terms: [
+            {
+              months: [
+                month(9, [7.9, 4.25], 5, 1),
+                month(10, [8.45, 8.78], 0, 0),
+                month(11, [8.3, 9.28], 0, 2),
+              ],
+              exam: [8.4, 6.2],
+              marks: [8.3, 7.4],
+              deducted: 5,
+              absences: 3,
+            },
+            {
+              months: [
+                month(2, [null, null], null, null),
+                month(3, [null, null], null, null),
+                month(4, [null, null], null, null),
+              ],
+              exam: [null, null],
+              marks: [null, null],
+              deducted: null,
+              absences: null,
+            },
+          ],
+          annual: [null, null],
+          deducted: 5,
+          absences: 3,
+        },
+      ],
+    };
+
+    it('shows the room’s year, shades the chosen subject, and exports every room under its name', async () => {
+      stubReads({
+        '/monthly-marks/class-year': year,
+        '/monthly-marks/annual': { subject, classroom, semesters: [semester], rows: [] },
+      });
+      const created = vi.fn((_blob: Blob) => 'blob:sheet');
+      vi.stubGlobal('URL', { ...URL, createObjectURL: created, revokeObjectURL: vi.fn() });
+      const filenames: string[] = [];
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+        this: HTMLAnchorElement,
+      ) {
+        filenames.push(this.download);
+      });
+
+      renderWithProviders(<AnnualSheet />);
+      await chooseSheet();
+      await userEvent.click(screen.getByRole('button', { name: 'All subjects' }));
+
+      const row = (await screen.findByText(/ເກວະລິນ ອຸ່ນມີໄຊ/)).closest('tr') as HTMLElement;
+      expect(within(row).getByText('7.90')).toBeInTheDocument();
+      // Below ຄະນິດສາດ's pass line of 5.
+      expect(within(row).getByText('4.25')).toHaveClass('text-danger');
+      expect(screen.getByRole('columnheader', { name: 'Exam, ພາກຮຽນ I' })).toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'ພາກຮຽນ II' })).toBeInTheDocument();
+      // The heading is the subject picked above, though every subject is shown.
+      expect(screen.getByRole('heading', { name: 'ພາສາລາວ 2026-2027' })).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: /every class/i }));
+      await waitFor(() => expect(created).toHaveBeenCalled());
+      expect(filenames[0]).toMatch(/^Year ພາສາລາວ\.xlsx$/);
+      // Every room of the year was read, not only the one on screen.
+      expect(vi.mocked(apiClient.get).mock.calls.some(([url]) => url === '/classrooms')).toBe(true);
+
+      const bytes = await new Promise<Uint8Array>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsArrayBuffer(created.mock.calls[0][0]);
+      });
+      const { default: ExcelJS } = await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(bytes.buffer as ArrayBuffer);
+      const sheet = workbook.worksheets[0];
+
+      expect(sheet.getCell('A1').value).toBe('ພາສາລາວ 2026-2027');
+      expect(sheet.getCell('A2').value).toBe('Class ມ.1/ກ: ນູລີ ສີສະຫວາດ');
+      // Four bands of eight periods: 3 months, the exam, twice; then the terms and the year.
+      expect(sheet.getCell('G2').value).toBe('September');
+      const student = sheet.getRow(5).values as unknown[];
+      // ລ/ດ · ລ/ຕ · ເພດ · ຊື່ · ນາມສະກຸນ · ຊື່ຫຼິ້ນ, then September: ລາວ, ຄະນິດ, ຖືກຕັດ, ວັນຂາດ.
+      expect(student.slice(1, 11)).toEqual([
+        1,
+        '762',
+        'F',
+        'ເກວະລິນ',
+        'ອຸ່ນມີໄຊ',
+        'ເກວະລິນ',
+        7.9,
+        4.25,
+        5,
+        1,
+      ]);
+      // The exam's register columns are left blank, as on the paper.
+      expect(student.slice(19, 23)).toEqual([8.4, 6.2, undefined, undefined]);
+      // ພາກຮຽນ I after both terms' months and exams: 6 + 8 periods × 4 columns.
+      expect(student.slice(39, 43)).toEqual([8.3, 7.4, 5, 3]);
+      expect(sheet.getCell('H5').font?.color?.argb).toBe('FF9C0006');
+      vi.unstubAllGlobals();
+    });
   });
 });
 
