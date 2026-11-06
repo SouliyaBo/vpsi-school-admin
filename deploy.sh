@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Build the admin SPA and ship it to the S3 website bucket.
+# Build the admin SPA and ship it to the EC2 box, where Caddy serves it at
+# https://vpsischool.com.
 #
 #   ./deploy.sh                 build (bumps the patch version) and upload
 #   ./deploy.sh --no-release    build without bumping the version
@@ -8,18 +9,17 @@
 #   ./deploy.sh --yes           do not ask before uploading
 #
 # The long-form reasoning behind each step is in DEPLOY.md. This script is the
-# same steps with the checks that are easy to forget: that the shell is pointed
-# at the school's AWS account and not another one, that the build is aimed at
-# the right API, and that what the bucket serves afterwards is what was just
-# built.
+# same steps with the checks that are easy to forget: that the box is ready to
+# receive it, that the build is aimed at the right API, and that what the site
+# serves afterwards is what was just built.
 set -euo pipefail
 
-BUCKET=vpsi-school-admin
-PROFILE=${AWS_PROFILE:-vpsi}
-ACCOUNT=020429478361
-REGION=ap-southeast-1
-SITE="http://${BUCKET}.s3-website-${REGION}.amazonaws.com"
-EXPECTED_API=http://3.26.219.236:3000/api/v1
+HOST=${VPSI_HOST:-ubuntu@api.vpsischool.com}
+KEY=../vpsi-api.pem
+# Mounted into the caddy container as /srv/admin (vpsischool-api/docker-compose.prod.yml).
+REMOTE_DIR='vpsischool-api/admin'
+SITE=https://vpsischool.com
+EXPECTED_API=https://api.vpsischool.com/api/v1
 
 release=true
 build=true
@@ -37,30 +37,30 @@ cd "$(dirname "$0")"
 
 say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
 fail() { printf '\n\033[31m%s\033[0m\n' "$*" >&2; exit 1; }
+on_server() { ssh -i "$KEY" "$HOST" "$@"; }
 
-# ── Who am I ────────────────────────────────────────────────────────────────
-# First, because the failure it prevents is the confusing one: the default
-# profile on this machine is a different AWS account, and a sync run under it
-# fails with AccessDenied on a bucket that is plainly there in the Console.
-say "1/5  checking the AWS profile"
-export AWS_PROFILE=$PROFILE
-if ! identity=$(aws sts get-caller-identity --output json 2>&1); then
-  fail "profile '$PROFILE' does not work:
-$identity
+[ -f "$KEY" ] || fail "the deploy key is not at $KEY (it belongs in VPSI-SCHOOL/, beside the two project folders)"
 
-  aws configure --profile $PROFILE      # see DEPLOY.md section 0"
-fi
-account=$(printf '%s' "$identity" | sed -n 's/.*"Account": "\([0-9]*\)".*/\1/p')
-[ "$account" = "$ACCOUNT" ] || fail "profile '$PROFILE' is account $account, not the school's $ACCOUNT"
-printf '     %s\n' "$(printf '%s' "$identity" | sed -n 's/.*"Arn": "\(.*\)".*/\1/p')"
+# ── Is the box ready for it ─────────────────────────────────────────────────
+# The folder is created by the API's deploy (or by hand, DEPLOY.md). If it is
+# missing, Caddy is not serving it either, and an upload would land nowhere.
+say "1/5  checking the server"
+on_server "test -d $REMOTE_DIR && test -w $REMOTE_DIR" \
+  || fail "$HOST:~/$REMOTE_DIR is missing or not writable — vpsischool-api/DEPLOY.md section 8 sets it up"
+printf '     %s:~/%s\n' "$HOST" "$REMOTE_DIR"
 
 # ── What will it talk to ────────────────────────────────────────────────────
 # VITE_* values are compiled into the bundle, so this is decided now and cannot
-# be corrected on the bucket afterwards.
+# be corrected on the server afterwards.
 say "2/5  checking which API this build will point at"
 api=$(sed -n 's/^VITE_API_BASE_URL=//p' .env 2>/dev/null | head -1)
 [ -n "$api" ] || fail "VITE_API_BASE_URL is not set in .env"
 printf '     %s\n' "$api"
+# An https page may not call an http API — the browser blocks it silently.
+case "$api" in
+  https://*) ;;
+  *) fail "VITE_API_BASE_URL must be https:// — $SITE is served over HTTPS" ;;
+esac
 if [ "$api" != "$EXPECTED_API" ]; then
   printf '     \033[33mnote: DEPLOY.md expects %s\033[0m\n' "$EXPECTED_API"
 fi
@@ -86,27 +86,22 @@ printf '     version %s, entry %s\n' "$version" "$entry"
 
 # ── Confirm ─────────────────────────────────────────────────────────────────
 if ! $assume_yes; then
-  printf '\nUpload to %s? [y/N] ' "$BUCKET"
+  printf '\nUpload to %s? [y/N] ' "$SITE"
   read -r reply
   case "$reply" in [yY]*) ;; *) echo "stopped."; exit 1 ;; esac
 fi
 
 # ── Upload ──────────────────────────────────────────────────────────────────
 # No --delete: the previous build's assets are what a viewer with the page open
-# is still loading, and what a rollback re-points index.html at. The bucket
-# grows by a few MB a release; that is the trade.
+# is still loading, and what a rollback re-points index.html at. The folder
+# grows by a few MB a release; that is the trade. Source maps stay behind —
+# they publish the readable source of the whole admin.
 say "4/5  uploading"
-aws s3 sync dist/assets/ "s3://$BUCKET/assets/" \
-  --exclude "*.map" \
-  --cache-control "public, max-age=31536000, immutable" \
-  --only-show-errors
-
-# Named files, so they must never be served stale. Uploaded after the assets
-# they reference, so the page is never pointed at a chunk that is not there yet.
-aws s3 cp dist/index.html "s3://$BUCKET/index.html" \
-  --cache-control "no-cache" --only-show-errors
-aws s3 cp dist/favicon.svg "s3://$BUCKET/favicon.svg" \
-  --cache-control "no-cache" --only-show-errors
+ssh_cmd="ssh -i $KEY"
+rsync -a --exclude '*.map' -e "$ssh_cmd" dist/assets/ "$HOST:$REMOTE_DIR/assets/"
+rsync -a --exclude assets --exclude index.html --exclude '*.map' -e "$ssh_cmd" dist/ "$HOST:$REMOTE_DIR/"
+# Last, so the page is never pointed at a chunk that is not there yet.
+rsync -a -e "$ssh_cmd" dist/index.html "$HOST:$REMOTE_DIR/index.html"
 printf '     done\n'
 
 # ── Check ───────────────────────────────────────────────────────────────────
@@ -115,9 +110,9 @@ served=$(curl -fsS "$SITE" | sed -n 's/.*src="\/assets\/\(index-[^"]*\.js\)".*/\
 if [ "$served" = "$entry" ]; then
   printf '     \033[32mlive: %s\033[0m\n' "$entry"
 else
-  fail "the site is still serving $served, not $entry
-     S3 is eventually consistent — wait a moment and reload. If it persists,
-     check that index.html went up with Cache-Control: no-cache."
+  fail "the site is serving '${served}', not $entry
+     Check Caddy on the box:  docker compose --env-file .env.production \\
+       -f docker-compose.prod.yml logs --tail 50 caddy"
 fi
 
 cat <<EOF
@@ -125,5 +120,5 @@ cat <<EOF
   $SITE
 
   If the screen loads but nothing can log in, it is CORS_ORIGINS on the API box
-  rather than anything here — see DEPLOY.md step 4.
+  rather than anything here — see DEPLOY.md.
 EOF
